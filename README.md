@@ -1,0 +1,66 @@
+# Climate-Risk Analyst Agent
+
+An open-source **agent** (not a chatbot) that turns live weather data and authoritative climate documents into a **grounded, cited, structured risk report** for a location, hazard, and time horizon.
+
+> **Status: Week 1 — core spine shipped.** The agent runs end-to-end and produces a validated `RiskReport` from live forecast data. RAG citations, ERA5 hazard statistics, evals, and MCP are on the roadmap below. Built in public.
+
+## Why an agent, not a chatbot
+
+A chatbot predicts plausible text — ask it about flood risk and it invents a number. This agent **plans, fetches real data, and grounds every claim**, then returns a typed report it can back up (or refuses when a question is out of scope).
+
+## What works today
+
+- **Typed output contract** — a Pydantic `RiskReport` (risk level, drivers, citations, data provenance, confidence, refusal). Bad output can't be constructed: the level is a 4-value enum, confidence is bounded `[0,1]`, and a report must either assert a risk *or* refuse — never both.
+- **Live forecast tool** — `get_forecast` calls Open-Meteo (free, no key) and returns a typed daily series.
+- **3-node LangGraph agent** — `plan → call → synthesize`, with a refusal short-circuit for unsupported hazards.
+- **16 tests, all green** — HTTP is mocked, so tests are fast, offline, and deterministic.
+
+## Architecture
+
+```
+query (location, hazard, horizon)
+        │
+        ▼
+   LangGraph state machine
+   plan ──▶ call ──▶ synthesize ──▶ RiskReport (typed, provenanced)
+     │
+     └─(unsupported hazard)─▶ refusal
+```
+
+## Quickstart
+
+```bash
+uv sync                      # install deps
+uv run pytest                # run the test suite (16 green)
+uv run python -m scripts.demo  # live end-to-end demo → prints a RiskReport
+```
+
+Example output (real Open-Meteo data):
+
+```json
+{
+  "location": "Rourkela",
+  "hazard": "extreme_precip",
+  "risk_level": "low",
+  "summary": "Peak daily rainfall of 12.1 mm over 7 days.",
+  "confidence": 0.3,
+  "provenance": [{ "source": "Open-Meteo", "retrieved_at": "..." }]
+}
+```
+
+## Tech stack
+
+Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · httpx · pytest.
+
+## Roadmap
+
+- [ ] IPCC AR6 RAG with page-level citations
+- [ ] ERA5 hazard statistics (return periods via extreme-value analysis) + skill-aware confidence
+- [ ] Eval harness with numbers (retrieval recall@k, citation validity, numeric accuracy, latency, cost)
+- [ ] MCP server (tools usable from any MCP client)
+- [ ] Gemini-backed synthesis, guardrails, observability
+- [ ] FastAPI + Streamlit UI, Docker, deployed demo
+
+## Limitations (honest)
+
+Day-1 risk thresholds are crude placeholders (a rainfall/temperature cutoff, fixed low confidence). Real grounding — climate statistics and cited evidence — is what the coming weeks add. The spine ships first, then the intelligence.
