@@ -31,7 +31,7 @@ def _valid_report(**overrides) -> RiskReport:
     """A fully-populated, non-refusal report; overrides let each test poke one field."""
     data = dict(
         location="Rourkela",
-        hazard=Hazard.FLOOD,
+        hazard=Hazard.EXTREME_PRECIP,
         horizon_days=7,
         risk_level=RiskLevel.HIGH,
         summary="Heavy rain expected; elevated flood risk.",
@@ -47,7 +47,7 @@ def _valid_report(**overrides) -> RiskReport:
 def test_valid_report_builds_with_expected_fields():
     report = _valid_report()
     assert report.risk_level is RiskLevel.HIGH
-    assert report.hazard is Hazard.FLOOD
+    assert report.hazard is Hazard.EXTREME_PRECIP
     assert report.refusal is None
     assert report.drivers[0].factor == "precipitation"
 
@@ -60,6 +60,10 @@ def test_risk_level_rejects_unknown_value():
 def test_hazard_rejects_unknown_value():
     with pytest.raises(ValidationError):
         _valid_report(hazard="meteor")
+
+
+def test_supported_hazards_match_master_plan():
+    assert {h.value for h in Hazard} == {"heatwave", "extreme_precip", "wind"}
 
 
 @pytest.mark.parametrize("bad", [-0.1, 1.5])
@@ -83,7 +87,7 @@ def test_json_round_trip_preserves_data():
 def test_refusal_report_is_valid_without_risk():
     report = RiskReport(
         location="Rourkela",
-        hazard=Hazard.FLOOD,
+        hazard=Hazard.EXTREME_PRECIP,
         horizon_days=7,
         confidence=0.0,
         refusal="Out of scope: only flood hazard is supported.",
@@ -97,7 +101,7 @@ def test_refusal_cannot_also_assert_risk_level():
     with pytest.raises(ValidationError):
         RiskReport(
             location="Rourkela",
-            hazard=Hazard.FLOOD,
+            hazard=Hazard.EXTREME_PRECIP,
             horizon_days=7,
             confidence=0.0,
             risk_level=RiskLevel.HIGH,
@@ -109,7 +113,7 @@ def test_non_refusal_requires_risk_level():
     with pytest.raises(ValidationError):
         RiskReport(
             location="Rourkela",
-            hazard=Hazard.FLOOD,
+            hazard=Hazard.EXTREME_PRECIP,
             horizon_days=7,
             confidence=0.2,
             summary="no level given",

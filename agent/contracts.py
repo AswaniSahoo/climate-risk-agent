@@ -26,10 +26,17 @@ class RiskLevel(str, Enum):
 
 
 class Hazard(str, Enum):
-    """Hazards the agent supports. Day-1: flood only; out-of-scope hazards are
-    rejected here, which forces the agent down the refusal path."""
+    """Hazards the agent supports (per MASTER-PLAN). Out-of-scope hazards are
+    rejected here, which forces the agent down the refusal path.
 
-    FLOOD = "flood"
+    heatwave ← temperature_2m_max, extreme_precip ← precipitation_sum (both from
+    get_forecast); wind is in-vocabulary but its data path isn't wired yet, so
+    a wind query currently takes the refusal path.
+    """
+
+    HEATWAVE = "heatwave"
+    EXTREME_PRECIP = "extreme_precip"
+    WIND = "wind"
 
 
 class RiskDriver(BaseModel):
