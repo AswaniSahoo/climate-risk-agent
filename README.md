@@ -27,11 +27,29 @@ query (location, hazard, horizon)
      └─(unsupported hazard)─▶ refusal
 ```
 
+## Use it over MCP
+
+The tools are exposed as an [MCP](https://modelcontextprotocol.io) server, so any MCP client (Claude Desktop, Cursor, the MCP Inspector) can call them — no custom glue per app.
+
+```bash
+uv run mcp dev tools/mcp_server.py   # opens the MCP Inspector
+```
+
+`get_forecast` exposed as an MCP tool — the input schema is auto-generated from the Python function's type hints:
+
+![forecast tool exposed over MCP](assets/mcp-inspector-tools.png)
+
+Calling it live from the Inspector (real Open-Meteo data, fetched through MCP):
+
+![calling the forecast tool over MCP](assets/mcp-inspector-run.gif)
+
+![forecast tool result](assets/mcp-inspector-result.png)
+
 ## Quickstart
 
 ```bash
 uv sync                      # install deps
-uv run pytest                # run the test suite (16 green)
+uv run pytest                # run the test suite (18 green)
 uv run python -m scripts.demo  # live end-to-end demo → prints a RiskReport
 ```
 
@@ -57,7 +75,7 @@ Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · httpx 
 - [ ] IPCC AR6 RAG with page-level citations
 - [ ] ERA5 hazard statistics (return periods via extreme-value analysis) + skill-aware confidence
 - [ ] Eval harness with numbers (retrieval recall@k, citation validity, numeric accuracy, latency, cost)
-- [ ] MCP server (tools usable from any MCP client)
+- [x] MCP server (tools usable from any MCP client) — `get_forecast` exposed, demoed in the MCP Inspector
 - [ ] Gemini-backed synthesis, guardrails, observability
 - [ ] FastAPI + Streamlit UI, Docker, deployed demo
 

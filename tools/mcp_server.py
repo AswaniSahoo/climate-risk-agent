@@ -6,9 +6,16 @@ it. The tool logic itself lives in tools/forecast.py and is unchanged.
 
 Run as a stdio server:  uv run python -m tools.mcp_server
 """
-from mcp.server.fastmcp import FastMCP
+import sys
+from pathlib import Path
 
-from tools.forecast import get_forecast
+# `mcp dev` imports this file standalone (project root not on sys.path), so add it
+# here to keep `from tools.forecast import ...` working however the server is launched.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from mcp.server.fastmcp import FastMCP  # noqa: E402
+
+from tools.forecast import get_forecast  # noqa: E402
 
 mcp = FastMCP("climate-tools")
 
