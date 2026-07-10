@@ -6,7 +6,7 @@ The fit is deterministic (same input maxima -> same params), so no randomness.
 """
 import pytest
 
-from tools.hazard_stats import HazardStat, hazard_stat, return_level, return_period
+from tools.hazard_stats import return_level, return_levels, return_period
 
 # 30 years of (illustrative) annual-maximum daily precipitation, mm.
 ANNUAL_MAXIMA = [
@@ -32,15 +32,10 @@ def test_rarer_value_has_longer_return_period():
     assert return_period(ANNUAL_MAXIMA, 80) > return_period(ANNUAL_MAXIMA, 55)
 
 
-def test_hazard_stat_builds_typed_result():
-    stat = hazard_stat(
-        ANNUAL_MAXIMA, variable="precipitation", latitude=22.26, longitude=84.85
-    )
-    assert isinstance(stat, HazardStat)
-    assert stat.variable == "precipitation"
-    assert stat.years_of_data == len(ANNUAL_MAXIMA)
-    assert [rl.return_period_years for rl in stat.return_levels] == [10, 50, 100]
-    levels = [rl.level for rl in stat.return_levels]
-    assert levels == sorted(levels)  # rarer event -> higher level
-    assert levels[-1] > levels[0]
+def test_return_levels_are_labelled_and_monotonic():
+    levels = return_levels(ANNUAL_MAXIMA, (10, 50, 100))
+    assert [rl.return_period_years for rl in levels] == [10, 50, 100]
+    values = [rl.level for rl in levels]
+    assert values == sorted(values)  # rarer event -> higher level
+    assert values[-1] > values[0]
 

@@ -9,7 +9,7 @@ import pytest
 
 from agent.contracts import Hazard, RiskLevel, RiskReport
 from agent.graph import run_agent
-from tools.hazard_stats import hazard_stat
+from tools.climatology import build_hazard_stat
 
 # ~20 years of (illustrative) annual-max 2m_temperature in Kelvin.
 _HEAT_MAXIMA = [
@@ -21,11 +21,17 @@ CANNED = {
     "latitude": 22.26,
     "longitude": 84.85,
     "timezone": "Asia/Kolkata",
-    "daily_units": {"time": "iso8601", "precipitation_sum": "mm", "temperature_2m_max": "°C"},
+    "daily_units": {
+        "time": "iso8601",
+        "precipitation_sum": "mm",
+        "temperature_2m_max": "°C",
+        "wind_speed_10m_max": "km/h",
+    },
     "daily": {
         "time": ["2026-07-02", "2026-07-03", "2026-07-04"],
-        "precipitation_sum": [14.2, 0.1, 80.0],   # max 80mm -> HIGH precip band
-        "temperature_2m_max": [46.0, 44.0, 40.0],  # max 46°C -> SEVERE heat band
+        "precipitation_sum": [14.2, 0.1, 80.0],     # max 80mm  -> HIGH precip band
+        "temperature_2m_max": [46.0, 44.0, 40.0],   # max 46°C  -> SEVERE heat band
+        "wind_speed_10m_max": [70.0, 45.0, 30.0],   # max 70km/h -> HIGH wind band
     },
 }
 
@@ -56,9 +62,25 @@ def test_heatwave_query_yields_severe_risk_report(httpx_mock):
     assert report.risk_level is RiskLevel.SEVERE
 
 
-def test_wind_query_takes_refusal_path_without_forecast():
-    # No httpx mock added on purpose: if the graph wrongly calls get_forecast,
-    # risk_level would be set and this test fails.
+def test_wind_query_yields_high_risk_report(httpx_mock):
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.WIND, horizon_days=3,
+    )
+
+    assert report.refusal is None
+    assert report.risk_level is RiskLevel.HIGH  # 70 km/h
+    assert report.drivers[0].factor == "wind"
+    assert "m/s" in report.drivers[0].detail  # km/h converted for ERA5 comparability
+
+
+def test_unsupported_hazard_takes_refusal_path_without_forecast(monkeypatch):
+    # Simulate a hazard with no data path. No httpx mock on purpose: if the graph
+    # wrongly calls get_forecast, this test fails.
+    monkeypatch.setattr("agent.graph._ANSWERABLE", {Hazard.HEATWAVE})
+
     report = run_agent(
         location="Rourkela", latitude=22.26, longitude=84.85,
         hazard=Hazard.WIND, horizon_days=3,
@@ -70,8 +92,9 @@ def test_wind_query_takes_refusal_path_without_forecast():
 
 def test_heatwave_report_includes_injected_hazard_stats(httpx_mock):
     httpx_mock.add_response(json=CANNED)
-    hs = hazard_stat(
-        _HEAT_MAXIMA, variable="2m_temperature", latitude=22.26, longitude=84.85
+    hs = build_hazard_stat(
+        list(range(2003, 2023)), _HEAT_MAXIMA, hazard=Hazard.HEATWAVE,
+        latitude=22.26, longitude=84.85, timezone="Asia/Kolkata",
     )
 
     report = run_agent(
@@ -79,7 +102,7 @@ def test_heatwave_report_includes_injected_hazard_stats(httpx_mock):
         hazard=Hazard.HEATWAVE, horizon_days=3, hazard_stat=hs,
     )
 
-    assert report.hazard_stats and report.hazard_stats[0].years_of_data == len(_HEAT_MAXIMA)
+    assert report.hazard_stats and report.hazard_stats[0].n_years == len(_HEAT_MAXIMA)
     assert report.confidence > 0.3  # climatology grounding beats the raw heuristic
     assert "return level" in report.summary.lower()
 

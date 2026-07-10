@@ -30,7 +30,8 @@ from tools.forecast import ForecastResult, get_forecast, OPEN_METEO_URL
 from tools.hazard_stats import HazardStat
 
 # Hazards we can actually answer today (have a data path in get_forecast).
-_ANSWERABLE = {Hazard.HEATWAVE, Hazard.EXTREME_PRECIP}
+_ANSWERABLE = {Hazard.HEATWAVE, Hazard.EXTREME_PRECIP, Hazard.WIND}
+_KMH_TO_MS = 1.0 / 3.6  # Open-Meteo reports km/h; ERA5 return levels are m/s.
 _DAY1_CONFIDENCE = 0.3  # low on purpose: crude heuristic, no climatology yet.
 _CLIMATOLOGY_CONFIDENCE = 0.6  # bumped when ERA5 GEV climatology grounds the report.
 
@@ -66,6 +67,17 @@ def _heat_level(max_c: float) -> RiskLevel:
     if max_c < 40:
         return RiskLevel.MODERATE
     if max_c < 45:
+        return RiskLevel.HIGH
+    return RiskLevel.SEVERE
+
+
+def _wind_level(max_kmh: float) -> RiskLevel:
+    """Day-1 wind heuristic on max daily 10 m wind speed (km/h), Beaufort-inspired."""
+    if max_kmh < 40:
+        return RiskLevel.LOW
+    if max_kmh < 62:
+        return RiskLevel.MODERATE
+    if max_kmh < 88:
         return RiskLevel.HIGH
     return RiskLevel.SEVERE
 
@@ -107,11 +119,22 @@ def synthesize(state: AgentState) -> dict:
         level = _precip_level(metric)
         driver = RiskDriver(factor="precipitation", detail=f"max daily {metric} mm")
         summary = f"Peak daily rainfall of {metric} mm over {state['horizon_days']} days."
-    else:  # Hazard.HEATWAVE
+    elif hazard is Hazard.HEATWAVE:
         metric = max(forecast.temperature_2m_max)
         level = _heat_level(metric)
         driver = RiskDriver(factor="temperature", detail=f"max daily {metric} °C")
         summary = f"Peak daily max temperature of {metric} °C over {state['horizon_days']} days."
+    else:  # Hazard.WIND — km/h from Open-Meteo, also shown in m/s for ERA5 comparability
+        metric = max(forecast.wind_speed_10m_max)
+        metric_ms = metric * _KMH_TO_MS
+        level = _wind_level(metric)
+        driver = RiskDriver(
+            factor="wind", detail=f"max daily {metric} km/h ({metric_ms:.1f} m/s)"
+        )
+        summary = (
+            f"Peak daily wind of {metric} km/h ({metric_ms:.1f} m/s) "
+            f"over {state['horizon_days']} days."
+        )
 
     provenance = DataProvenance(
         source="Open-Meteo",
@@ -136,7 +159,7 @@ def synthesize(state: AgentState) -> dict:
         drivers.append(
             RiskDriver(
                 factor="climatology",
-                detail=f"{stat.years_of_data}-yr ERA5 GEV ({stat.variable})",
+                detail=f"{stat.n_years}-yr ERA5 GEV ({stat.variable})",
             )
         )
         summary += f" ERA5 return levels ({levels_txt})."

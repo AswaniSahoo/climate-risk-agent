@@ -11,6 +11,7 @@ annual maxima is a separate layer (wired next).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import Enum
 
 import numpy as np
 from pydantic import BaseModel
@@ -49,33 +50,52 @@ class ReturnLevel(BaseModel):
     level: float
 
 
+class Representativeness(str, Enum):
+    """How faithfully the statistic represents the requested point's TRUE extreme.
+
+    The honest label is the whole point: a reanalysis point value is not a station
+    observation, and a coarse/aliased grid value is not a local extreme at all.
+    """
+
+    STATION_CALIBRATED = "station_calibrated"  # bias-corrected to observations
+    POINT_INTERPOLATED_REANALYSIS = "point_interpolated_reanalysis"  # ERA5 ~25km, point-interp, no station cal
+    REGIONAL_GRID_SIGNAL = "regional_grid_signal"  # a named coarse grid cell
+    NOT_REPRESENTATIVE = "not_representative"  # wrong cell / temporally aliased
+
+
 class HazardStat(BaseModel):
-    """Typed hazard-statistics result for one variable at one location."""
+    """Typed hazard statistics for one variable at one location, carrying the
+    provenance a reader needs to judge how far to trust the numbers.
+
+    `record_max` sits next to `return_levels` on purpose: if a 100-year level is
+    at or below the observed record, the tail is degenerate and the number lies.
+    """
 
     variable: str
+    statistic_definition: str
+    unit: str
+    source: str
+    model: str
+    native_resolution_deg: float
+    captures_diurnal_peak: bool
+    timezone: str
     latitude: float
     longitude: float
-    years_of_data: int
+    n_years: int
+    record_start_year: int
+    record_end_year: int
+    record_max: float
     return_levels: list[ReturnLevel]
+    is_bias_corrected: bool
+    representativeness: Representativeness
+    interpretation: str
 
 
-def hazard_stat(
-    annual_maxima: Sequence[float],
-    *,
-    variable: str,
-    latitude: float,
-    longitude: float,
-    return_periods: Sequence[int] = (10, 50, 100),
-) -> HazardStat:
-    """Fit a GEV to `annual_maxima` and report the return level for each period."""
-    levels = [
+def return_levels(
+    annual_maxima: Sequence[float], return_periods: Sequence[int] = (10, 50, 100)
+) -> list[ReturnLevel]:
+    """Fit a GEV once and report the return level for each requested period."""
+    return [
         ReturnLevel(return_period_years=int(t), level=return_level(annual_maxima, t))
         for t in return_periods
     ]
-    return HazardStat(
-        variable=variable,
-        latitude=latitude,
-        longitude=longitude,
-        years_of_data=len(annual_maxima),
-        return_levels=levels,
-    )
