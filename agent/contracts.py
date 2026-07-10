@@ -14,6 +14,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
 
+from tools.hazard_stats import HazardStat
+
 
 class RiskLevel(str, Enum):
     """Qualitative climate-risk band (IPCC-style). A controlled vocabulary so the
@@ -85,6 +87,7 @@ class RiskReport(BaseModel):
     drivers: list[RiskDriver] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
     provenance: list[DataProvenance] = Field(default_factory=list)
+    hazard_stats: list[HazardStat] = Field(default_factory=list)
     refusal: str | None = None
 
     @model_validator(mode="after")

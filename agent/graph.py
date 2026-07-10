@@ -27,10 +27,12 @@ from agent.contracts import (
     RiskReport,
 )
 from tools.forecast import ForecastResult, get_forecast, OPEN_METEO_URL
+from tools.hazard_stats import HazardStat
 
 # Hazards we can actually answer today (have a data path in get_forecast).
 _ANSWERABLE = {Hazard.HEATWAVE, Hazard.EXTREME_PRECIP}
 _DAY1_CONFIDENCE = 0.3  # low on purpose: crude heuristic, no climatology yet.
+_CLIMATOLOGY_CONFIDENCE = 0.6  # bumped when ERA5 GEV climatology grounds the report.
 
 
 class AgentState(TypedDict, total=False):
@@ -42,6 +44,7 @@ class AgentState(TypedDict, total=False):
     hazard: Hazard
     horizon_days: int
     forecast: Optional[ForecastResult]
+    hazard_stat: Optional[HazardStat]  # optional ERA5 climatology, injected by caller
     report: Optional[RiskReport]
 
 
@@ -120,15 +123,34 @@ def synthesize(state: AgentState) -> dict:
             "horizon_days": state["horizon_days"],
         },
     )
+    drivers = [driver]
+    hazard_stats: list[HazardStat] = []
+    confidence = _DAY1_CONFIDENCE
+    stat = state.get("hazard_stat")
+    if stat is not None:
+        hazard_stats = [stat]
+        confidence = _CLIMATOLOGY_CONFIDENCE
+        levels_txt = ", ".join(
+            f"{r.return_period_years}yr={round(r.level, 1)}" for r in stat.return_levels
+        )
+        drivers.append(
+            RiskDriver(
+                factor="climatology",
+                detail=f"{stat.years_of_data}-yr ERA5 GEV ({stat.variable})",
+            )
+        )
+        summary += f" ERA5 return levels ({levels_txt})."
+
     report = RiskReport(
         location=state["location"],
         hazard=hazard,
         horizon_days=state["horizon_days"],
         risk_level=level,
         summary=summary,
-        drivers=[driver],
+        drivers=drivers,
         provenance=[provenance],
-        confidence=_DAY1_CONFIDENCE,
+        hazard_stats=hazard_stats,
+        confidence=confidence,
     )
     return {"report": report}
 
@@ -159,15 +181,21 @@ def run_agent(
     longitude: float,
     hazard: Hazard,
     horizon_days: int = 7,
+    hazard_stat: Optional[HazardStat] = None,
 ) -> RiskReport:
-    """Run the agent end-to-end and return the RiskReport."""
-    final = _GRAPH.invoke(
-        {
-            "location": location,
-            "latitude": latitude,
-            "longitude": longitude,
-            "hazard": hazard,
-            "horizon_days": horizon_days,
-        }
-    )
+    """Run the agent end-to-end and return the RiskReport.
+
+    Pass `hazard_stat` (from tools.era5.era5_hazard_stat) to ground the report in
+    ERA5 GEV climatology and raise its confidence.
+    """
+    state: AgentState = {
+        "location": location,
+        "latitude": latitude,
+        "longitude": longitude,
+        "hazard": hazard,
+        "horizon_days": horizon_days,
+    }
+    if hazard_stat is not None:
+        state["hazard_stat"] = hazard_stat
+    final = _GRAPH.invoke(state)
     return final["report"]

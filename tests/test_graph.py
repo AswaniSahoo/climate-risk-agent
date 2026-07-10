@@ -9,6 +9,13 @@ import pytest
 
 from agent.contracts import Hazard, RiskLevel, RiskReport
 from agent.graph import run_agent
+from tools.hazard_stats import hazard_stat
+
+# ~20 years of (illustrative) annual-max 2m_temperature in Kelvin.
+_HEAT_MAXIMA = [
+    309.6, 310.5, 308.6, 311.0, 307.9, 312.1, 309.0, 310.2, 308.4, 311.5,
+    309.8, 307.5, 310.9, 308.1, 312.4, 309.3, 310.7, 308.8, 311.2, 309.5,
+]
 
 CANNED = {
     "latitude": 22.26,
@@ -59,3 +66,20 @@ def test_wind_query_takes_refusal_path_without_forecast():
 
     assert report.refusal is not None
     assert report.risk_level is None
+
+
+def test_heatwave_report_includes_injected_hazard_stats(httpx_mock):
+    httpx_mock.add_response(json=CANNED)
+    hs = hazard_stat(
+        _HEAT_MAXIMA, variable="2m_temperature", latitude=22.26, longitude=84.85
+    )
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.HEATWAVE, horizon_days=3, hazard_stat=hs,
+    )
+
+    assert report.hazard_stats and report.hazard_stats[0].years_of_data == len(_HEAT_MAXIMA)
+    assert report.confidence > 0.3  # climatology grounding beats the raw heuristic
+    assert "return level" in report.summary.lower()
+
