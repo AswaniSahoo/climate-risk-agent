@@ -70,6 +70,14 @@ Example output (real Open-Meteo data):
 
 Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · httpx · pytest.
 
+## Data & attribution
+
+- **Forecasts & climatology:** [Open-Meteo](https://open-meteo.com/) (forecast + ERA5 archive APIs), licensed **CC-BY 4.0**.
+- **Reanalysis:** ERA5, Copernicus Climate Change Service (C3S) / ECMWF.
+- **Climate assessment:** IPCC AR6 WG1 (SPM + Chapter 11), © IPCC — reused for research under IPCC's terms.
+
+Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not station observations — see [docs/hazard-data-source.md](docs/hazard-data-source.md) and the `representativeness` field on every `HazardStat`.
+
 ## Roadmap
 
 - [ ] IPCC AR6 RAG with page-level citations

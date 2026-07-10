@@ -208,8 +208,8 @@ def run_agent(
 ) -> RiskReport:
     """Run the agent end-to-end and return the RiskReport.
 
-    Pass `hazard_stat` (from tools.era5.era5_hazard_stat) to ground the report in
-    ERA5 GEV climatology and raise its confidence.
+    Pass `hazard_stat` (from tools.climatology.climatology_hazard_stat) to ground
+    the report in ERA5 GEV climatology and raise its confidence.
     """
     state: AgentState = {
         "location": location,

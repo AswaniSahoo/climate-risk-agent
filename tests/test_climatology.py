@@ -14,6 +14,14 @@ from tools.climatology import (
 )
 from tools.hazard_stats import HazardStat, Representativeness
 
+
+@pytest.fixture(autouse=True)
+def _clear_climatology_cache():
+    """climatology_hazard_stat is lru_cached; clear it so mocked calls stay isolated."""
+    climatology_hazard_stat.cache_clear()
+    yield
+
+
 CANNED = {
     "timezone": "Asia/Kolkata",
     "daily_units": {"time": "iso8601", "temperature_2m_max": "°C"},

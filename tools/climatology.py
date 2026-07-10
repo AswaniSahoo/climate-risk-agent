@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 
 import httpx
 
@@ -118,6 +119,7 @@ def build_hazard_stat(
     )
 
 
+@lru_cache(maxsize=256)
 def climatology_hazard_stat(
     latitude: float,
     longitude: float,
@@ -125,12 +127,13 @@ def climatology_hazard_stat(
     *,
     start_year: int = 1960,
     end_year: int = 2022,
-    return_periods: Sequence[int] = (10, 50, 100),
+    return_periods: tuple[int, ...] = (10, 50, 100),
 ) -> HazardStat:
     """Live: fetch ERA5 daily history from the Open-Meteo Archive → GEV → HazardStat.
 
-    Historical archive data is static, so a caller can safely cache the result per
-    (location, hazard) — the fitted statistic never changes.
+    Cached (lru_cache): historical archive data is static, so the fitted statistic
+    for a (location, hazard) never changes — repeat calls are instant and make no
+    network request (also a denial-of-wallet guard on the free Archive tier).
     """
     cfg = _HAZARD_VARS[hazard]
     params = {
