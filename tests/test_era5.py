@@ -6,9 +6,10 @@ Dataset, so it's fast and offline. The `open_era5` loader is the network edge
 """
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
-from tools.era5 import annual_maxima, wind_speed_annual_maxima
+from tools.era5 import annual_maxima, precip_annual_maxima_mm, wind_speed_annual_maxima
 
 
 def _uniform_two_years() -> xr.Dataset:
@@ -68,3 +69,21 @@ def test_wind_speed_annual_maxima_combines_uv_and_takes_yearly_max():
         ds, latitude=10.0, longitude=80.0, u_var="u10", v_var="v10"
     )
     assert maxima == [5.0, 10.0]
+
+
+def test_precip_annual_maxima_converts_metres_to_mm_and_skips_nan():
+    times = pd.date_range("2000-01-01", "2001-12-31", freq="D")
+    lats = np.array([10.0, 20.0])
+    lons = np.array([80.0, 90.0])
+    p = np.zeros((times.size, 2, 2))
+    p[(times.year == 2000) & (times.dayofyear == 100), 0, 0] = 0.05  # 50 mm
+    p[(times.year == 2001) & (times.dayofyear == 100), 0, 0] = 0.07  # 70 mm
+    p[0, 0, 0] = np.nan  # record spin-up, like the real ERA5 24h accumulation
+    ds = xr.Dataset(
+        {"total_precipitation_24hr": (("time", "latitude", "longitude"), p)},
+        coords={"time": times, "latitude": lats, "longitude": lons},
+    )
+
+    maxima = precip_annual_maxima_mm(ds, latitude=10.0, longitude=80.0)
+
+    assert maxima == pytest.approx([50.0, 70.0])

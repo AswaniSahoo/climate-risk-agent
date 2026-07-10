@@ -25,6 +25,11 @@ WB2_PATH = "gs://weatherbench2/datasets/era5/1959-2022-6h-64x32_equiangular_cons
 WIND_U_VAR = "10m_u_component_of_wind"
 WIND_V_VAR = "10m_v_component_of_wind"
 
+# ERA5 24-hour accumulated precipitation. Stored in METRES (x1000 -> mm); the first
+# timesteps of the record are NaN (no prior 24h to accumulate) — xarray's max skips them.
+PRECIP_VAR = "total_precipitation_24hr"
+_METRES_TO_MM = 1000.0
+
 
 def annual_maxima(
     ds: xr.Dataset, var: str, latitude: float, longitude: float
@@ -44,6 +49,13 @@ def wind_speed_annual_maxima(
     speed = (u**2 + v**2) ** 0.5
     yearly = speed.groupby("time.year").max()
     return [float(x) for x in yearly.values]
+
+
+def precip_annual_maxima_mm(
+    ds: xr.Dataset, latitude: float, longitude: float, var: str = PRECIP_VAR
+) -> list[float]:
+    """Annual maxima of 24h precipitation at the nearest cell, converted m -> mm."""
+    return [m * _METRES_TO_MM for m in annual_maxima(ds, var, latitude, longitude)]
 
 
 def open_era5(path: str = WB2_PATH) -> xr.Dataset:
@@ -91,6 +103,24 @@ def era5_wind_hazard_stat(
     return hazard_stat(
         maxima,
         variable="10m_wind_speed",
+        latitude=latitude,
+        longitude=longitude,
+        return_periods=return_periods,
+    )
+
+
+def era5_precip_hazard_stat(
+    latitude: float,
+    longitude: float,
+    path: str = WB2_PATH,
+    return_periods: Sequence[int] = (10, 50, 100),
+) -> HazardStat:
+    """Live moat call for extreme precip: 24h-precip annual maxima (mm) → GEV → HazardStat."""
+    ds = open_era5(path)
+    maxima = precip_annual_maxima_mm(ds, latitude, longitude)
+    return hazard_stat(
+        maxima,
+        variable="total_precipitation_24hr_mm",
         latitude=latitude,
         longitude=longitude,
         return_periods=return_periods,
