@@ -15,6 +15,9 @@ venv/
 # uv (keep uv.lock tracked)
 # (no uv cache to ignore here)
 
+# Source documents / indexes (large; fetched via scripts/download_ipcc.py)
+data/
+
 # Test / tooling caches
 .pytest_cache/
 .ruff_cache/
