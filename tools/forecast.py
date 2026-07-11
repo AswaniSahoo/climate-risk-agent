@@ -28,6 +28,7 @@ class ForecastResult(BaseModel):
     time: list[date]
     precipitation_sum: list[float]  # mm per day
     temperature_2m_max: list[float]  # °C per day
+    wind_speed_10m_max: list[float]  # km/h per day (ERA5 uses m/s — convert to compare)
 
 
 def get_forecast(
@@ -37,7 +38,7 @@ def get_forecast(
     params = {
         "latitude": latitude,
         "longitude": longitude,
-        "daily": "precipitation_sum,temperature_2m_max",
+        "daily": "precipitation_sum,temperature_2m_max,wind_speed_10m_max",
         "forecast_days": horizon_days,
         "timezone": "auto",
     }
@@ -56,4 +57,5 @@ def get_forecast(
         time=daily["time"],
         precipitation_sum=daily["precipitation_sum"],
         temperature_2m_max=daily["temperature_2m_max"],
+        wind_speed_10m_max=daily["wind_speed_10m_max"],
     )

@@ -12,11 +12,17 @@ CANNED = {
     "latitude": 22.26,
     "longitude": 84.85,
     "timezone": "Asia/Kolkata",
-    "daily_units": {"time": "iso8601", "precipitation_sum": "mm", "temperature_2m_max": "°C"},
+    "daily_units": {
+        "time": "iso8601",
+        "precipitation_sum": "mm",
+        "temperature_2m_max": "°C",
+        "wind_speed_10m_max": "km/h",
+    },
     "daily": {
         "time": ["2026-07-02", "2026-07-03", "2026-07-04"],
         "precipitation_sum": [14.2, 0.1, 55.0],
         "temperature_2m_max": [35.1, 36.4, 33.0],
+        "wind_speed_10m_max": [70.0, 45.0, 30.0],
     },
 }
 
