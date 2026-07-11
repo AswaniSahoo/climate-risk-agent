@@ -2,7 +2,7 @@
 
 An open-source **agent** (not a chatbot) that turns live weather data and authoritative climate documents into a **grounded, cited, structured risk report** for a location, hazard, and time horizon.
 
-> **Status: Week 1 — core spine shipped.** The agent runs end-to-end and produces a validated `RiskReport` from live forecast data. RAG citations, ERA5 hazard statistics, evals, and MCP are on the roadmap below. Built in public.
+> **Status: the moat is measurable.** ERA5 extreme-value statistics with full provenance, an IPCC RAG with page-level citations, and a **frozen, hash-pinned eval set with published recall numbers** — headline recall@3 **82%** (95% CI 66–92), failure slices printed too. Built in public.
 
 ## Why an agent, not a chatbot
 
@@ -11,9 +11,12 @@ A chatbot predicts plausible text — ask it about flood risk and it invents a n
 ## What works today
 
 - **Typed output contract** — a Pydantic `RiskReport` (risk level, drivers, citations, data provenance, confidence, refusal). Bad output can't be constructed: the level is a 4-value enum, confidence is bounded `[0,1]`, and a report must either assert a risk *or* refuse — never both.
-- **Live forecast tool** — `get_forecast` calls Open-Meteo (free, no key) and returns a typed daily series.
-- **3-node LangGraph agent** — `plan → call → synthesize`, with a refusal short-circuit for unsupported hazards.
-- **16 tests, all green** — HTTP is mocked, so tests are fast, offline, and deterministic.
+- **ERA5 hazard statistics with honest provenance** — 60+ years of daily extremes → GEV fit → 10/50/100-year return levels. Every `HazardStat` states its statistic definition, resolution, `record_max` beside the fitted levels (degenerate tails visible at a glance), and a `representativeness` enum. Live example: Rourkela's 100-year daily-max temperature fits at 46.0 °C against a 46.1 °C record.
+- **IPCC RAG with page-level citations** — AR6 WG1 SPM + Ch.11 + Ch.12 (439 pages), row-atomic chunking for regional assessment tables, zero-dependency BM25 (+ Gemini dense / RRF hybrid), and an LLM answerer whose **citations are structurally validated**: a citation that doesn't reference a retrieved chunk cannot be constructed.
+- **A frozen benchmark with published numbers** — 45 hand-verified questions; every supporting quote is machine-checked verbatim against the PDFs and the set is frozen by content hash. Recall@k with Wilson CIs per slice, including adversarial slices. The naive-chunking baseline scored **0%** on the duplicate-region trap slice; row-atomic chunking took it to 100% R@5. That before/after is the design philosophy.
+- **Deterministic scope guard** — questions about unsupported hazards (drought, tropical cyclones, coastal flooding, wildfire) are refused in code, before the LLM, so the guard cannot be prompt-injected away.
+- **Two MCP servers** — `weather-mcp` (forecast + hazard climatology) and `ipcc-rag-mcp` (search + cited answers), stdio-only, narrow and typed.
+- **115 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) are pinned as tests.
 
 ## Architecture
 
@@ -29,10 +32,11 @@ query (location, hazard, horizon)
 
 ## Use it over MCP
 
-The tools are exposed as an [MCP](https://modelcontextprotocol.io) server, so any MCP client (Claude Desktop, Cursor, the MCP Inspector) can call them — no custom glue per app.
+The tools are exposed as two [MCP](https://modelcontextprotocol.io) servers, so any MCP client (Claude Desktop, Cursor, the MCP Inspector) can call them — no custom glue per app.
 
 ```bash
-uv run mcp dev tools/mcp_server.py   # opens the MCP Inspector
+uv run mcp dev tools/weather_mcp.py   # forecast + hazard climatology
+uv run mcp dev tools/ipcc_mcp.py      # IPCC search + cited answers
 ```
 
 `get_forecast` exposed as an MCP tool — the input schema is auto-generated from the Python function's type hints:
@@ -48,10 +52,17 @@ Calling it live from the Inspector (real Open-Meteo data, fetched through MCP):
 ## Quickstart
 
 ```bash
-uv sync                      # install deps
-uv run pytest                # run the test suite (18 green)
+uv sync                        # install deps
+uv run pytest                  # run the test suite (115 green)
 uv run python -m scripts.demo  # live end-to-end demo → prints a RiskReport
+
+# evals — run the numbers yourself
+uv run python -m scripts.download_ipcc      # fetch the corpus (once)
+uv run python -m evals.run_retrieval_eval   # recall@{3,5,10} + MRR per slice, Wilson CIs
+uv run python -m evals.run_e2e_eval         # refusal matrix + citation/numeric checkers (needs GEMINI_API_KEY)
 ```
+
+The gold set (`evals/gold_set.json`) was authored **before** retrieval existed and is frozen by content hash — editing a question breaks the suite until the freeze is deliberately renewed. Questions are never edited to make retrieval look better.
 
 Example output (real Open-Meteo data):
 
@@ -74,19 +85,21 @@ Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · httpx 
 
 - **Forecasts & climatology:** [Open-Meteo](https://open-meteo.com/) (forecast + ERA5 archive APIs), licensed **CC-BY 4.0**.
 - **Reanalysis:** ERA5, Copernicus Climate Change Service (C3S) / ECMWF.
-- **Climate assessment:** IPCC AR6 WG1 (SPM + Chapter 11), © IPCC — reused for research under IPCC's terms.
+- **Climate assessment:** IPCC AR6 WG1 (SPM + Chapters 11 & 12), © IPCC — reused for research under IPCC's terms.
 
-Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not station observations — see [docs/hazard-data-source.md](docs/hazard-data-source.md) and the `representativeness` field on every `HazardStat`.
+Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not station observations — see [LIMITATIONS.md](LIMITATIONS.md) and the `representativeness` field on every `HazardStat`.
 
 ## Roadmap
 
-- [ ] IPCC AR6 RAG with page-level citations
-- [ ] ERA5 hazard statistics (return periods via extreme-value analysis) + skill-aware confidence
-- [ ] Eval harness with numbers (retrieval recall@k, citation validity, numeric accuracy, latency, cost)
-- [x] MCP server (tools usable from any MCP client) — `get_forecast` exposed, demoed in the MCP Inspector
-- [ ] Gemini-backed synthesis, guardrails, observability
-- [ ] FastAPI + Streamlit UI, Docker, deployed demo
+- [x] IPCC AR6 RAG with page-level citations
+- [x] ERA5 hazard statistics (return periods via extreme-value analysis) with provenance
+- [x] Eval harness with numbers (retrieval recall@k + adversarial slices; e2e citation/refusal metrics)
+- [x] MCP servers (weather-mcp + ipcc-rag-mcp), demoed in the MCP Inspector
+- [ ] Hybrid dense+RRF ablation published (embedding cache in progress)
+- [ ] RAG citations wired into the `RiskReport` agent path + skill-aware confidence
+- [ ] FastAPI + Streamlit UI, Docker, CI with eval regression gates, deployed demo
 
-## Limitations (honest)
+## Security & limitations
 
-Day-1 risk thresholds are crude placeholders (a rainfall/temperature cutoff, fixed low confidence). Real grounding — climate statistics and cited evidence — is what the coming weeks add. The spine ships first, then the intelligence.
+- [SECURITY.md](SECURITY.md) — the threat model; every control that matters is pinned by a test.
+- [LIMITATIONS.md](LIMITATIONS.md) — what these numbers do and don't mean. Read it before trusting a return level.
