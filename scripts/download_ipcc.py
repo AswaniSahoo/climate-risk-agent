@@ -1,8 +1,10 @@
-"""Fetch the IPCC AR6 WG1 documents we index: the SPM + Chapter 11 (Extremes).
+"""Fetch the IPCC AR6 WG1 documents we index: SPM + Chapter 11 + Chapter 12.
 
-Chapter 11 ("Weather and Climate Extreme Events in a Changing Climate") is the
-chapter that covers heat, precipitation and wind extremes — exactly our three
-hazards. The SPM supplies the headline assessed statements.
+Chapter 11 ("Weather and Climate Extreme Events in a Changing Climate") covers
+heat, precipitation and wind extremes — exactly our three hazards. Chapter 12
+("Climatic Impact-Drivers and their Changes") assesses those same hazards *by
+region*, which is what a location-based agent needs for the regional/table eval
+questions. The SPM supplies the headline assessed statements.
 
 PDFs land in data/ (git-ignored: large, and best fetched from the source).
 
@@ -16,6 +18,7 @@ BASE = "https://www.ipcc.ch/report/ar6/wg1/downloads/report"
 DOCS = {
     "IPCC_AR6_WGI_SPM.pdf": f"{BASE}/IPCC_AR6_WGI_SPM.pdf",
     "IPCC_AR6_WGI_Chapter11.pdf": f"{BASE}/IPCC_AR6_WGI_Chapter11.pdf",
+    "IPCC_AR6_WGI_Chapter12.pdf": f"{BASE}/IPCC_AR6_WGI_Chapter12.pdf",
 }
 DEST = Path("data/ipcc")
 
