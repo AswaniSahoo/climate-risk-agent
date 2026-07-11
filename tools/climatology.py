@@ -135,6 +135,9 @@ def climatology_hazard_stat(
     for a (location, hazard) never changes — repeat calls are instant and make no
     network request (also a denial-of-wallet guard on the free Archive tier).
     """
+    from tools.validation import validate_coordinates
+
+    validate_coordinates(latitude, longitude)
     cfg = _HAZARD_VARS[hazard]
     params = {
         "latitude": latitude,

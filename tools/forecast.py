@@ -35,6 +35,10 @@ def get_forecast(
     latitude: float, longitude: float, horizon_days: int = 7
 ) -> ForecastResult:
     """Fetch a daily forecast (precipitation + max temp) for the next N days."""
+    from tools.validation import validate_coordinates, validate_horizon
+
+    validate_coordinates(latitude, longitude)
+    validate_horizon(horizon_days)
     params = {
         "latitude": latitude,
         "longitude": longitude,
