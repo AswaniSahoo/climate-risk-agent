@@ -1,0 +1,530 @@
+{
+  "questions": [
+    {
+      "id": "SP-01",
+      "slice": "single_page",
+      "question": "By roughly how much does the IPCC project extreme daily precipitation to intensify for each 1°C of global warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 16}],
+      "supporting_quote": "extreme daily precipitation events are projected to intensify by about 7% for each 1°C of global warming",
+      "hazard": "extreme_precip",
+      "notes": "SPM B.2.4."
+    },
+    {
+      "id": "SP-02",
+      "slice": "single_page",
+      "question": "What happens to the intensity and frequency of hot extremes with each additional 0.5°C of global warming, per AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 15}],
+      "supporting_quote": "every additional 0.5°C of global warming causes clearly discernible increases in the intensity and frequency of hot extremes, including heatwaves",
+      "hazard": "heatwave",
+      "notes": "SPM B.2.2."
+    },
+    {
+      "id": "SP-03",
+      "slice": "single_page",
+      "question": "According to Chapter 11, what is the assessed link between human greenhouse-gas emissions and temperature extremes?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 5}],
+      "supporting_quote": "It is an established fact that human-induced greenhouse gas emissions have led to an increased frequency and/or intensity of some weather and climate extremes since pre-industrial time, in particular for temperature extremes",
+      "hazard": "heatwave",
+      "notes": "Ch.11 Executive Summary opening assessment."
+    },
+    {
+      "id": "SP-04",
+      "slice": "single_page",
+      "question": "What confidence does AR6 assign to heat extremes increasing in frequency across many parts of India?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 33}],
+      "supporting_quote": "there is medium confidence of heat extremes increasing in frequency in many parts of India",
+      "hazard": "heatwave",
+      "notes": "Deliberate honest-twin of PI-01: same fact and page, asked straight here (ANSWER) vs wrapped in a false premise there (REFUSE)."
+    },
+    {
+      "id": "SP-05",
+      "slice": "single_page",
+      "question": "Were atmospheric CO2 concentrations in 2019 higher than at any point in the last two million years?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 8}],
+      "supporting_quote": "In 2019, atmospheric CO2 concentrations were higher than at any time in at least 2 million years ( high confidence), and concentrations of CH4 and N2O were higher than at any time in at least 800,000 years (very high confidence).",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "SP-06",
+      "slice": "single_page",
+      "question": "What warming does AR6 estimate results from each 1000 GtCO2 of cumulative CO2 emissions (the TCRE)?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 28}],
+      "supporting_quote": "Each 1000 GtCO2 of cumulative CO2 emissions is assessed to likely cause a 0.27°C to 0.63°C increase in global surface temperature with a best estimate of 0.45°C",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "SP-07",
+      "slice": "single_page",
+      "question": "Do increases in average precipitation and increases in extreme (heavy) precipitation always move in the same direction?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 96}],
+      "supporting_quote": "changes in precipitation extremes (heavy precipitation) generally do not follow those in average precipitation, and can even move in the opposite direction (e.g., with average precipitation decreasing but extreme precipitation increasing)",
+      "hazard": "extreme_precip",
+      "notes": "FAQ 11.2."
+    },
+    {
+      "id": "SP-08",
+      "slice": "single_page",
+      "question": "Have average surface wind speeds been declining (the 'stilling' phenomenon) in the tropics and mid-latitudes?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 85}],
+      "supporting_quote": "negative surface wind speed trends (stilling) were found in the tropics and mid-latitudes of both hemispheres",
+      "hazard": "wind",
+      "notes": "Ch.11 section 11.7.2 (wind); unique page for this statement."
+    },
+    {
+      "id": "SP-09",
+      "slice": "single_page",
+      "question": "What were the measured atmospheric concentrations of CO2, methane and nitrous oxide in 2019?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 4}],
+      "supporting_quote": "reaching annual averages of 410 parts per million (ppm) for carbon dioxide (CO 2), 1866 parts per billion (ppb) for methane (CH 4), and 332 ppb for nitrous oxide (N 2O) in 2019.",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "SP-10",
+      "slice": "single_page",
+      "question": "Can low-likelihood, high-impact climate extreme events be ruled out, even though confidence in predicting them is low?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 8}],
+      "supporting_quote": "The future occurrence of low-likelihood, high-impact events linked to climate extremes is generally associated with low confidence , but cannot be excluded, especially at global warming levels above 4°C.",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "SP-11",
+      "slice": "single_page",
+      "question": "Has Asia as a whole shown a long-term warming trend in mean surface temperature, and when did it accelerate?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 33}],
+      "supporting_quote": "A long-term warming trend in annual mean surface temperature has been observed across Asia during 1960–2015, and the warming accelerated after the 1970s ( high confidence)",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "SP-12",
+      "slice": "single_page",
+      "question": "What is AR6's best estimate for equilibrium climate sensitivity, and how does its likely range compare to AR5?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 11}],
+      "supporting_quote": "the very likely range of equilibrium climate sensitivity is between 2°C (high confidence) and 5°C ( medium confidence). The AR6 assessed best estimate is 3°C with a likely range of 2.5°C to 4°C (high confidence), compared to 1.5°C to 4.5°C in AR5, which did not provide a best estimate",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "MP-01",
+      "slice": "multi_page",
+      "question": "At what rate does extreme (heavy) precipitation intensify per degree of global warming, and why?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 6},
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 96}
+      ],
+      "supporting_quote": "the intensification of heavy precipitation will follow the rate of increase in the maximum amount of moisture that the atmosphere can hold as it warms ( high confidence), of about 7% per 1°C of global warming",
+      "hazard": "extreme_precip",
+      "notes": "Same Clausius-Clapeyron ~7%/1C figure in Ch11 Executive Summary (p6) and FAQ 11.1 (p96); both independently sufficient."
+    },
+    {
+      "id": "MP-02",
+      "slice": "multi_page",
+      "question": "Is it virtually certain that hot extremes have become more frequent and intense since the 1950s?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_SPM.pdf", "page": 8},
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 5}
+      ],
+      "supporting_quote": "The frequency and intensity of hot extremes (including heatwaves) have increased, and those of cold extremes have decreased on the global scale since 1950 ( virtually certain)",
+      "hazard": "heatwave",
+      "notes": "SPM A.3.1 (p8) and Ch11 Executive Summary (p5) both assess this at virtually certain; either page independently answers it."
+    },
+    {
+      "id": "MP-03",
+      "slice": "multi_page",
+      "question": "Will heavy precipitation events become more frequent and more intense as global warming continues?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_SPM.pdf", "page": 16},
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 6},
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 54}
+      ],
+      "supporting_quote": "precipitation will generally become more frequent and more intense with additional global warming",
+      "hazard": "extreme_precip",
+      "notes": "Quote verbatim on both Ch11 pages (ES p6 and section summary p54); SPM B.2.4 (p16) independently sufficient in its own wording."
+    },
+    {
+      "id": "MP-04",
+      "slice": "multi_page",
+      "question": "Is monsoon precipitation over South Asia projected to increase, and with what confidence?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_SPM.pdf", "page": 19},
+        {"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 34}
+      ],
+      "supporting_quote": "Monsoon precipitation is projected to increase in the mid- to long term at the global scale, particularly over South and South East Asia, East Asia and West Africa apart from the far west Sahel ( high confidence )",
+      "hazard": null,
+      "notes": "SPM B.3.3 (p19); Ch12 12.4.2.2 (p34) independently says mean precipitation likely increases in southern Asia with wetter wet seasons."
+    },
+    {
+      "id": "MP-05",
+      "slice": "multi_page",
+      "question": "Have concurrent heatwaves and droughts become more frequent because of human-induced climate change?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_SPM.pdf", "page": 9},
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 7}
+      ],
+      "supporting_quote": "Concurrent heatwaves and droughts have become more frequent, and this trend will continue with higher global warming ( high confidence )",
+      "hazard": "heatwave",
+      "notes": "SPM A.3.5 (p9) and Ch11 Executive Summary compound-events section (p7) both assess this."
+    },
+    {
+      "id": "MP-06",
+      "slice": "multi_page",
+      "question": "Has the frequency and intensity of heavy precipitation increased since the 1950s, and is human influence the main driver?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_SPM.pdf", "page": 8},
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 6}
+      ],
+      "supporting_quote": "The frequency and intensity of heavy precipitation events have increased since the 1950s over most land area for which observational data are sufficient for trend analysis ( high confidence), and human-induced climate change is likely the main driver",
+      "hazard": "extreme_precip",
+      "notes": "SPM A.3.2 (p8) and Ch11 Executive Summary (p6) both independently sufficient."
+    },
+    {
+      "id": "MP-07",
+      "slice": "multi_page",
+      "question": "Are mountain and polar glaciers committed to continue shrinking regardless of emissions pathway?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_SPM.pdf", "page": 21},
+        {"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 4}
+      ],
+      "supporting_quote": "Mountain and polar glaciers are committed to continue melting for decades or centuries ( very high confidence)",
+      "hazard": null,
+      "notes": "SPM B.5.2 (p21) and Ch12 Executive Summary (p4) both independently confirm continued glacier loss."
+    },
+    {
+      "id": "MP-08",
+      "slice": "multi_page",
+      "question": "Does the Arctic warm faster than the global average, and by roughly what factor?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_SPM.pdf", "page": 15},
+        {"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 5}
+      ],
+      "supporting_quote": "It is virtually certain that the Arctic will continue to warm more than global surface temperature, with high confidence above two times the rate of global warming.",
+      "hazard": null,
+      "notes": "SPM B.2.1 (p15) and Ch12 Executive Summary (p5, ~2x GSAT) both independently confirm."
+    },
+    {
+      "id": "MP-09",
+      "slice": "multi_page",
+      "question": "Does urbanization make heatwaves worse in cities on top of the general background warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_SPM.pdf", "page": 25},
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 6}
+      ],
+      "supporting_quote": "Cities intensify human-induced warming locally, and further urbanization together with more frequent hot extremes will increase the severity of heatwaves ( very high confidence )",
+      "hazard": "heatwave",
+      "notes": "SPM C.2.6 (p25) and Ch11 Executive Summary (p6, urbanization exacerbates temperature extremes) both independently confirm."
+    },
+    {
+      "id": "MP-10",
+      "slice": "multi_page",
+      "question": "Do hot temperature extremes increase nonlinearly with global warming — with larger increases for rarer events?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 6},
+        {"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 45}
+      ],
+      "supporting_quote": "The frequency of hot temperature extreme events will very likely increase nonlinearly with increasing global warming, with larger percentage increases for rarer events",
+      "hazard": "heatwave",
+      "notes": "Quote verbatim on Ch11 p6 (ES); p45 states the same nonlinearity in section wording, independently sufficient."
+    },
+    {
+      "id": "RT-01",
+      "slice": "regional_table",
+      "question": "By how much are the rarest (50-year) heavy 1-day and 5-day rainfall events in South Asia projected to intensify at 4 degrees of global warming, compared to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 131}],
+      "supporting_quote": "Median increase of more than 25% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.8 (heavy precipitation, Asia), South Asia (SAS) row, 4°C GWL projection column."
+    },
+    {
+      "id": "RT-02",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 place in the observed increase of hot extremes (and decrease of cold extremes) in South Asia?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 125}],
+      "supporting_quote": "Significant increases in the intensity and frequency of hot extremes and significant decreases in the intensity and frequency of cold extremes (Zahid and Rasul, 2012",
+      "hazard": "heatwave",
+      "notes": "Table 11.7 (temperature extremes, Asia), South Asia (SAS) row."
+    },
+    {
+      "id": "RT-03",
+      "slice": "regional_table",
+      "question": "Will heat extremes in South Asia become more intense or frequent by the end of the century?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 33}],
+      "supporting_quote": "Extreme heat events are very likely to become more intense and/or more frequent in SAS, WCA, ARP , EAS, and SEA by the end of 21st century",
+      "hazard": "heatwave",
+      "notes": "Ch12 12.4.2.1 extreme-heat paragraph explicitly lists SAS."
+    },
+    {
+      "id": "RT-04",
+      "slice": "regional_table",
+      "question": "Is South Asia's mean near-surface wind speed expected to keep declining in the future along with the rest of Asia?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 35}],
+      "supporting_quote": "There is medium confidence of future declining mean SWS in Asia, except in SAS and SEA, as global projections indicate a decreasing trend",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.2.3: SAS and SEA are the explicit exceptions to the projected Asia-wide wind-speed decline."
+    },
+    {
+      "id": "RT-05",
+      "slice": "regional_table",
+      "question": "Which AR6 region list includes South Asia as having at least medium confidence observed increases in heavy precipitation?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 6}],
+      "supporting_quote": "Regional increases in the frequency and/or intensity of heavy precipitation have been observed with at least medium confidence for nearly half of AR6 regions, including WSAF , ESAF , WSB, SAS, ESB, RFE, WCA, ECA, TIB, EAS, SEA, NAU, NEU, EEU, GIC, WCE, SES, CNA, and ENA.",
+      "hazard": "extreme_precip",
+      "notes": "Ch11 Executive Summary lists SAS explicitly."
+    },
+    {
+      "id": "RT-06",
+      "slice": "regional_table",
+      "question": "How does South Asia's observed decline in surface wind speed compare with the rest of Asia?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 35}],
+      "supporting_quote": "with the significant decreases in Central Asia among the highest in the world followed by EAS and SAS (J. Wu et al., 2018",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.2.3: SAS among the regions with the largest observed near-surface wind-speed slowdown."
+    },
+    {
+      "id": "RT-07",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to the observed increase in hot extremes over Southeast Asia?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 126}],
+      "supporting_quote": "Significant increases in the intensity and frequency of hot extremes and significant decreases in the intensity and frequency of cold extremes (Donat et al., 2016a; Supari et al., 2017; Cheong et al., 2018; P . Zhang et al., 2019; Dunn et al., 2020)",
+      "hazard": "heatwave",
+      "notes": "Table 11.7 (temperature extremes, Asia), South East Asia (SEA) row."
+    },
+    {
+      "id": "RT-08",
+      "slice": "regional_table",
+      "question": "Has heavy precipitation intensified in East Asia, and what does the evidence rest on?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 130}],
+      "supporting_quote": "East Asia (EAS) Intensification of heavy precipitation (B. Zhou et al., 2016; Baek et al., 2017; Nayak et al., 2017; Ye and Li, 2017; Dunn et al., 2020; Sun et al., 2021) Disagreement among studies",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.8 (heavy precipitation, Asia), East Asia (EAS) row."
+    },
+    {
+      "id": "RT-09",
+      "slice": "regional_table",
+      "question": "Is there good evidence for intensification of heavy precipitation on the Tibetan Plateau?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 131}],
+      "supporting_quote": "Tibetan Plateau (TIB) Intensification of heavy precipitation (Jiang et al., 2013; Hu et al., 2016; Ge et al., 2017; Zhan et al., 2017; M. Liu et al., 2019b; Sun et al., 2021) Limited evidence",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.8 (heavy precipitation, Asia), Tibetan Plateau (TIB) row."
+    },
+    {
+      "id": "RT-10",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot-extreme (TXx/TNn) events in East Central Asia projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 124}],
+      "supporting_quote": "Median increase of more than 3.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.7 (temperature extremes, Asia), East Central Asia (ECA) row, 4°C GWL projection."
+    },
+    {
+      "id": "OSH-01",
+      "slice": "out_of_scope_hazard",
+      "question": "Has South Asia seen a significant increase in meteorological drought?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 141}],
+      "supporting_quote": "Medium confidence: Increase in meteorological drought. Subregional differences but drying is dominant (Mishra et al., 2014a",
+      "hazard": "drought",
+      "notes": "Table 11.9 (droughts, Asia), SAS MET row. Agent must refuse (drought unsupported) even though the corpus answers it."
+    },
+    {
+      "id": "OSH-02",
+      "slice": "out_of_scope_hazard",
+      "question": "Has the global proportion of the most intense (Category 3-5) tropical cyclones increased over the last several decades?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 9}],
+      "supporting_quote": "It is likely that the global proportion of major (Category 3–5) tropical cyclone occurrence has increased over the last four decades",
+      "hazard": "tropical_cyclone",
+      "notes": "SPM A.3.4. Agent must refuse (tropical cyclone unsupported) even though evidence exists."
+    },
+    {
+      "id": "OSH-03",
+      "slice": "out_of_scope_hazard",
+      "question": "Will coastal flooding from extreme sea level events become more frequent this century?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 25}],
+      "supporting_quote": "Due to relative sea level rise, extreme sea level events that occurred once per century in the recent past are projected to occur at least annually at more than half of all tide gauge locations by 2100",
+      "hazard": "coastal_flood",
+      "notes": "SPM C.2.5. Agent must refuse (sea-level/coastal flood unsupported) even though evidence exists."
+    },
+    {
+      "id": "OSH-04",
+      "slice": "out_of_scope_hazard",
+      "question": "Is fire weather season length expected to increase in India under 2 degrees of global warming?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 35}],
+      "supporting_quote": "Under the global warming scenario of 2°C, the magnitude of length and frequency of fire seasons are projected to increase with strong effects in India, China and Russia ( medium confidence) (Q. Sun et al., 2019)",
+      "hazard": "fire_weather",
+      "notes": "Ch12 12.4.2.2 fire-weather paragraph names India explicitly. Agent must refuse (fire weather unsupported) even though evidence exists."
+    },
+    {
+      "id": "OOC-01",
+      "slice": "out_of_corpus",
+      "question": "What Nationally Determined Contribution (NDC) emissions-reduction target has India pledged under the Paris Agreement?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'Nationally Determined Contribution' (1 passing hit, Ch12 p96 policy-vehicle list), 'Paris Agreement' (only GWL scenario framing), 'India pledge'/'India NDC' (0 hits). Country NDC content is WG3 territory."
+    },
+    {
+      "id": "OOC-02",
+      "slice": "out_of_corpus",
+      "question": "What would it cost to adapt Mumbai's coastal infrastructure to protect against sea-level rise by 2100?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'Mumbai' (0), 'adaptation cost' (0), 'adaptation finance' (0), 'coastal infrastructure' (0), 'seawall' (1 unrelated Ch12 hit). Adaptation costing is WG2/WG3 territory."
+    },
+    {
+      "id": "OOC-03",
+      "slice": "out_of_corpus",
+      "question": "What percentage of global GDP is projected to be lost due to climate change impacts at 2 degrees of warming?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'GDP' (0 hits in all 3 PDFs), 'gross domestic product' (0); economic-loss mentions in Ch12 are citation noise, no quantified GDP-loss share. WG2/WG3 territory."
+    },
+    {
+      "id": "PI-01",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC says heat extremes in India are increasing with high confidence purely because of global greenhouse warming, how much worse will Indian heatwaves get by 2100?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 33}],
+      "supporting_quote": "there is medium confidence of heat extremes increasing in frequency in many parts of India",
+      "hazard": "heatwave",
+      "notes": "False premise: AR6 assigns MEDIUM (not high) confidence, and the same page attributes part of the picture to aerosols/irrigation partially offsetting GHG warming. Honest-twin of SP-04."
+    },
+    {
+      "id": "PI-02",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC says South Asian monsoon rainfall increased steadily across the entire 20th century because of rising greenhouse gases, what's driving that trend?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 9}],
+      "supporting_quote": "Over South Asia, East Asia and West Africa, increases in monsoon precipitation due to warming from GHG emissions were counteracted by decreases in monsoon precipitation due to cooling from human-caused aerosol emissions over the 20th century ( high confidence)",
+      "hazard": null,
+      "notes": "False premise: SPM A.3.3 says the GHG-driven increase was COUNTERACTED by aerosol cooling through the 20th century, not a steady unopposed increase."
+    },
+    {
+      "id": "PI-03",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC says the Atlantic Meridional Overturning Circulation is very likely to collapse abruptly before 2100, how should coastal planners prepare?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_SPM.pdf", "page": 27}],
+      "supporting_quote": "There is medium confidence that there will not be an abrupt collapse before 2100.",
+      "hazard": null,
+      "notes": "False premise: SPM C.3.4 assigns medium confidence AMOC will NOT abruptly collapse before 2100 — the opposite of the premise."
+    },
+    {
+      "id": "PI-04",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC says mean wind speeds are projected to decline everywhere in Asia including South Asia, is wind power still viable in India?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 35}],
+      "supporting_quote": "There is medium confidence of future declining mean SWS in Asia, except in SAS and SEA, as global projections indicate a decreasing trend in all climate scenarios for most of northern Asia, TIB and East Asia by the mid-century",
+      "hazard": "wind",
+      "notes": "False premise: Ch12 12.4.2.3 explicitly names SAS and SEA as EXCEPTIONS to the projected Asia-wide decline."
+    },
+    {
+      "id": "DR-01",
+      "slice": "duplicate_region",
+      "question": "What confidence does AR6 assign to the observed intensification of heavy precipitation in South Asia?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 131}],
+      "supporting_quote": "High confidence in the intensification of heavy precipitation Low confidence",
+      "hazard": "extreme_precip",
+      "notes": "Trap: Tibetan Plateau (TIB), listed immediately above SAS on the SAME page 131 of Table 11.8, is assessed at only MEDIUM confidence — a naive retrieval grabs TIB's row and answers 'medium'. Gold is SAS's row only."
+    },
+    {
+      "id": "DR-02",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, how much warmer are 50-year extreme heat (TXx/TNn) events projected to become in West Central Asia, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter11.pdf", "page": 120}],
+      "supporting_quote": "Median increase of more than 5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 6°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Trap: East Central Asia (ECA) — one letter off WCA — has its own Table 11.7 row (Ch11 p124) projecting only 'more than 3.5°C' at 4°C GWL vs WCA's 'more than 5°C'. Gold is West Central Asia's page only."
+    }
+  ]
+}
