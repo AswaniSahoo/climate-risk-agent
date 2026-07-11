@@ -1,13 +1,16 @@
-"""Tests for Gemini embeddings + disk cache + dense index + RRF (all offline).
+"""Tests for embeddings + disk cache + dense index + RRF (all offline).
 
-Network is mocked (pytest-httpx); cosine and RRF are pure math on tiny vectors.
+The SDK seam (rag.gemini_client.embed_batch) is monkeypatched; cosine and RRF
+are pure math on tiny vectors.
 """
 import numpy as np
 import pytest
 
+import rag.embed as embed_mod
 from rag.chunk import Chunk
 from rag.dense import DenseIndex
-from rag.embed import DiskVectorCache, EmbeddingError, embed_texts
+from rag.embed import DiskVectorCache, EmbeddingError, cache_key, cached_embed_texts, embed_texts
+from rag.gemini_client import GeminiError
 from rag.hybrid import rrf_fuse
 
 
@@ -15,53 +18,44 @@ def _chunk(i: int, text: str = "x") -> Chunk:
     return Chunk(chunk_id=f"d#p1#{i}", source="d.pdf", page=i + 1, text=text)
 
 
-# --- embed_texts (mocked HTTP) ---
+@pytest.fixture(autouse=True)
+def _no_pacing(monkeypatch):
+    monkeypatch.setattr(embed_mod, "_sleep", lambda s: None)
 
 
-def _batch_response(n: int, dims: int = 4) -> dict:
-    return {"embeddings": [{"values": [float(i)] * dims} for i in range(n)]}
+def _fake_batches(*results):
+    """Seam stub returning canned batch results (or raising) in order."""
+    queue = list(results)
+
+    def fake(texts, *, task_type, dims):
+        item = queue.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return [[float(i)] * 4 for i in range(len(texts))]
+
+    return fake
 
 
-def test_embed_texts_parses_batch_response(httpx_mock):
-    httpx_mock.add_response(json=_batch_response(2))
-    vectors = embed_texts(["a", "b"], task_type="RETRIEVAL_DOCUMENT", api_key="k")
-    assert len(vectors) == 2
-    assert vectors[1] == [1.0, 1.0, 1.0, 1.0]
+# --- embed_texts (seam mocked) ---
 
 
-def test_embed_texts_splits_into_batches(httpx_mock, monkeypatch):
-    from rag.embed import _BATCH_SIZE
+def test_embed_texts_batches_and_concatenates(monkeypatch):
+    calls = []
 
-    monkeypatch.setattr("rag.embed._sleep", lambda s: None)  # no real pacing in tests
-    httpx_mock.add_response(json=_batch_response(_BATCH_SIZE))
-    httpx_mock.add_response(json=_batch_response(1))
-    vectors = embed_texts(["t"] * (_BATCH_SIZE + 1), task_type="RETRIEVAL_DOCUMENT", api_key="k")
-    assert len(vectors) == _BATCH_SIZE + 1
-    assert len(httpx_mock.get_requests()) == 2
+    def fake(texts, *, task_type, dims):
+        calls.append(len(texts))
+        return [[0.0] * dims for _ in texts]
 
-
-def test_embed_texts_retries_429_with_server_delay(httpx_mock, monkeypatch):
-    slept = []
-    monkeypatch.setattr("rag.embed._sleep", slept.append)
-    httpx_mock.add_response(status_code=429, text="Please retry in 7.5s.")
-    httpx_mock.add_response(json=_batch_response(1))
-    vectors = embed_texts(["a"], task_type="RETRIEVAL_DOCUMENT", api_key="k")
-    assert len(vectors) == 1
-    assert slept == [8.5]  # server-suggested 7.5s + 1
+    monkeypatch.setattr(embed_mod, "embed_batch", fake)
+    vectors = embed_texts(["t"] * (embed_mod._BATCH_SIZE + 1), task_type="RETRIEVAL_DOCUMENT")
+    assert len(vectors) == embed_mod._BATCH_SIZE + 1
+    assert calls == [embed_mod._BATCH_SIZE, 1]
 
 
-def test_embed_texts_raises_typed_error_on_http_failure(httpx_mock):
-    httpx_mock.add_response(status_code=500)
-    with pytest.raises(EmbeddingError):
-        embed_texts(["a"], task_type="RETRIEVAL_QUERY", api_key="k")
-
-
-def test_embed_texts_gives_up_after_max_429_retries(httpx_mock, monkeypatch):
-    monkeypatch.setattr("rag.embed._sleep", lambda s: None)
-    for _ in range(8):  # _RETRY_MAX
-        httpx_mock.add_response(status_code=429, text="Please retry in 1s.")
-    with pytest.raises(EmbeddingError, match="retries exhausted"):
-        embed_texts(["a"], task_type="RETRIEVAL_QUERY", api_key="k")
+def test_embed_texts_wraps_seam_error(monkeypatch):
+    monkeypatch.setattr(embed_mod, "embed_batch", _fake_batches(GeminiError("quota")))
+    with pytest.raises(EmbeddingError, match="quota"):
+        embed_texts(["a"], task_type="RETRIEVAL_QUERY")
 
 
 def test_disk_cache_roundtrip_and_miss(tmp_path):
@@ -71,22 +65,29 @@ def test_disk_cache_roundtrip_and_miss(tmp_path):
     assert cache.get("some-key") == pytest.approx([0.1, 0.2])
 
 
-def test_cached_embed_persists_completed_batches_on_midway_failure(tmp_path, httpx_mock, monkeypatch):
+def test_cached_embed_persists_completed_batches_on_midway_failure(tmp_path, monkeypatch):
     # Quota can bite mid-run: batch 1's vectors must already be on disk so the
     # next run resumes instead of re-paying.
-    from rag.embed import _BATCH_SIZE, cache_key, cached_embed_texts
-
-    monkeypatch.setattr("rag.embed._sleep", lambda s: None)
-    monkeypatch.setenv("GEMINI_API_KEY", "k")
-    httpx_mock.add_response(json=_batch_response(_BATCH_SIZE))
-    httpx_mock.add_response(status_code=500)
-
+    monkeypatch.setattr(
+        embed_mod, "embed_batch", _fake_batches("ok-batch", GeminiError("quota"))
+    )
     cache = DiskVectorCache(tmp_path)
-    texts = [f"t{i}" for i in range(_BATCH_SIZE + 1)]
+    texts = [f"t{i}" for i in range(embed_mod._BATCH_SIZE + 1)]
     with pytest.raises(EmbeddingError):
         cached_embed_texts(texts, task_type="RETRIEVAL_DOCUMENT", cache=cache)
     assert cache.get(cache_key("t0", "RETRIEVAL_DOCUMENT")) is not None  # batch 1 kept
-    assert cache.get(cache_key(f"t{_BATCH_SIZE}", "RETRIEVAL_DOCUMENT")) is None
+    assert cache.get(cache_key(f"t{embed_mod._BATCH_SIZE}", "RETRIEVAL_DOCUMENT")) is None
+
+
+def test_cached_embed_makes_no_call_on_full_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        embed_mod, "embed_batch",
+        lambda *a, **k: pytest.fail("network must not be touched on cache hit"),
+    )
+    cache = DiskVectorCache(tmp_path)
+    cache.put(cache_key("hello", "RETRIEVAL_QUERY"), [1.0, 2.0])
+    [vector] = cached_embed_texts(["hello"], task_type="RETRIEVAL_QUERY", cache=cache)
+    assert vector == pytest.approx([1.0, 2.0])
 
 
 # --- dense index (pure math) ---

@@ -11,29 +11,18 @@ Trust architecture, in order of the guarantees:
 4. An abstention may carry citations (grounded refusal: "refusing BECAUSE this
    excerpt says otherwise") — but a non-abstaining answer MUST cite.
 
-Model pinned to a stable GA version for reproducibility; previews are upgraded
-deliberately, with the eval rerun, never implicitly.
+Model calls go through the SDK seam (rag/gemini_client.py — API key or Vertex
+ADC, env-driven). Model pinned stable GA; previews are upgraded deliberately,
+with the eval rerun, never implicitly.
 """
 from __future__ import annotations
 
 import json
-import os
-import re
-import time
 
-import httpx
 from pydantic import BaseModel, model_validator
 
 from rag.chunk import Chunk
-
-_RETRY_MAX = 6
-_RETRY_IN = re.compile(r"retry in ([0-9.]+)s", re.IGNORECASE)
-_sleep = time.sleep  # module-level so tests can stub the waiting out
-
-GENERATE_MODEL = "gemini-2.5-flash"
-GENERATE_URL = (
-    f"https://generativelanguage.googleapis.com/v1beta/models/{GENERATE_MODEL}:generateContent"
-)
+from rag.gemini_client import GeminiError, generate_json
 
 SUPPORTED_HAZARDS = "heatwave, extreme precipitation, wind"
 
@@ -100,9 +89,7 @@ def _build_prompt(question: str, chunks: list[Chunk]) -> str:
     return f"{_INSTRUCTIONS}\n\n{excerpts}\n\nQuestion: {question}"
 
 
-def answer_with_guard(
-    question: str, chunks: list[Chunk], *, api_key: str | None = None
-) -> CitedAnswer:
+def answer_with_guard(question: str, chunks: list[Chunk]) -> CitedAnswer:
     """The full answer path: deterministic scope guard FIRST, then the LLM.
 
     An out-of-scope hazard refuses before any model call — the guard is code,
@@ -122,42 +109,15 @@ def answer_with_guard(
             ),
             allowed_ids=[c.chunk_id for c in chunks],
         )
-    return answer_question(question, chunks, api_key=api_key)
+    return answer_question(question, chunks)
 
 
-def answer_question(
-    question: str, chunks: list[Chunk], *, api_key: str | None = None
-) -> CitedAnswer:
-    """One generateContent call → validated CitedAnswer. Raises AnswerError."""
-    key = api_key or os.environ.get("GEMINI_API_KEY")
-    if not key:
-        raise AnswerError("GEMINI_API_KEY is not set")
-
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": _build_prompt(question, chunks)}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": _RESPONSE_SCHEMA,
-            "temperature": 0.0,  # deterministic-as-possible for eval runs
-        },
-    }
+def answer_question(question: str, chunks: list[Chunk]) -> CitedAnswer:
+    """One generation call → validated CitedAnswer. Raises AnswerError."""
     try:
-        for _ in range(_RETRY_MAX):
-            response = httpx.post(
-                GENERATE_URL, headers={"x-goog-api-key": key}, json=payload, timeout=120
-            )
-            if response.status_code == 429:  # free-tier RPM: honor suggested delay
-                match = _RETRY_IN.search(response.text)
-                _sleep(min(float(match.group(1)) + 1 if match else 30.0, 120.0))
-                continue
-            response.raise_for_status()
-            break
-        else:
-            raise AnswerError("rate-limit retries exhausted (429)")
-        raw = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except httpx.HTTPError as exc:
-        raise AnswerError(f"generateContent failed: {exc}") from exc
-    except (KeyError, IndexError) as exc:
-        raise AnswerError(f"unexpected generateContent response shape: {exc}") from exc
-
+        raw = generate_json(_build_prompt(question, chunks), schema=_RESPONSE_SCHEMA)
+    except GeminiError as exc:
+        raise AnswerError(str(exc)) from exc
+    if raw is None:
+        raise AnswerError("model returned empty response")
     return CitedAnswer.from_llm_json(raw, allowed_ids=[c.chunk_id for c in chunks])

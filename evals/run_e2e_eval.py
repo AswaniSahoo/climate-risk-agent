@@ -25,7 +25,10 @@ from rag.answer import AnswerError, answer_with_guard
 from rag.bm25 import BM25Index
 from rag.scope import out_of_scope_hazard
 
-_LLM_PAUSE_S = 13.0  # free-tier gemini-2.5-flash is ~5 RPM (measured via 429s)
+import os as _os
+
+# Default pacing fits the FREE tier (~5 RPM measured); paid tier: EVAL_LLM_PAUSE_S=0.5
+_LLM_PAUSE_S = float(_os.environ.get("EVAL_LLM_PAUSE_S", "13.0"))
 _TOP_K = 5
 
 

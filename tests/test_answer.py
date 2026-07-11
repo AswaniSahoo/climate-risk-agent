@@ -1,4 +1,4 @@
-"""Tests for the cited LLM answerer (rag/answer.py). HTTP mocked; validators pure.
+"""Tests for the cited LLM answerer (rag/answer.py). SDK seam mocked; validators pure.
 
 The trust core: a citation that doesn't reference a retrieved chunk_id cannot
 even be constructed — fabricated citations are a schema violation, not a vibe.
@@ -8,8 +8,10 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from rag.answer import AnswerError, CitedAnswer, answer_question
+import rag.answer as answer_mod
+from rag.answer import AnswerError, CitedAnswer, answer_question, answer_with_guard
 from rag.chunk import Chunk
+from rag.gemini_client import GeminiError
 
 ALLOWED = ["a.pdf#p1#0", "a.pdf#p2#0"]
 
@@ -28,10 +30,6 @@ def _llm_json(**overrides) -> str:
     }
     payload.update(overrides)
     return json.dumps(payload)
-
-
-def _gemini_response(text: str) -> dict:
-    return {"candidates": [{"content": {"parts": [{"text": text}]}}]}
 
 
 # --- validation invariants (pure) ---
@@ -68,45 +66,40 @@ def test_malformed_llm_json_is_a_typed_error():
         CitedAnswer.from_llm_json("not json at all", allowed_ids=ALLOWED)
 
 
-# --- the network edge (mocked) ---
+# --- the seam edge (mocked) ---
 
 
-def test_answer_question_round_trip(httpx_mock):
-    httpx_mock.add_response(json=_gemini_response(_llm_json()))
+def test_answer_question_round_trip(monkeypatch):
+    seen = {}
+
+    def fake_generate(prompt, *, schema):
+        seen["prompt"] = prompt
+        return _llm_json()
+
+    monkeypatch.setattr(answer_mod, "generate_json", fake_generate)
     chunks = [_chunk(cid) for cid in ALLOWED]
 
-    answer = answer_question("How fast does heavy rain intensify?", chunks, api_key="k")
+    answer = answer_question("How fast does heavy rain intensify?", chunks)
 
     assert answer.citations == ["a.pdf#p1#0"]
-    sent = json.loads(httpx_mock.get_requests()[0].content)
-    prompt = json.dumps(sent)
-    assert "a.pdf#p1#0" in prompt  # chunk ids are offered to the model
-    assert "How fast does heavy rain intensify?" in prompt
+    assert "a.pdf#p1#0" in seen["prompt"]  # chunk ids are offered to the model
+    assert "How fast does heavy rain intensify?" in seen["prompt"]
 
 
-def test_answer_question_http_error_is_typed(httpx_mock):
-    httpx_mock.add_response(status_code=500)
-    with pytest.raises(AnswerError):
-        answer_question("q", [_chunk(ALLOWED[0])], api_key="k")
+def test_answer_question_seam_error_is_typed(monkeypatch):
+    def broken(prompt, *, schema):
+        raise GeminiError("backend down")
+
+    monkeypatch.setattr(answer_mod, "generate_json", broken)
+    with pytest.raises(AnswerError, match="backend down"):
+        answer_question("q", [_chunk(ALLOWED[0])])
 
 
-def test_answer_question_retries_429_with_server_delay(httpx_mock, monkeypatch):
-    slept = []
-    monkeypatch.setattr("rag.answer._sleep", slept.append)
-    httpx_mock.add_response(status_code=429, text="Please retry in 11s.")
-    httpx_mock.add_response(json=_gemini_response(_llm_json()))
-    answer = answer_question("q", [_chunk(ALLOWED[0])], api_key="k")
-    assert answer.abstain is False
-    assert slept == [12.0]
-
-
-def test_scope_guard_refuses_without_any_network_call(httpx_mock):
-    # no responses registered: any HTTP attempt would fail this test loudly
-    from rag.answer import answer_with_guard
-
-    result = answer_with_guard(
-        "Are tropical cyclones intensifying?", [_chunk(ALLOWED[0])], api_key="k"
+def test_scope_guard_refuses_without_any_model_call(monkeypatch):
+    monkeypatch.setattr(
+        answer_mod, "generate_json",
+        lambda *a, **k: pytest.fail("LLM must not be called for out-of-scope questions"),
     )
+    result = answer_with_guard("Are tropical cyclones intensifying?", [_chunk(ALLOWED[0])])
     assert result.abstain is True
     assert "tropical cyclone" in result.abstain_reason
-    assert httpx_mock.get_requests() == []
