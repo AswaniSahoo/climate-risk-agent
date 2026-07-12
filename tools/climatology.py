@@ -17,7 +17,7 @@ from functools import lru_cache
 import httpx
 
 from agent.contracts import Hazard
-from tools.hazard_stats import HazardStat, Representativeness, return_levels
+from tools.hazard_stats import HazardStat, Representativeness, return_levels_with_ci
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 _ERA5_RESOLUTION_DEG = 0.25
@@ -112,7 +112,9 @@ def build_hazard_stat(
         record_start_year=years[0],
         record_end_year=years[-1],
         record_max=max(maxima),
-        return_levels=return_levels(maxima, return_periods),
+        # 90% bootstrap band on every level: a 100-yr estimate from ~60 maxima
+        # has real sampling noise, and the report must say how much.
+        return_levels=return_levels_with_ci(maxima, return_periods),
         is_bias_corrected=False,
         representativeness=Representativeness.POINT_INTERPOLATED_REANALYSIS,
         interpretation=cfg.interpretation,

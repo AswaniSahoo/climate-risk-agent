@@ -143,13 +143,18 @@ if run:
             stat = report.hazard_stats[0]
             with st.container(border=True):
                 st.markdown(f"**ERA5 climatology** — {stat.n_years} years, {stat.variable}")
+                table = {
+                    "return_period_years": [
+                        r.return_period_years for r in stat.return_levels
+                    ],
+                    "level": [round(r.level, 1) for r in stat.return_levels],
+                }
+                if all(r.ci_low is not None for r in stat.return_levels):
+                    table["ci"] = [
+                        f"{r.ci_low:.1f} – {r.ci_high:.1f}" for r in stat.return_levels
+                    ]
                 st.dataframe(
-                    {
-                        "return_period_years": [
-                            r.return_period_years for r in stat.return_levels
-                        ],
-                        "level": [round(r.level, 1) for r in stat.return_levels],
-                    },
+                    table,
                     column_config={
                         "return_period_years": st.column_config.NumberColumn(
                             "Return period (yr)", format="%d",
@@ -157,6 +162,7 @@ if run:
                         "level": st.column_config.NumberColumn(
                             f"Level ({stat.variable})", format="%.1f",
                         ),
+                        "ci": st.column_config.TextColumn("90% CI (bootstrap)"),
                     },
                     hide_index=True,
                 )

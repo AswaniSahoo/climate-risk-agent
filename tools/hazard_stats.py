@@ -44,10 +44,17 @@ def return_period(annual_maxima: Sequence[float], value: float) -> float:
 
 
 class ReturnLevel(BaseModel):
-    """One (return period → level) pair, e.g. the 100-year event magnitude."""
+    """One (return period → level) pair, e.g. the 100-year event magnitude.
+
+    `ci_low`/`ci_high` are a 90% parametric-bootstrap confidence band on the
+    fitted level — present when the stat was built with uncertainty, None on
+    plain point fits (backward compatible).
+    """
 
     return_period_years: int
     level: float
+    ci_low: float | None = None
+    ci_high: float | None = None
 
 
 class Representativeness(str, Enum):
@@ -99,3 +106,44 @@ def return_levels(
         ReturnLevel(return_period_years=int(t), level=return_level(annual_maxima, t))
         for t in return_periods
     ]
+
+
+def return_levels_with_ci(
+    annual_maxima: Sequence[float],
+    return_periods: Sequence[int] = (10, 50, 100),
+    *,
+    n_boot: int = 300,
+    seed: int = 0,
+    alpha: float = 0.10,
+) -> list[ReturnLevel]:
+    """Return levels with a (1 - alpha) parametric-bootstrap confidence band.
+
+    Why parametric: the sample IS the fit's world-view — we resample n values
+    from the FITTED GEV, refit each resample, and read the percentile spread of
+    each return level across refits. This measures sampling noise (how much the
+    fit would move on a different 60-ish years), not model error; stationarity
+    is still assumed and stated in LIMITATIONS.
+    """
+    data = np.asarray(annual_maxima, dtype=float)
+    c, loc, scale = _fit(data)
+    quantiles = {int(t): 1.0 - 1.0 / t for t in return_periods}
+    point = {t: float(genextreme.ppf(q, c, loc, scale)) for t, q in quantiles.items()}
+
+    rng = np.random.default_rng(seed)
+    boot_levels: dict[int, list[float]] = {t: [] for t in quantiles}
+    for _ in range(n_boot):
+        resample = genextreme.rvs(c, loc=loc, scale=scale, size=data.size, random_state=rng)
+        bc, bloc, bscale = genextreme.fit(resample)
+        for t, q in quantiles.items():
+            boot_levels[t].append(float(genextreme.ppf(q, bc, bloc, bscale)))
+
+    lo_pct, hi_pct = 100 * (alpha / 2), 100 * (1 - alpha / 2)
+    out = []
+    for t in quantiles:
+        lo, hi = np.percentile(boot_levels[t], [lo_pct, hi_pct])
+        out.append(ReturnLevel(
+            return_period_years=t, level=point[t],
+            # the band must contain the point estimate even in skewed bootstrap draws
+            ci_low=float(min(lo, point[t])), ci_high=float(max(hi, point[t])),
+        ))
+    return out
