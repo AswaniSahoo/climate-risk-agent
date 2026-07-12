@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 from rag.gemini_client import EMBED_MODEL, GeminiError, embed_batch
 
@@ -77,24 +78,44 @@ def cache_key(text: str, task_type: str) -> str:
 def cached_embed_texts(
     texts: list[str], *, task_type: str, cache: DiskVectorCache
 ) -> list[list[float]]:
-    """embed_texts through the disk cache: only cache misses hit the network.
+    """Embed texts through the disk cache: only cache misses hit the network."""
 
-    Misses are fetched AND persisted one batch at a time, so a mid-run failure
-    (crash, quota) keeps every completed batch — the next run resumes from the
-    cache instead of re-paying.
-    """
     vectors: list[list[float] | None] = [cache.get(cache_key(t, task_type)) for t in texts]
     missing = [i for i, v in enumerate(vectors) if v is None]
+
+    if not missing:
+        print("All embeddings loaded from cache.")
+        return vectors  # type: ignore[return-value]
+
+    print(
+        f"Cache hits: {len(texts) - len(missing)} | "
+        f"Need to embed: {len(missing)}"
+    )
+
+    progress = tqdm(
+        total=len(missing),
+        desc=f"Embedding ({task_type})",
+        unit="chunks",
+    )
+
     for start in range(0, len(missing), _BATCH_SIZE):
         batch = missing[start : start + _BATCH_SIZE]
         try:
-            fetched = embed_batch([texts[i] for i in batch], task_type=task_type, dims=DIMS)
+            fetched = embed_batch(
+                [texts[i] for i in batch],
+                task_type=task_type,
+                dims=DIMS,
+            )
         except GeminiError as exc:
+            progress.close()
             raise EmbeddingError(str(exc)) from exc
         for i, vector in zip(batch, fetched):
             cache.put(cache_key(texts[i], task_type), vector)
             vectors[i] = vector
-        print(f"  embedded {min(start + _BATCH_SIZE, len(missing))}/{len(missing)} misses", flush=True)
+
+        progress.update(len(batch))
         if start + _BATCH_SIZE < len(missing):
             _sleep(_BATCH_PAUSE_S)
+    progress.close()
+
     return vectors  # type: ignore[return-value]
