@@ -1,0 +1,34 @@
+# CI: the invariants that need no corpus and no keys.
+#
+# 126 tests run here; the handful that parse the IPCC PDFs skip themselves
+# (pytest.mark.skipif on file presence). The retrieval + e2e EVALS are a
+# MANUAL pre-release gate on purpose — they need the corpus (600+ pages),
+# an embedding cache, and Gemini/Vertex auth, none of which belong in CI.
+# Release rule: run both evals locally, publish the numbers in README/STATE,
+# THEN tag. See docs/DEBT.md ("Eval-in-CI").
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run tests
+        run: uv run pytest -q
