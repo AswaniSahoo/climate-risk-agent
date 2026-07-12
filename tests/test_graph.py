@@ -14,6 +14,7 @@ from rag.answer import CitedAnswer
 from rag.chunk import Chunk
 from rag.corpus import CorpusError
 from tools.climatology import build_hazard_stat
+from tools.hazard_stats import HazardStat, Representativeness, ReturnLevel
 
 
 @pytest.fixture(autouse=True)
@@ -120,6 +121,53 @@ def test_heatwave_report_includes_injected_hazard_stats(httpx_mock):
     assert "return level" in report.summary.lower()
 
 
+def _precip_stat(ten, fifty, hundred) -> HazardStat:
+    return HazardStat(
+        variable="precipitation_sum", statistic_definition="annual max daily precip",
+        unit="mm", source="test", model="era5", native_resolution_deg=0.25,
+        captures_diurnal_peak=True, timezone="Asia/Kolkata",
+        latitude=22.26, longitude=84.85, n_years=63,
+        record_start_year=1960, record_end_year=2022, record_max=150.0,
+        return_levels=[
+            ReturnLevel(return_period_years=10, level=ten),
+            ReturnLevel(return_period_years=50, level=fifty),
+            ReturnLevel(return_period_years=100, level=hundred),
+        ],
+        is_bias_corrected=False,
+        representativeness=Representativeness.POINT_INTERPOLATED_REANALYSIS,
+        interpretation="test fixture",
+    )
+
+
+def test_gev_verdict_overrides_absolute_thresholds(httpx_mock):
+    # 80 mm peak = "HIGH" on the absolute Day-1 scale, but at a wet-climate
+    # location whose 10-yr event is 100 mm it's within decadal experience -> LOW.
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.EXTREME_PRECIP, horizon_days=3,
+        hazard_stat=_precip_stat(100.0, 140.0, 160.0),
+    )
+
+    assert report.risk_level is RiskLevel.LOW  # location-relative, not absolute
+    basis = [d for d in report.drivers if d.factor == "severity_basis"]
+    assert basis and "GEV return levels" in basis[0].detail
+
+
+def test_gev_verdict_flags_record_class_event(httpx_mock):
+    # Same 80 mm peak at a dry-climate location whose 100-yr event is 70 mm -> SEVERE.
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.EXTREME_PRECIP, horizon_days=3,
+        hazard_stat=_precip_stat(40.0, 60.0, 70.0),
+    )
+
+    assert report.risk_level is RiskLevel.SEVERE
+
+
 # --- research node: IPCC RAG -> real page-level Citations in the report ---
 
 _IPCC_CHUNKS = (
@@ -139,7 +187,7 @@ class _FakeRetriever:
 
 def _grounded_ipcc(monkeypatch, answer: CitedAnswer):
     monkeypatch.setattr(graph_mod, "_ipcc_retriever", lambda: _FakeRetriever())
-    monkeypatch.setattr(graph_mod, "answer_with_guard", lambda q, chunks: answer)
+    monkeypatch.setattr(graph_mod, "answer_with_guard", lambda q, chunks, **_: answer)
 
 
 def test_report_carries_page_level_citations_from_cited_answer(httpx_mock, monkeypatch):

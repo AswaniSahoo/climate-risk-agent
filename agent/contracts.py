@@ -31,9 +31,8 @@ class Hazard(str, Enum):
     """Hazards the agent supports (per MASTER-PLAN). Out-of-scope hazards are
     rejected here, which forces the agent down the refusal path.
 
-    heatwave ← temperature_2m_max, extreme_precip ← precipitation_sum (both from
-    get_forecast); wind is in-vocabulary but its data path isn't wired yet, so
-    a wind query currently takes the refusal path.
+    heatwave ← temperature_2m_max, extreme_precip ← precipitation_sum,
+    wind ← wind_speed_10m_max (all from get_forecast).
     """
 
     HEATWAVE = "heatwave"

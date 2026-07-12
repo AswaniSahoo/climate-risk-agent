@@ -8,7 +8,11 @@ Flow:  START -> plan -> (call -> research -> synthesize) -> END
 - research   : IPCC AR6 RAG — retrieve + cited LLM answer for this hazard/region.
                Loud, non-fatal: offline/no-LLM degrades to a citation-less report.
 - synthesize : turn forecast (+ optional ERA5 climatology + IPCC answer) into a
-               RiskReport with page-level Citations.
+               RiskReport with page-level Citations. Severity comes from the
+               forecast peak's position on the location's GEV return-level curve
+               when climatology is present (location-relative); absolute Day-1
+               thresholds remain only as the ungrounded fallback. Confidence is
+               composed from the report's actual grounding (agent/verdict.py).
 
 Every node reads/writes one shared `AgentState` (the "clipboard"). Nodes depend on
 the state shape, not on each other — which is what lets this grow into the
@@ -30,6 +34,7 @@ from agent.contracts import (
     RiskLevel,
     RiskReport,
 )
+from agent.verdict import compose_confidence, level_from_return_periods
 from rag.answer import AnswerError, CitedAnswer, answer_with_guard
 from rag.chunk import Chunk
 from rag.corpus import CorpusError, load_corpus_chunks
@@ -41,8 +46,13 @@ from tools.hazard_stats import HazardStat
 # Hazards we can actually answer today (have a data path in get_forecast).
 _ANSWERABLE = {Hazard.HEATWAVE, Hazard.EXTREME_PRECIP, Hazard.WIND}
 _KMH_TO_MS = 1.0 / 3.6  # Open-Meteo reports km/h; ERA5 return levels are m/s.
-_DAY1_CONFIDENCE = 0.3  # low on purpose: crude heuristic, no climatology yet.
-_CLIMATOLOGY_CONFIDENCE = 0.6  # bumped when ERA5 GEV climatology grounds the report.
+# Which forecast variable each hazard's peak metric comes from — must equal the
+# fitted HazardStat.variable for the GEV verdict to be a like-for-like comparison.
+_FORECAST_VARIABLE = {
+    Hazard.HEATWAVE: "temperature_2m_max",
+    Hazard.EXTREME_PRECIP: "precipitation_sum",
+    Hazard.WIND: "wind_speed_10m_max",  # climatology fits GUSTS -> never matches (by design)
+}
 # A/B-measured on the frozen set: k=8 admits table-header chunks (GWL column
 # labels), fixing column-ambiguity refusals — matrix 33/11/1/0, false_answer 0.
 _IPCC_TOP_K = 8
@@ -128,6 +138,16 @@ def _ipcc_retriever() -> HybridRetriever:
     return HybridRetriever.build(list(load_corpus_chunks()))
 
 
+@lru_cache(maxsize=1)
+def _answer_cache():
+    """Disk cache: repeat (question, evidence) pairs cost zero tokens."""
+    from pathlib import Path
+
+    from rag.answer_cache import AnswerCache
+
+    return AnswerCache(Path("data/cache/answers"))
+
+
 # Fused vocabulary per hazard: AR6 table terms ("hot extremes", "heavy
 # precipitation" — BM25 anchors) + real-world risk-screening phrasing
 # ("extreme heat", "extreme rainfall" — dense bridges the paraphrase).
@@ -162,7 +182,7 @@ def research(state: AgentState) -> dict:
     question = _ipcc_question(state["hazard"], state["location"])
     try:
         chunks = _ipcc_retriever().retrieve(question, top_k=_IPCC_TOP_K)
-        answer = answer_with_guard(question, chunks)
+        answer = answer_with_guard(question, chunks, cache=_answer_cache())
     except (CorpusError, AnswerError, GeminiError) as exc:
         print(f"[research] IPCC grounding unavailable ({exc}) — report ships without citations")
         return {}
@@ -209,11 +229,9 @@ def synthesize(state: AgentState) -> dict:
     )
     drivers = [driver]
     hazard_stats: list[HazardStat] = []
-    confidence = _DAY1_CONFIDENCE
     stat = state.get("hazard_stat")
     if stat is not None:
         hazard_stats = [stat]
-        confidence = _CLIMATOLOGY_CONFIDENCE
         levels_txt = ", ".join(
             f"{r.return_period_years}yr={round(r.level, 1)}" for r in stat.return_levels
         )
@@ -224,6 +242,31 @@ def synthesize(state: AgentState) -> dict:
             )
         )
         summary += f" ERA5 return levels ({levels_txt})."
+        # GEV-grounded verdict: severity = the forecast peak's position on THIS
+        # location's return-level curve. Only when forecast metric and fitted
+        # variable are the same quantity — wind is excluded (forecast = sustained
+        # speed, climatology = gusts; comparing them would understate risk).
+        if stat.variable == _FORECAST_VARIABLE[hazard]:
+            level = level_from_return_periods(metric, stat.return_levels)
+            drivers.append(
+                RiskDriver(
+                    factor="severity_basis",
+                    detail=(
+                        f"forecast peak {metric} {stat.unit} vs GEV return levels "
+                        f"({levels_txt}) -> {level.value}"
+                    ),
+                )
+            )
+        else:
+            drivers.append(
+                RiskDriver(
+                    factor="severity_basis",
+                    detail=(
+                        f"absolute thresholds (forecast/climatology variable mismatch: "
+                        f"{_FORECAST_VARIABLE[hazard]} vs {stat.variable})"
+                    ),
+                )
+            )
 
     citations: list[Citation] = []
     answer = state.get("ipcc_answer")
@@ -237,6 +280,11 @@ def synthesize(state: AgentState) -> dict:
             per_page[(c.source, c.page)] = Citation(source=c.source, locator=f"p{c.page}")
         citations = list(per_page.values())
         summary += f" IPCC AR6: {answer.answer}"
+
+    confidence = compose_confidence(
+        representativeness=stat.representativeness if stat is not None else None,
+        ipcc_cited=bool(citations),
+    )
 
     report = RiskReport(
         location=state["location"],
