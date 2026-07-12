@@ -19,7 +19,8 @@ A chatbot predicts plausible text — ask it about flood risk and it invents a n
 - **IPCC RAG with page-level citations** — AR6 WG1 SPM + Ch.11 + Ch.12 (439 pages), row-atomic chunking for regional assessment tables, zero-dependency BM25 (+ Gemini dense / RRF hybrid), and an LLM answerer whose **citations are structurally validated**: a citation that doesn't reference a retrieved chunk cannot be constructed.
 - **A frozen benchmark with published numbers** — 45 hand-verified questions; every supporting quote is machine-checked verbatim against the PDFs and the set is frozen by content hash. Recall@k with Wilson CIs per slice, including adversarial slices. The measured progression — naive chunks 76% → row-atomic table chunks 82% → BM25+dense RRF hybrid **91%** headline R@3; the duplicate-region trap slice went **0% → 100%** — is the design philosophy: every layer earned its place with a delta on the same frozen questions (dense alone actually *underperforms* BM25 at 71%; the fusion is what wins).
 - **Deterministic scope guard** — questions about unsupported hazards (drought, tropical cyclones, coastal flooding, wildfire) are refused in code, before the LLM, so the guard cannot be prompt-injected away.
-- **Zero confabulation, measured** — the end-to-end eval over all 45 frozen questions scores refusal behavior as a confusion matrix: **false_answer = 0**, held constant through a full retriever swap (BM25 → hybrid) and a context-size change (top_k 5 → 8). The agent's only error is 1 cautious false-refusal on a column-ambiguous table row — it errs toward silence, never invention. Citation validity 94%, numeric provenance 85%, and 3 of 4 premise-injection refusals cite the page that refutes the false premise.
+- **Zero confabulation, measured** — the end-to-end eval over all 45 frozen questions scores refusal behavior as a confusion matrix: **false_answer = 0**, held constant through a full retriever swap (BM25 → hybrid) and a context-size change (top_k 5 → 8). The agent's only error is 1 cautious false-refusal on a column-ambiguous table row — it errs toward silence, never invention. Citation validity 94%, numeric provenance 85%, **claim-level LLM-judge support 95%** (101/106 claims audited against cited excerpts only), and 3 of 4 premise-injection refusals cite the page that refutes the false premise.
+- **Statistics with uncertainty** — every GEV return level ships with a 90% parametric-bootstrap confidence band; the risk verdict itself comes from the forecast peak's position on the location's return-level curve (location-relative severity), and report confidence is composed from actual grounding, not a constant.
 - **Two MCP servers** — `weather-mcp` (forecast + hazard climatology) and `ipcc-rag-mcp` (search + cited answers), stdio-only, narrow and typed.
 - **Real citations in the report** — a `research` graph node retrieves top-8 IPCC chunks and gets a schema-validated cited answer; the final `RiskReport.citations` are page-level (`Chapter11.pdf, p124`), deduped, and can only reference actually-retrieved chunks. Offline/no-LLM degrades loudly to a citation-less report — never silently, never invented.
 - **Streamlit UI + Docker + CI** — one-page UI over the agent contract, a self-sufficient Docker image (corpus baked in at build; runs BM25-only without a key, hybrid with one), GitHub Actions on every push. Evals are a documented **manual release gate** (`false_answer > 0` blocks release) — see [DEPLOY.md](DEPLOY.md).
@@ -70,6 +71,8 @@ uv run streamlit run ui/app.py # the UI (localhost:8501)
 uv run python -m scripts.download_ipcc      # fetch the corpus (once)
 uv run python -m evals.run_retrieval_eval   # recall@{3,5,10} + MRR per slice, Wilson CIs
 uv run python -m evals.run_e2e_eval         # refusal matrix + citation/numeric checkers (needs Gemini auth)
+EVAL_CLAIM_JUDGE=1 uv run python -m evals.run_e2e_eval  # + claim-level LLM-judge audit
+uv run python -m evals.run_graph_eval       # the REAL agent path, live scenarios, contract checks
 
 # or containerized (corpus bakes in at build; see DEPLOY.md for HF Spaces)
 docker build -t climate-risk-agent . && docker run -p 7860:7860 climate-risk-agent
@@ -117,9 +120,11 @@ Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not statio
 - [x] Hybrid dense+RRF ablation published (bm25 82% / dense 71% / hybrid 91% headline R@3)
 - [x] RAG citations wired into the `RiskReport` agent path (`research` graph node)
 - [x] Streamlit UI, Docker image, CI; evals as a documented release gate
+- [x] Risk verdict from GEV return-level position; composed confidence; bootstrap CIs on return levels
+- [x] Claim-level LLM-judge eval + graph-path (real agent) eval
 - [ ] Deployed demo on Hugging Face Spaces
-- [ ] Last false refusal: table-caption-aware chunking (RT-01, column-ambiguity)
-- [ ] Observability + cost-per-report metering; skill-aware confidence
+- [ ] Table-caption-aware chunking (kills the last false refusal AND the judge's column-label flags)
+- [ ] Eval v2: 150+ questions with dev/test split · non-stationary GEV · observability + cost metering
 
 ## Security & limitations
 
