@@ -2,7 +2,7 @@
 
 An open-source **agent** (not a chatbot) that turns live weather data and authoritative climate documents into a **grounded, cited, structured risk report** for a location, hazard, and time horizon.
 
-> **Status: the moat is measurable.** ERA5 extreme-value statistics with full provenance, an IPCC RAG with page-level citations, and a **frozen, hash-pinned eval set with published recall numbers** — headline recall@3 **82%** (95% CI 66–92), failure slices printed too. Built in public.
+> **Status: the moat is measurable.** ERA5 extreme-value statistics with full provenance, an IPCC RAG with page-level citations, and a **frozen, hash-pinned eval set with published recall numbers** — hybrid (BM25 + dense + RRF) headline recall@3 **91%** (95% CI 77–97), up from 76% naive baseline, with every failure slice printed too. Built in public.
 
 ## Why an agent, not a chatbot
 
@@ -13,8 +13,9 @@ A chatbot predicts plausible text — ask it about flood risk and it invents a n
 - **Typed output contract** — a Pydantic `RiskReport` (risk level, drivers, citations, data provenance, confidence, refusal). Bad output can't be constructed: the level is a 4-value enum, confidence is bounded `[0,1]`, and a report must either assert a risk *or* refuse — never both.
 - **ERA5 hazard statistics with honest provenance** — 60+ years of daily extremes → GEV fit → 10/50/100-year return levels. Every `HazardStat` states its statistic definition, resolution, `record_max` beside the fitted levels (degenerate tails visible at a glance), and a `representativeness` enum. Live example: Rourkela's 100-year daily-max temperature fits at 46.0 °C against a 46.1 °C record.
 - **IPCC RAG with page-level citations** — AR6 WG1 SPM + Ch.11 + Ch.12 (439 pages), row-atomic chunking for regional assessment tables, zero-dependency BM25 (+ Gemini dense / RRF hybrid), and an LLM answerer whose **citations are structurally validated**: a citation that doesn't reference a retrieved chunk cannot be constructed.
-- **A frozen benchmark with published numbers** — 45 hand-verified questions; every supporting quote is machine-checked verbatim against the PDFs and the set is frozen by content hash. Recall@k with Wilson CIs per slice, including adversarial slices. The naive-chunking baseline scored **0%** on the duplicate-region trap slice; row-atomic chunking took it to 100% R@5. That before/after is the design philosophy.
+- **A frozen benchmark with published numbers** — 45 hand-verified questions; every supporting quote is machine-checked verbatim against the PDFs and the set is frozen by content hash. Recall@k with Wilson CIs per slice, including adversarial slices. The measured progression — naive chunks 76% → row-atomic table chunks 82% → BM25+dense RRF hybrid **91%** headline R@3; the duplicate-region trap slice went **0% → 100%** — is the design philosophy: every layer earned its place with a delta on the same frozen questions (dense alone actually *underperforms* BM25 at 71%; the fusion is what wins).
 - **Deterministic scope guard** — questions about unsupported hazards (drought, tropical cyclones, coastal flooding, wildfire) are refused in code, before the LLM, so the guard cannot be prompt-injected away.
+- **Zero confabulation, measured** — the end-to-end eval over all 45 frozen questions scores refusal behavior as a confusion matrix: **false_answer = 0**. The agent's only errors are 2 cautious false-refusals on weak retrieval — it errs toward silence, never invention. Citation validity 88%, numeric provenance 88%, and half of the premise-injection refusals cite the page that refutes the false premise.
 - **Two MCP servers** — `weather-mcp` (forecast + hazard climatology) and `ipcc-rag-mcp` (search + cited answers), stdio-only, narrow and typed.
 - **115 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) are pinned as tests.
 
@@ -95,7 +96,7 @@ Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not statio
 - [x] ERA5 hazard statistics (return periods via extreme-value analysis) with provenance
 - [x] Eval harness with numbers (retrieval recall@k + adversarial slices; e2e citation/refusal metrics)
 - [x] MCP servers (weather-mcp + ipcc-rag-mcp), demoed in the MCP Inspector
-- [ ] Hybrid dense+RRF ablation published (embedding cache in progress)
+- [x] Hybrid dense+RRF ablation published (bm25 82% / dense 71% / hybrid 91% headline R@3)
 - [ ] RAG citations wired into the `RiskReport` agent path + skill-aware confidence
 - [ ] FastAPI + Streamlit UI, Docker, CI with eval regression gates, deployed demo
 
