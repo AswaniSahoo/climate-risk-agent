@@ -1,0 +1,50 @@
+# Climate-Risk Analyst Agent — custom theme.
+#
+# Earth/climate palette: deep teal-green primary (grounded, scientific — not a
+# generic SaaS blue), warm neutral backgrounds. Both light and dark variants
+# are defined so the app-settings theme toggle works either way. No Google
+# Fonts / external assets — built-in "sans-serif" keeps the app self-contained.
+
+[theme]
+base = "light"
+font = "sans-serif"
+baseRadius = "medium"
+showWidgetBorder = true
+showSidebarBorder = true
+
+# Semantic status colors — reused for the risk-level badges (low/moderate/
+# high/severe) and for warnings/errors.
+greenColor = "#2F9E44"
+yellowColor = "#E8B923"
+orangeColor = "#E8590C"
+redColor = "#C92A2A"
+
+[theme.light]
+primaryColor = "#1B7F5B"
+backgroundColor = "#FAFAF7"
+secondaryBackgroundColor = "#F1F3EE"
+textColor = "#1B231F"
+borderColor = "#D8DED6"
+linkColor = "#1B7F5B"
+
+[theme.light.sidebar]
+backgroundColor = "#F1F3EE"
+secondaryBackgroundColor = "#E6EAE2"
+textColor = "#1B231F"
+borderColor = "#D8DED6"
+primaryColor = "#1B7F5B"
+
+[theme.dark]
+primaryColor = "#4FBF8B"
+backgroundColor = "#101613"
+secondaryBackgroundColor = "#1A2420"
+textColor = "#E7EDE9"
+borderColor = "#2C3833"
+linkColor = "#4FBF8B"
+
+[theme.dark.sidebar]
+backgroundColor = "#0C1210"
+secondaryBackgroundColor = "#161F1B"
+textColor = "#E7EDE9"
+borderColor = "#2C3833"
+primaryColor = "#4FBF8B"

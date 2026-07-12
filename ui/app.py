@@ -34,14 +34,20 @@ LOCATIONS: dict[str, tuple[float, float]] = {
     "Berlin, Germany": (52.52, 13.40),
 }
 
-_LEVEL_BADGE = {
-    RiskLevel.LOW: "🟢 LOW",
-    RiskLevel.MODERATE: "🟡 MODERATE",
-    RiskLevel.HIGH: "🟠 HIGH",
-    RiskLevel.SEVERE: "🔴 SEVERE",
+# Severity → (badge color, Material icon). Colors match the semantic palette
+# in .streamlit/config.toml, so the badge is themed consistently in light/dark.
+_LEVEL_STYLE: dict[RiskLevel, tuple[str, str]] = {
+    RiskLevel.LOW: ("green", ":material/check_circle:"),
+    RiskLevel.MODERATE: ("yellow", ":material/warning:"),
+    RiskLevel.HIGH: ("orange", ":material/priority_high:"),
+    RiskLevel.SEVERE: ("red", ":material/emergency:"),
 }
 
-st.set_page_config(page_title="Climate-Risk Analyst Agent", page_icon="🌍")
+st.set_page_config(
+    page_title="Climate-Risk Analyst Agent",
+    page_icon="🌍",
+    layout="wide",
+)
 st.title("🌍 Climate-Risk Analyst Agent")
 st.caption(
     "Live forecast (Open-Meteo) + ERA5 GEV return levels + IPCC AR6 citations "
@@ -50,6 +56,7 @@ st.caption(
 )
 
 with st.sidebar:
+    st.caption("Configure the assessment")
     location = st.selectbox("Location", list(LOCATIONS))
     hazard = st.selectbox(
         "Hazard", list(Hazard), format_func=lambda h: h.value.replace("_", " ")
@@ -59,7 +66,9 @@ with st.sidebar:
         "Ground with ERA5 climatology (GEV return levels)", value=True,
         help="First call fetches 60+ years of daily extremes (~3 s), then cached.",
     )
-    run = st.button("Assess risk", type="primary")
+    run = st.button(
+        "Assess risk", type="primary", icon=":material/troubleshoot:", width="stretch",
+    )
 
 if run:
     latitude, longitude = LOCATIONS[location]
@@ -81,46 +90,85 @@ if run:
         )
 
     if report.refusal is not None:
-        st.error(f"**Refused:** {report.refusal}")
+        st.error(f"**Refused:** {report.refusal}", icon=":material/block:")
         st.caption("Out-of-scope is an explicit, valid output — not a fabricated risk.")
     else:
-        st.subheader(f"{_LEVEL_BADGE[report.risk_level]} — {report.hazard.value.replace('_', ' ')}")
-        st.metric("Confidence", f"{report.confidence:.0%}")
-        st.write(report.summary)
+        color, icon = _LEVEL_STYLE[report.risk_level]
 
-        if report.drivers:
-            st.markdown("**Risk drivers**")
-            for d in report.drivers:
-                st.markdown(f"- **{d.factor}**: {d.detail}")
+        with st.container(border=True):
+            with st.container(horizontal=True, vertical_alignment="center"):
+                st.subheader(
+                    f"{report.risk_level.value.upper()} — "
+                    f"{report.hazard.value.replace('_', ' ')} risk in {report.location}"
+                )
+                st.badge(report.risk_level.value.upper(), color=color, icon=icon)
+            st.write(report.summary)
 
-        if report.citations:
-            st.markdown("**IPCC AR6 citations** (page-level, validator-guaranteed)")
-            for c in report.citations:
-                st.markdown(f"- 📄 `{c.source}` — {c.locator}")
-        else:
-            st.caption(
-                "No IPCC citations in this report (RAG layer offline or the "
-                "answerer honestly abstained — it never invents)."
+        metric_cols = st.columns(3 if report.hazard_stats else 2, border=True)
+        metric_cols[0].metric("Confidence", f"{report.confidence:.0%}")
+        metric_cols[1].metric("Forecast horizon", f"{report.horizon_days} d")
+        if report.hazard_stats:
+            stat = report.hazard_stats[0]
+            metric_cols[2].metric(
+                "Record max (series)", f"{round(stat.record_max, 1)} {stat.variable}",
             )
+
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            with st.container(border=True):
+                st.markdown("**Risk drivers**")
+                if report.drivers:
+                    for d in report.drivers:
+                        st.markdown(f"- **{d.factor}**: {d.detail}")
+                else:
+                    st.caption("No drivers reported.")
+
+        with col_right:
+            with st.container(border=True):
+                st.markdown("**IPCC AR6 citations** (page-level, validator-guaranteed)")
+                if report.citations:
+                    for c in report.citations:
+                        st.markdown(
+                            f":gray-badge[:material/description: {c.source}] "
+                            f":blue-badge[{c.locator}]"
+                        )
+                else:
+                    st.caption(
+                        "No IPCC citations in this report (RAG layer offline or the "
+                        "answerer honestly abstained — it never invents)."
+                    )
 
         if report.hazard_stats:
             stat = report.hazard_stats[0]
-            st.markdown(f"**ERA5 climatology** ({stat.n_years} years, {stat.variable})")
-            st.table(
-                {
-                    "return period (yr)": [r.return_period_years for r in stat.return_levels],
-                    "level": [round(r.level, 1) for r in stat.return_levels],
-                }
-            )
-            st.caption(
-                f"Record max in series: {round(stat.record_max, 1)} — "
-                f"representativeness: {stat.representativeness.value}"
-            )
+            with st.container(border=True):
+                st.markdown(f"**ERA5 climatology** — {stat.n_years} years, {stat.variable}")
+                st.dataframe(
+                    {
+                        "return_period_years": [
+                            r.return_period_years for r in stat.return_levels
+                        ],
+                        "level": [round(r.level, 1) for r in stat.return_levels],
+                    },
+                    column_config={
+                        "return_period_years": st.column_config.NumberColumn(
+                            "Return period (yr)", format="%d",
+                        ),
+                        "level": st.column_config.NumberColumn(
+                            f"Level ({stat.variable})", format="%.1f",
+                        ),
+                    },
+                    hide_index=True,
+                )
+                st.caption(
+                    f"Record max in series: {round(stat.record_max, 1)} — "
+                    f"representativeness: {stat.representativeness.value}"
+                )
 
-    with st.expander("Data provenance (audit trail)"):
+    with st.expander("Data provenance (audit trail)", icon=":material/fact_check:"):
         for p in report.provenance:
             st.markdown(f"- **{p.source}** — `{p.url}` at {p.retrieved_at:%Y-%m-%d %H:%M} UTC")
             st.json(p.params, expanded=False)
 
-    with st.expander("Raw RiskReport JSON (the contract)"):
+    with st.expander("Raw RiskReport JSON (the contract)", icon=":material/code:"):
         st.code(report.model_dump_json(indent=2), language="json")
