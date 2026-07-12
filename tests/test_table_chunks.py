@@ -58,3 +58,49 @@ def test_prose_page_with_single_region_mention_stays_windowed():
     prose = "In South Asia (SAS) the monsoon intensifies. " * 40
     chunks = chunk_pages([_page(prose)])
     assert len(chunks) > 1  # windowed as before, not one giant row
+
+
+# --- table-caption carry (measured motive, twice): row cells say "compared to
+# the 1°C warming level" for EVERY column — the 1.5/2/4°C labels live only in
+# the table caption. Without the caption in the chunk, the model correctly
+# refused to attribute figures (RT-01 false refusal) and the claim judge
+# flagged "at 4°C" as unsupported on RT-10/DR-02. ---
+
+_CAPTION = (
+    "Table 11.7 | Observed trends, human contribution, and projected changes "
+    "at 1.5°C, 2°C and 4°C of global warming"
+)
+
+
+def _pageN(text: str, page: int) -> PageText:
+    return PageText(source="IPCC_AR6_WGI_Chapter11.pdf", page=page, text=text)
+
+
+def test_caption_is_suffixed_to_row_chunks_on_the_caption_page():
+    chunks = chunk_pages([_page(_CAPTION + " " + TABLE_TEXT)])
+    sas = next(c for c in chunks if c.text.startswith("South Asia (SAS)"))
+    assert "Table 11.7" in sas.text and "4°C" in sas.text
+    assert sas.text.startswith("South Asia (SAS)")  # label-first invariant kept
+
+
+def test_caption_carries_to_continuation_pages_of_the_same_table():
+    first = _pageN(_CAPTION + " " + TABLE_TEXT, page=119)
+    continuation = _pageN(TABLE_TEXT, page=120)  # no caption on the page itself
+    chunks = chunk_pages([first, continuation])
+    cont_sas = next(c for c in chunks if c.page == 120 and c.text.startswith("South Asia (SAS)"))
+    assert "Table 11.7" in cont_sas.text
+
+
+def test_prose_page_ends_the_carry():
+    first = _pageN(_CAPTION + " " + TABLE_TEXT, page=119)
+    prose = _pageN("Plain discussion of extremes, no table rows here. " * 30, page=120)
+    orphan_table = _pageN(TABLE_TEXT, page=121)  # table w/o caption after prose
+    chunks = chunk_pages([first, prose, orphan_table])
+    orphan_sas = next(c for c in chunks if c.page == 121 and "South Asia (SAS)" in c.text)
+    assert "Table 11.7" not in orphan_sas.text  # stale caption must not leak
+
+
+def test_preamble_segments_do_not_get_the_caption_suffix():
+    chunks = chunk_pages([_page(_CAPTION + " Region Observed Trends " + TABLE_TEXT)])
+    preamble = [c for c in chunks if not c.text.startswith(("Tibetan Plateau", "South Asia"))]
+    assert all(not c.text.endswith("]") for c in preamble)

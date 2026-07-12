@@ -60,6 +60,23 @@ def _region_row_pattern() -> re.Pattern[str]:
 
 _REGION_ROW = _region_row_pattern()
 
+# Table caption, e.g. "Table 11.7 | Observed trends ... at 1.5°C, 2°C and 4°C ...".
+# The caption is the ONLY place the GWL column labels appear — row cells all say
+# "compared to the 1°C warming level" — so every row chunk must carry it.
+# Measured twice: RT-01 false refusal + claim-judge "at 4°C" flags (RT-10/DR-02).
+_TABLE_CAPTION = re.compile(r"Table \d+\.\d+\s*\|\s*[^|]{0,160}")
+
+
+def _find_caption(text: str) -> str | None:
+    """The page's table caption, word-safe trimmed, or None."""
+    match = _TABLE_CAPTION.search(text)
+    if not match:
+        return None
+    caption = match.group(0).strip()
+    if match.end() < len(text) and " " in caption:  # trim a cut-off last word
+        caption = caption.rsplit(" ", 1)[0]
+    return caption
+
 
 class Chunk(BaseModel):
     """One retrievable unit of an IPCC document, traceable to a page."""
@@ -133,13 +150,29 @@ def chunk_pages(
     so no window is ever orphaned from its region.
     """
     chunks: list[Chunk] = []
+    carried_caption: dict[str, str] = {}  # source -> caption while its table continues
     for page in pages:
-        segments = _split_region_rows(page.text) or [(None, page.text)]
+        segments = _split_region_rows(page.text)
+        if segments is None:
+            # prose page: any running table has ended — drop the carried caption
+            carried_caption.pop(page.source, None)
+            segments = [(None, page.text)]
+            caption = None
+        else:
+            found = _find_caption(page.text)
+            if found:
+                carried_caption[page.source] = found
+            caption = carried_caption.get(page.source)
         index = 0
         for label, segment in segments:
             for piece in _split_text(segment, max_chars, overlap):
                 if label and not piece.startswith(label):
                     piece = f"{label} {piece}"
+                if label and caption and "Table" not in piece:
+                    # suffix (not prefix): keeps the label-first invariant; BM25
+                    # and embeddings are position-blind, the LLM only needs the
+                    # column labels PRESENT in the cited text
+                    piece = f"{piece} [{caption}]"
                 chunks.append(
                     Chunk(
                         chunk_id=f"{page.source}#p{page.page}#{index}",
