@@ -1,6 +1,7 @@
 # CI: the invariants that need no corpus and no keys.
 #
-# 126 tests run here; the handful that parse the IPCC PDFs skip themselves
+# The full unit/integration suite runs here; the handful of tests that parse
+# the IPCC PDFs skip themselves
 # (pytest.mark.skipif on file presence). The retrieval + e2e EVALS are a
 # MANUAL pre-release gate on purpose — they need the corpus (600+ pages),
 # an embedding cache, and Gemini/Vertex auth, none of which belong in CI.

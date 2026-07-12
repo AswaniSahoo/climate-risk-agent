@@ -25,10 +25,18 @@ possible, so a downstream consumer can check it programmatically.
   evidence lives elsewhere (WG2 adaptation, WG3 mitigation, the Atlas) are out
   of corpus and should be refused; the eval's out-of-corpus slice measures this.
 - **Retrieval quality is published, not perfect.** Current headline recall@3 is
-  82% (95% CI 66–92) on a frozen, hash-pinned benchmark of 45 hand-verified
-  questions (`evals/gold_set.json`). Per-slice numbers, including the ones we
-  are not proud of (premise-injection R@3 = 50% on BM25-only), are in the eval
-  output — rerun them with `uv run python -m evals.run_retrieval_eval`.
+  91% (95% CI 77–97) with the hybrid BM25+dense retriever — 82% on BM25-only,
+  which is what a keyless deployment falls back to — on a frozen, hash-pinned
+  benchmark of 45 hand-verified questions (`evals/gold_set.json`). Per-slice
+  numbers, including the ones we are not proud of (premise-injection R@3 = 75%
+  hybrid / 50% BM25-only; 1 remaining false refusal on a column-ambiguous table
+  row), are in the eval output — rerun with `uv run python -m evals.run_retrieval_eval`.
+- **The eval set is small (n=45) and doubles as the development set.** Retrieval
+  and context-size choices (chunking, top_k) were selected using deltas on the
+  same frozen questions the headline numbers come from, so those numbers carry
+  optimistic bias. There is no held-out split yet; eval v2 (larger set, dev/test
+  split, claim-level checking) is planned. The freeze prevents question-editing,
+  not configuration-overfitting — we say so here on purpose.
 - **The scope guard is lexical (v1).** It matches hazard vocabulary; a
   paraphrase that avoids all known terms can slip past it to the LLM layer,
   whose prompt-level rules are best-effort. The refusal confusion matrix in the

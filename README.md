@@ -10,6 +10,8 @@ An open-source **agent** (not a chatbot) that turns live weather data and author
 
 A chatbot predicts plausible text — ask it about flood risk and it invents a number. This agent **plans, fetches real data, and grounds every claim**, then returns a typed report it can back up (or refuses when a question is out of scope).
 
+![the UI: live forecast + ERA5 GEV return levels + validated IPCC page citations in one report](assets/ui-report.png)
+
 ## What works today
 
 - **Typed output contract** — a Pydantic `RiskReport` (risk level, drivers, citations, data provenance, confidence, refusal). Bad output can't be constructed: the level is a 4-value enum, confidence is bounded `[0,1]`, and a report must either assert a risk *or* refuse — never both.
@@ -30,9 +32,11 @@ query (location, hazard, horizon)
         │
         ▼
    LangGraph state machine
-   plan ──▶ call ──▶ synthesize ──▶ RiskReport (typed, provenanced)
+   plan ──▶ call ──▶ research ──▶ synthesize ──▶ RiskReport (typed, cited, provenanced)
+     │      forecast   IPCC RAG      forecast + ERA5 GEV + cited IPCC answer
+     │      (live)     (hybrid top-8 → validated CitedAnswer)
      │
-     └─(unsupported hazard)─▶ refusal
+     └─(unsupported hazard)─▶ refusal (explicit, valid output)
 ```
 
 ## Use it over MCP
@@ -73,22 +77,28 @@ docker build -t climate-risk-agent . && docker run -p 7860:7860 climate-risk-age
 
 The gold set (`evals/gold_set.json`) was authored **before** retrieval existed and is frozen by content hash — editing a question breaks the suite until the freeze is deliberately renewed. Questions are never edited to make retrieval look better.
 
-Example output (real Open-Meteo data):
+Example output (real Open-Meteo data + real IPCC citations from a live run):
 
 ```json
 {
-  "location": "Rourkela",
+  "location": "Rourkela, India",
   "hazard": "extreme_precip",
-  "risk_level": "low",
-  "summary": "Peak daily rainfall of 12.1 mm over 7 days.",
-  "confidence": 0.3,
+  "risk_level": "moderate",
+  "summary": "Peak daily rainfall of 46.2 mm over 7 days. ERA5 return levels (10yr=134.4, 50yr=187.3, 100yr=212.0). IPCC AR6: Extreme precipitation is projected to increase in South Asia [...] (high confidence).",
+  "confidence": 0.6,
+  "citations": [
+    { "source": "IPCC_AR6_WGI_Chapter11.pdf", "locator": "p53" },
+    { "source": "IPCC_AR6_WGI_Chapter11.pdf", "locator": "p54" }
+  ],
   "provenance": [{ "source": "Open-Meteo", "retrieved_at": "..." }]
 }
 ```
 
+Every `locator` is a real PDF page, and the answerer structurally cannot cite a chunk it didn't retrieve.
+
 ## Tech stack
 
-Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · httpx · pytest.
+Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · Gemini (google-genai SDK; AI Studio or Vertex) · numpy/scipy (GEV) · httpx · MCP Python SDK · Streamlit · pytest · Docker · GitHub Actions.
 
 ## Data & attribution
 
@@ -105,8 +115,11 @@ Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not statio
 - [x] Eval harness with numbers (retrieval recall@k + adversarial slices; e2e citation/refusal metrics)
 - [x] MCP servers (weather-mcp + ipcc-rag-mcp), demoed in the MCP Inspector
 - [x] Hybrid dense+RRF ablation published (bm25 82% / dense 71% / hybrid 91% headline R@3)
-- [ ] RAG citations wired into the `RiskReport` agent path + skill-aware confidence
-- [ ] FastAPI + Streamlit UI, Docker, CI with eval regression gates, deployed demo
+- [x] RAG citations wired into the `RiskReport` agent path (`research` graph node)
+- [x] Streamlit UI, Docker image, CI; evals as a documented release gate
+- [ ] Deployed demo on Hugging Face Spaces
+- [ ] Last false refusal: table-caption-aware chunking (RT-01, column-ambiguity)
+- [ ] Observability + cost-per-report metering; skill-aware confidence
 
 ## Security & limitations
 
