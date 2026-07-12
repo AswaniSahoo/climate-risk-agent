@@ -9,6 +9,13 @@ Run:  uv run streamlit run ui/app.py
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# `streamlit run ui/app.py` puts ui/ (not the repo root) on sys.path — same
+# entry-point shim the MCP servers use.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import streamlit as st
 
 from agent import graph as agent_graph
