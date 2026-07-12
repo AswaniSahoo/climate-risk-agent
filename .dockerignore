@@ -1,0 +1,18 @@
+# Keep the image lean; data/ is INTENTIONALLY not ignored — a local build
+# ships the embedding cache (13 MB) so the container starts on hybrid
+# retrieval without re-embedding. Fresh clones simply have no data/ and the
+# Dockerfile downloads the corpus itself.
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+htmlcov
+.env
+.env.*
+docs
+MASTER-PLAN*.md
+.claude
+assets

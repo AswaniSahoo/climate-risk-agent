@@ -1,5 +1,7 @@
 # Climate-Risk Analyst Agent
 
+[![ci](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml)
+
 An open-source **agent** (not a chatbot) that turns live weather data and authoritative climate documents into a **grounded, cited, structured risk report** for a location, hazard, and time horizon.
 
 > **Status: the moat is measurable.** ERA5 extreme-value statistics with full provenance, an IPCC RAG with page-level citations, and a **frozen, hash-pinned eval set with published recall numbers** — hybrid (BM25 + dense + RRF) headline recall@3 **91%** (95% CI 77–97), up from 76% naive baseline, with every failure slice printed too. Built in public.
@@ -15,9 +17,11 @@ A chatbot predicts plausible text — ask it about flood risk and it invents a n
 - **IPCC RAG with page-level citations** — AR6 WG1 SPM + Ch.11 + Ch.12 (439 pages), row-atomic chunking for regional assessment tables, zero-dependency BM25 (+ Gemini dense / RRF hybrid), and an LLM answerer whose **citations are structurally validated**: a citation that doesn't reference a retrieved chunk cannot be constructed.
 - **A frozen benchmark with published numbers** — 45 hand-verified questions; every supporting quote is machine-checked verbatim against the PDFs and the set is frozen by content hash. Recall@k with Wilson CIs per slice, including adversarial slices. The measured progression — naive chunks 76% → row-atomic table chunks 82% → BM25+dense RRF hybrid **91%** headline R@3; the duplicate-region trap slice went **0% → 100%** — is the design philosophy: every layer earned its place with a delta on the same frozen questions (dense alone actually *underperforms* BM25 at 71%; the fusion is what wins).
 - **Deterministic scope guard** — questions about unsupported hazards (drought, tropical cyclones, coastal flooding, wildfire) are refused in code, before the LLM, so the guard cannot be prompt-injected away.
-- **Zero confabulation, measured** — the end-to-end eval over all 45 frozen questions scores refusal behavior as a confusion matrix: **false_answer = 0**. The agent's only errors are 2 cautious false-refusals on weak retrieval — it errs toward silence, never invention. Citation validity 88%, numeric provenance 88%, and half of the premise-injection refusals cite the page that refutes the false premise.
+- **Zero confabulation, measured** — the end-to-end eval over all 45 frozen questions scores refusal behavior as a confusion matrix: **false_answer = 0**, held constant through a full retriever swap (BM25 → hybrid) and a context-size change (top_k 5 → 8). The agent's only error is 1 cautious false-refusal on a column-ambiguous table row — it errs toward silence, never invention. Citation validity 94%, numeric provenance 85%, and 3 of 4 premise-injection refusals cite the page that refutes the false premise.
 - **Two MCP servers** — `weather-mcp` (forecast + hazard climatology) and `ipcc-rag-mcp` (search + cited answers), stdio-only, narrow and typed.
-- **115 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) are pinned as tests.
+- **Real citations in the report** — a `research` graph node retrieves top-8 IPCC chunks and gets a schema-validated cited answer; the final `RiskReport.citations` are page-level (`Chapter11.pdf, p124`), deduped, and can only reference actually-retrieved chunks. Offline/no-LLM degrades loudly to a citation-less report — never silently, never invented.
+- **Streamlit UI + Docker + CI** — one-page UI over the agent contract, a self-sufficient Docker image (corpus baked in at build; runs BM25-only without a key, hybrid with one), GitHub Actions on every push. Evals are a documented **manual release gate** (`false_answer > 0` blocks release) — see [DEPLOY.md](DEPLOY.md).
+- **128 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) are pinned as tests.
 
 ## Architecture
 
@@ -54,13 +58,17 @@ Calling it live from the Inspector (real Open-Meteo data, fetched through MCP):
 
 ```bash
 uv sync                        # install deps
-uv run pytest                  # run the test suite (115 green)
+uv run pytest                  # run the test suite (128 green)
 uv run python -m scripts.demo  # live end-to-end demo → prints a RiskReport
+uv run streamlit run ui/app.py # the UI (localhost:8501)
 
 # evals — run the numbers yourself
 uv run python -m scripts.download_ipcc      # fetch the corpus (once)
 uv run python -m evals.run_retrieval_eval   # recall@{3,5,10} + MRR per slice, Wilson CIs
-uv run python -m evals.run_e2e_eval         # refusal matrix + citation/numeric checkers (needs GEMINI_API_KEY)
+uv run python -m evals.run_e2e_eval         # refusal matrix + citation/numeric checkers (needs Gemini auth)
+
+# or containerized (corpus bakes in at build; see DEPLOY.md for HF Spaces)
+docker build -t climate-risk-agent . && docker run -p 7860:7860 climate-risk-agent
 ```
 
 The gold set (`evals/gold_set.json`) was authored **before** retrieval existed and is frozen by content hash — editing a question breaks the suite until the freeze is deliberately renewed. Questions are never edited to make retrieval look better.
