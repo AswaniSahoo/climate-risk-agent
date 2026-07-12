@@ -22,7 +22,7 @@ from evals.gold_set import load_gold_set
 from evals.run_retrieval_eval import build_chunks
 from evals.schema import ExpectedBehavior
 from rag.answer import AnswerError, answer_with_guard
-from rag.bm25 import BM25Index
+from rag.retrieve import HybridRetriever
 from rag.scope import out_of_scope_hazard
 
 import os as _os
@@ -35,7 +35,8 @@ _TOP_K = 5
 def main() -> None:
     gold = load_gold_set()
     chunks = build_chunks()
-    index = BM25Index(chunks)
+    retriever = HybridRetriever.build(chunks)  # the measured 91% path; loud BM25 fallback
+    print(f"retriever: dense_enabled={retriever.dense_enabled}")
     by_id = {c.chunk_id: c for c in chunks}
 
     cells: dict[str, list[str]] = {}
@@ -49,7 +50,7 @@ def main() -> None:
 
     progress = tqdm(gold.questions, desc="e2e", unit="q")
     for q in progress:
-        top = [c for c, _ in index.query(q.question, top_k=_TOP_K)]
+        top = retriever.retrieve(q.question, top_k=_TOP_K)
         guard_fired = out_of_scope_hazard(q.question) is not None
         try:
             result = answer_with_guard(q.question, top)

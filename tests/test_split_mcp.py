@@ -23,9 +23,16 @@ def _fresh_ipcc_index(monkeypatch):
               text="glaciers are committed to continue melting for centuries"),
     )
     monkeypatch.setattr(ipcc_mcp, "load_corpus_chunks", lambda: canned)
-    ipcc_mcp._index.cache_clear()
+    # keep tests offline: corpus embedding degrades to the loud BM25-only path
+    import rag.retrieve as retrieve_mod
+
+    def no_network(texts, *, task_type, cache):
+        raise retrieve_mod.EmbeddingError("offline test")
+
+    monkeypatch.setattr(retrieve_mod, "cached_embed_texts", no_network)
+    ipcc_mcp._retriever.cache_clear()
     yield
-    ipcc_mcp._index.cache_clear()
+    ipcc_mcp._retriever.cache_clear()
 
 
 async def test_weather_server_exposes_both_tools():

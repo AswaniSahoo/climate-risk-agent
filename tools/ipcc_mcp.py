@@ -18,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
-from rag.bm25 import BM25Index
 from rag.corpus import load_corpus_chunks
+from rag.retrieve import HybridRetriever
 
 mcp = FastMCP("ipcc-rag")
 
@@ -36,18 +36,17 @@ class Excerpt(BaseModel):
 
 
 @lru_cache(maxsize=1)
-def _index() -> BM25Index:
-    return BM25Index(list(load_corpus_chunks()))
+def _retriever() -> HybridRetriever:
+    return HybridRetriever.build(list(load_corpus_chunks()))
 
 
 @mcp.tool()
 def search_ipcc(question: str, top_k: int = 5) -> list[Excerpt]:
     """Search the IPCC AR6 WG1 corpus (SPM, Ch.11, Ch.12); returns page-cited excerpts."""
     top_k = max(1, min(top_k, _MAX_TOP_K))
-    ranked = _index().query(question, top_k=top_k)
     return [
         Excerpt(chunk_id=c.chunk_id, source=c.source, page=c.page, text=c.text)
-        for c, _ in ranked
+        for c in _retriever().retrieve(question, top_k=top_k)
     ]
 
 
@@ -60,8 +59,7 @@ def answer_ipcc(question: str) -> dict:
     """
     from rag.answer import answer_with_guard
 
-    top = [c for c, _ in _index().query(question, top_k=5)]
-    result = answer_with_guard(question, top)
+    result = answer_with_guard(question, _retriever().retrieve(question, top_k=5))
     return result.model_dump(exclude={"allowed_ids"})
 
 
