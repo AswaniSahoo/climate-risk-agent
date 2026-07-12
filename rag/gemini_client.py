@@ -14,8 +14,8 @@ is SDK-agnostic; tests monkeypatch these two functions instead of mocking HTTP.
 from __future__ import annotations
 
 import os
+import threading
 import time
-from functools import lru_cache
 
 EMBED_MODEL = "gemini-embedding-2"
 GENERATE_MODEL = "gemini-2.5-flash"
@@ -23,14 +23,21 @@ GENERATE_MODEL = "gemini-2.5-flash"
 _RETRY_MAX = 6
 _sleep = time.sleep  # module-level so tests can stub the waiting out
 
+_local = threading.local()  # one SDK client per thread (shared clients get closed
+# under concurrent use — measured: "Cannot send a request, as the client has been closed")
+
 
 class GeminiError(RuntimeError):
     """Raised when a Gemini call fails (auth, quota exhausted after retries, API)."""
 
 
-@lru_cache(maxsize=1)
-def _client():
+def _new_client():
     from google import genai
+    from google.genai import types
+
+    # Explicit timeout: a hung call must FAIL LOUDLY, never leave the user
+    # staring at a stuck progress bar wondering (observable-CLI rule).
+    http_options = types.HttpOptions(timeout=120_000)  # ms
 
     if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true":
         project = os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -40,12 +47,25 @@ def _client():
             vertexai=True,
             project=project,
             location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
+            http_options=http_options,
         )
     if os.environ.get("GEMINI_API_KEY"):
-        return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        return genai.Client(api_key=os.environ["GEMINI_API_KEY"], http_options=http_options)
     raise GeminiError(
         "no Gemini auth configured: set GOOGLE_GENAI_USE_VERTEXAI=true (+ project) or GEMINI_API_KEY"
     )
+
+
+def _client():
+    client = getattr(_local, "client", None)
+    if client is None:
+        client = _local.client = _new_client()
+    return client
+
+
+def _reset_clients() -> None:
+    """Drop this thread's cached client (tests; env changes)."""
+    _local.__dict__.clear()
 
 
 def _is_rate_limit(exc: Exception) -> bool:
@@ -64,19 +84,36 @@ def _with_retry(call):
     raise GeminiError("rate-limit retries exhausted")  # pragma: no cover
 
 
+_EMBED_WORKERS = 8
+
+
 def embed_batch(texts: list[str], *, task_type: str, dims: int) -> list[list[float]]:
-    """Embed up to ~100 texts. task_type: RETRIEVAL_DOCUMENT | RETRIEVAL_QUERY."""
+    """Embed texts, ONE content per API call (the SDK enforces this on Vertex:
+    "embedContent ... only supports one content at a time"; a plain string list
+    gets silently JOINED into one content — measured, and it poisoned a cache).
+    Per-text calls with retry, threaded for speed, order preserved.
+
+    task_type: RETRIEVAL_DOCUMENT | RETRIEVAL_QUERY.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
     from google.genai import types
 
-    def call():
-        response = _client().models.embed_content(
-            model=EMBED_MODEL,
-            contents=texts,
-            config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=dims),
-        )
-        return [list(e.values) for e in response.embeddings]
+    config = types.EmbedContentConfig(task_type=task_type, output_dimensionality=dims)
 
-    return _with_retry(call)
+    def embed_one(text: str) -> list[float]:
+        def call():
+            response = _client().models.embed_content(
+                model=EMBED_MODEL, contents=text, config=config
+            )
+            if not response.embeddings:
+                raise GeminiError("API returned no embedding for a text")
+            return list(response.embeddings[0].values)
+
+        return _with_retry(call)
+
+    with ThreadPoolExecutor(max_workers=_EMBED_WORKERS) as pool:
+        return list(pool.map(embed_one, texts))
 
 
 def generate_json(prompt: str, *, schema: dict) -> str:

@@ -45,13 +45,17 @@ def main() -> None:
     scope_refusals = 0
     errors: list[str] = []
 
-    for q in gold.questions:
+    from tqdm import tqdm
+
+    progress = tqdm(gold.questions, desc="e2e", unit="q")
+    for q in progress:
         top = [c for c, _ in index.query(q.question, top_k=_TOP_K)]
         guard_fired = out_of_scope_hazard(q.question) is not None
         try:
             result = answer_with_guard(q.question, top)
         except AnswerError as exc:
             errors.append(f"{q.id}: {exc}")
+            progress.write(f"  {q.id:7s} ERROR: {exc}")
             continue
         if not guard_fired:
             time.sleep(_LLM_PAUSE_S)  # free-tier pacing
@@ -59,6 +63,8 @@ def main() -> None:
         expected_refuse = q.expected_behavior is ExpectedBehavior.REFUSE
         cell = refusal_cell(expected_refuse=expected_refuse, did_abstain=result.abstain)
         cells.setdefault(cell, []).append(q.id)
+        how = "guard" if guard_fired else "llm"
+        progress.write(f"  {q.id:7s} {cell:15s} ({how}, {len(result.citations)} citations)")
 
         if not result.abstain:
             cited_texts = [by_id[c].text for c in result.citations]
