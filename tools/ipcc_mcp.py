@@ -24,6 +24,9 @@ from rag.retrieve import HybridRetriever
 mcp = FastMCP("ipcc-rag")
 
 _MAX_TOP_K = 10  # denial-of-wallet + context-size cap on the tool surface
+# A/B-measured on the frozen set (2026-07-12): k=8 admits table-header chunks
+# (GWL column labels) -> fewer false refusals on regional-table rows, false_answer 0
+_ANSWER_TOP_K = 8
 
 
 class Excerpt(BaseModel):
@@ -58,8 +61,13 @@ def answer_ipcc(question: str) -> dict:
     cannot support. Citations are validated against retrieved chunks.
     """
     from rag.answer import answer_with_guard
+    from rag.answer_cache import AnswerCache
 
-    result = answer_with_guard(question, _retriever().retrieve(question, top_k=5))
+    result = answer_with_guard(
+        question,
+        _retriever().retrieve(question, top_k=_ANSWER_TOP_K),
+        cache=AnswerCache(Path("data/cache/answers")),
+    )
     return result.model_dump(exclude={"allowed_ids"})
 
 

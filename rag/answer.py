@@ -89,11 +89,17 @@ def _build_prompt(question: str, chunks: list[Chunk]) -> str:
     return f"{_INSTRUCTIONS}\n\n{excerpts}\n\nQuestion: {question}"
 
 
-def answer_with_guard(question: str, chunks: list[Chunk]) -> CitedAnswer:
+def answer_with_guard(question: str, chunks: list[Chunk], *, cache=None) -> CitedAnswer:
     """The full answer path: deterministic scope guard FIRST, then the LLM.
 
     An out-of-scope hazard refuses before any model call — the guard is code,
     so it cannot be prompt-injected and costs zero tokens.
+
+    `cache` (a rag.answer_cache.AnswerCache) is opt-in: frozen corpus +
+    temperature 0 make the answer deterministic in (question, chunk texts,
+    model), so callers serving repeat queries (UI/graph, MCP) pass one. The e2e
+    EVAL must not — it measures live behavior, and a cache would mask
+    model-version regressions.
     """
     from rag.scope import out_of_scope_hazard
 
@@ -109,6 +115,14 @@ def answer_with_guard(question: str, chunks: list[Chunk]) -> CitedAnswer:
             ),
             allowed_ids=[c.chunk_id for c in chunks],
         )
+    if cache is not None:
+        key = cache.key(question, chunks)
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+        result = answer_question(question, chunks)
+        cache.put(key, result)
+        return result
     return answer_question(question, chunks)
 
 
