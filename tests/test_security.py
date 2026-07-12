@@ -30,12 +30,12 @@ def test_outbound_targets_are_pinned():
 def test_gemini_auth_is_explicit_never_a_silent_fallback(monkeypatch):
     import rag.gemini_client as gc
 
-    gc._client.cache_clear()
+    gc._reset_clients()
     for var in ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_CLOUD_PROJECT", "GEMINI_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(gc.GeminiError):
         gc._client()
-    gc._client.cache_clear()
+    gc._reset_clients()
 
 
 # --- input validation: coordinates are range-checked at the tool boundary ---
