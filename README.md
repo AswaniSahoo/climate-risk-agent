@@ -62,7 +62,7 @@ Calling it live from the Inspector (real Open-Meteo data, fetched through MCP):
 ## Quickstart
 
 ```bash
-uv sync                        # install deps
+uv sync                        # install dependencies
 uv run pytest                  # run the test suite (128 green)
 uv run python -m scripts.demo  # live end-to-end demo → prints a RiskReport
 uv run streamlit run ui/app.py # the UI (localhost:8501)
