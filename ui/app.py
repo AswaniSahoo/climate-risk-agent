@@ -60,8 +60,17 @@ st.caption(
     "0 confabulated answers on a 45-question frozen benchmark."
 )
 
+# Natural-language front door: any place on Earth, plain English.
+nl_query = st.text_input(
+    "Ask in plain language",
+    placeholder="How risky are heatwaves in Rourkela over the next 10 days?",
+    help="Deterministic parsing → geocoding → AR6 region mapping → the agent. "
+         "Unsupported hazards and unknown places refuse honestly.",
+)
+ask = st.button("Ask", type="primary", icon=":material/travel_explore:")
+
 with st.sidebar:
-    st.caption("Configure the assessment")
+    st.caption("…or configure the assessment manually")
     location = st.selectbox("Location", list(LOCATIONS))
     hazard = st.selectbox(
         "Hazard", list(Hazard), format_func=lambda h: h.value.replace("_", " ")
@@ -75,7 +84,15 @@ with st.sidebar:
         "Assess risk", type="primary", icon=":material/troubleshoot:", width="stretch",
     )
 
-if run:
+report = None
+if ask and nl_query.strip():
+    from agent.nl import run_agent_nl  # noqa: E402
+    from obs.telemetry import Span
+
+    with st.spinner("Parsing → geocoding → AR6 region → agent…"):
+        with Span("report") as span:
+            report = run_agent_nl(nl_query)
+elif run:
     latitude, longitude = LOCATIONS[location]
 
     hazard_stat = None
@@ -97,6 +114,7 @@ if run:
                 hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
             )
 
+if report is not None:
     if report.refusal is not None:
         st.error(f"**Refused:** {report.refusal}", icon=":material/block:")
         st.caption("Out-of-scope is an explicit, valid output — not a fabricated risk.")

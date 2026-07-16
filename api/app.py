@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from agent.contracts import Hazard, RiskReport
 from agent.graph import run_agent
+from agent.nl import run_agent_nl
 from obs.telemetry import Span, snapshot, summarize
 from tools.climatology import ClimatologyError, climatology_hazard_stat
 
@@ -107,6 +108,22 @@ async def create_report(request: ReportRequest) -> ReportResponse:
     except ValueError as exc:  # tool-boundary validation (coords/horizon)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    return ReportResponse(report=report, telemetry=span.summary())
+
+
+class QueryRequest(BaseModel):
+    """Free-text front door: 'How risky are heatwaves in Rourkela next week?'"""
+
+    query: str
+
+
+@app.post("/query", response_model=ReportResponse, dependencies=[Depends(_require_api_key)])
+async def create_report_from_query(request: QueryRequest) -> ReportResponse:
+    """NL entry: parse -> geocode -> AR6 region -> agent. Unresolvable queries
+    return a 200 with a typed REFUSAL report — refusing is a valid output of
+    this system, not a server error."""
+    with Span("api-query") as span:
+        report = await asyncio.to_thread(run_agent_nl, request.query)
     return ReportResponse(report=report, telemetry=span.summary())
 
 

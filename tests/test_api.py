@@ -123,3 +123,25 @@ def test_metrics_returns_dict(client):
 
     assert response.status_code == 200
     assert isinstance(response.json(), dict)
+
+
+def test_query_endpoint_runs_the_nl_path(client, monkeypatch):
+    monkeypatch.setattr(api_app, "run_agent_nl", lambda q: _stub_report())
+
+    response = client.post("/query", json={"query": "heatwave risk in Rourkela next week"})
+
+    assert response.status_code == 200
+    assert response.json()["report"]["risk_level"] == "moderate"
+
+
+def test_query_refusal_is_200_with_refusal_report(client, monkeypatch):
+    refusal = RiskReport(location="wildfire risk in Sydney", hazard=None,
+                         horizon_days=7, confidence=0.0,
+                         refusal="wildfire / fire weather is not a supported hazard")
+    monkeypatch.setattr(api_app, "run_agent_nl", lambda q: refusal)
+
+    response = client.post("/query", json={"query": "wildfire risk in Sydney"})
+
+    assert response.status_code == 200  # refusing is a VALID output, not an error
+    payload = response.json()["report"]
+    assert payload["refusal"] and payload["risk_level"] is None
