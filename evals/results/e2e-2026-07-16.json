@@ -1,0 +1,78 @@
+{
+  "run_utc": "2026-07-16T18:36:37+00:00",
+  "gold_set_sha256_file": "evals/gold_set.sha256",
+  "top_k": 8,
+  "matrix": {
+    "correct_answer": [
+      "DR-01",
+      "DR-02",
+      "MP-01",
+      "MP-02",
+      "MP-03",
+      "MP-04",
+      "MP-05",
+      "MP-06",
+      "MP-07",
+      "MP-08",
+      "MP-09",
+      "MP-10",
+      "RT-01",
+      "RT-02",
+      "RT-03",
+      "RT-04",
+      "RT-05",
+      "RT-06",
+      "RT-07",
+      "RT-08",
+      "RT-09",
+      "RT-10",
+      "SP-01",
+      "SP-02",
+      "SP-03",
+      "SP-04",
+      "SP-05",
+      "SP-06",
+      "SP-07",
+      "SP-08",
+      "SP-09",
+      "SP-10",
+      "SP-11",
+      "SP-12"
+    ],
+    "correct_refuse": [
+      "OOC-01",
+      "OOC-02",
+      "OOC-03",
+      "OSH-01",
+      "OSH-02",
+      "OSH-03",
+      "OSH-04",
+      "PI-01",
+      "PI-02",
+      "PI-03",
+      "PI-04"
+    ]
+  },
+  "citation_validity": {
+    "passed": 32,
+    "total": 34
+  },
+  "numeric_provenance": {
+    "passed": 29,
+    "total": 34
+  },
+  "grounded_refusals": {
+    "passed": 3,
+    "total": 4
+  },
+  "claim_judge": {
+    "answers_fully_supported": {
+      "passed": 29,
+      "total": 34
+    },
+    "claims_supported": 106,
+    "claims_total": 114
+  },
+  "scope_guard_refusals": 4,
+  "errors": []
+}

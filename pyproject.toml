@@ -21,9 +21,11 @@ dependencies = [
 [dependency-groups]
 dev = [
     "mcp[cli]>=1.28.1",
+    "mypy>=2.3.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-httpx>=0.36.2",
+    "ruff>=0.15.22",
 ]
 
 [tool.pytest.ini_options]
@@ -31,3 +33,19 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E,F = correctness; I = import order. Style-only families deliberately off —
+# the linter gates real defects, not taste.
+select = ["E", "F", "I"]
+ignore = ["E501"]  # long lines: docstrings/prompts carry measured facts verbatim
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+files = ["agent", "obs", "api", "rag", "tools", "evals"]
