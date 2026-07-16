@@ -77,7 +77,9 @@ class RiskReport(BaseModel):
     """
 
     location: str
-    hazard: Hazard
+    # None is allowed ONLY on refusals: an out-of-scope natural-language query
+    # ("wildfire risk?") has no valid Hazard value to carry.
+    hazard: Hazard | None
     horizon_days: int = Field(gt=0)
     confidence: float = Field(ge=0.0, le=1.0)
 
@@ -95,4 +97,6 @@ class RiskReport(BaseModel):
             raise ValueError("risk_level is required unless the report is a refusal")
         if self.refusal is not None and self.risk_level is not None:
             raise ValueError("a refusal report must not assert a risk_level")
+        if self.hazard is None and self.refusal is None:
+            raise ValueError("hazard may be omitted only on a refusal report")
         return self
