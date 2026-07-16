@@ -2,9 +2,9 @@
 
 [![ci](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml)
 
-An open-source **agent** (not a chatbot) that turns live weather data and authoritative climate documents into a **grounded, cited, structured risk report** for a location, hazard, and time horizon.
+An open-source **AI agent** (not a chatbot) that turns live weather data and authoritative climate documents into a **grounded, cited, structured risk report** — with the **evaluation, guardrails, and observability** systems production AI actually needs.
 
-> **Status: the moat is measurable.** ERA5 extreme-value statistics with full provenance, an IPCC RAG with page-level citations, and a **frozen, hash-pinned eval set with published recall numbers** — hybrid (BM25 + dense + RRF) headline recall@3 **91%** (95% CI 77–97), up from 76% naive baseline, with every failure slice printed too. Built in public.
+> **The 30-second version:** LangGraph agent · frozen 45-question benchmark (refusal confusion matrix **34/11/0/0 — zero fabricated answers**, held through 3 system redesigns) · citations structurally validated (the LLM *cannot* cite what it didn't retrieve) · claim-level LLM-judge audit (93%) · code-level scope guard · GEV return levels **with bootstrap CIs** · every model call telemetried at the SDK seam (latency, tokens, **est. cost per report: ~$0.001**) · two-layer measured caching (repeat query **56 s → 0.8 s**) · async FastAPI + Streamlit + 2 MCP servers · Docker + CI · **174 tests green**. Every number reproducible from the frozen benchmark in this repo.
 
 ## Why an agent, not a chatbot
 
@@ -23,8 +23,10 @@ A chatbot predicts plausible text — ask it about flood risk and it invents a n
 - **Statistics with uncertainty** — every GEV return level ships with a 90% parametric-bootstrap confidence band; the risk verdict itself comes from the forecast peak's position on the location's return-level curve (location-relative severity), and report confidence is composed from actual grounding, not a constant.
 - **Two MCP servers** — `weather-mcp` (forecast + hazard climatology) and `ipcc-rag-mcp` (search + cited answers), stdio-only, narrow and typed.
 - **Real citations in the report** — a `research` graph node retrieves top-8 IPCC chunks and gets a schema-validated cited answer; the final `RiskReport.citations` are page-level (`Chapter11.pdf, p124`), deduped, and can only reference actually-retrieved chunks. Offline/no-LLM degrades loudly to a citation-less report — never silently, never invented.
+- **Observability at the seam** — every Gemini call is measured at the one chokepoint all traffic passes through: latency, real token counts, retries, failures, cache hits, estimated cost. Per-report rollups in the UI and API responses; `uv run python -m obs.report` aggregates across sessions. Measured: a fully-grounded report costs ~$0.001; a repeated one costs $0.
+- **Async API with access control** — `POST /report` (FastAPI, blocking layers run via `asyncio.to_thread` so the event loop never stalls), `x-api-key` gating on the endpoints that spend money or expose usage, `/metrics` for the telemetry rollups. The response carries the report *and* what it cost.
 - **Streamlit UI + Docker + CI** — one-page UI over the agent contract, a self-sufficient Docker image (corpus baked in at build; runs BM25-only without a key, hybrid with one), GitHub Actions on every push. Evals are a documented **manual release gate** (`false_answer > 0` blocks release) — see [DEPLOY.md](DEPLOY.md).
-- **128 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) are pinned as tests.
+- **174 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) are pinned as tests.
 
 ## Architecture
 
@@ -63,9 +65,11 @@ Calling it live from the Inspector (real Open-Meteo data, fetched through MCP):
 
 ```bash
 uv sync                        # install dependencies
-uv run pytest                  # run the test suite (128 green)
+uv run pytest                  # run the test suite (174 green)
 uv run python -m scripts.demo  # live end-to-end demo → prints a RiskReport
 uv run streamlit run ui/app.py # the UI (localhost:8501)
+uv run uvicorn api.app:app --port 8000   # the API (POST /report, /metrics; set API_KEY)
+uv run python -m obs.report    # telemetry rollup: latency percentiles + est cost per op
 
 # evals — run the numbers yourself
 uv run python -m scripts.download_ipcc      # fetch the corpus (once)
@@ -101,7 +105,7 @@ Every `locator` is a real PDF page, and the answerer structurally cannot cite a 
 
 ## Tech stack
 
-Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · Gemini (google-genai SDK; AI Studio or Vertex) · numpy/scipy (GEV) · httpx · MCP Python SDK · Streamlit · pytest · Docker · GitHub Actions.
+Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · Gemini (google-genai SDK; AI Studio or Vertex) · numpy/scipy (GEV) · FastAPI (async) · httpx · MCP Python SDK · Streamlit · pytest · Docker · GitHub Actions.
 
 ## Data & attribution
 
@@ -122,9 +126,11 @@ Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not statio
 - [x] Streamlit UI, Docker image, CI; evals as a documented release gate
 - [x] Risk verdict from GEV return-level position; composed confidence; bootstrap CIs on return levels
 - [x] Claim-level LLM-judge eval + graph-path (real agent) eval
+- [x] Table-caption-aware chunking → perfect matrix 34/11/0/0
+- [x] Observability: seam-level telemetry, cost-per-report, latency percentiles, `/metrics`
+- [x] Async FastAPI service with access control
 - [ ] Deployed demo on Hugging Face Spaces
-- [ ] Table-caption-aware chunking (kills the last false refusal AND the judge's column-label flags)
-- [ ] Eval v2: 150+ questions with dev/test split · non-stationary GEV · observability + cost metering
+- [ ] Eval v2: 150+ questions with dev/test split · non-stationary GEV
 
 ## Security & limitations
 
