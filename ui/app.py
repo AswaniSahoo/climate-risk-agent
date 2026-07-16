@@ -18,10 +18,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import streamlit as st
 
-from agent import graph as agent_graph
-from agent.contracts import Hazard, RiskLevel
-from tools import climatology
-from tools.climatology import ClimatologyError
+from obs.log import configure
+
+configure()  # the UI process owns logging config (library layers just log)
+
+# imports below the sys.path shim + logging config on purpose (script entrypoint)
+from agent import graph as agent_graph  # noqa: E402
+from agent.contracts import Hazard, RiskLevel  # noqa: E402
+from tools import climatology  # noqa: E402
+from tools.climatology import ClimatologyError  # noqa: E402
 
 # Demo locations (geocoding is a documented DEBT item; these cover the
 # India-weighted eval set plus one non-Indian sanity point).

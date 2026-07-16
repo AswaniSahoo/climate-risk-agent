@@ -18,6 +18,7 @@ interrupted run resumes instead of re-paying.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import time
 from pathlib import Path
@@ -26,6 +27,8 @@ import numpy as np
 from tqdm import tqdm
 
 from rag.gemini_client import EMBED_MODEL, GeminiError, embed_batch
+
+_log = logging.getLogger(__name__)
 
 MODEL = EMBED_MODEL
 DIMS = 768
@@ -84,13 +87,10 @@ def cached_embed_texts(
     missing = [i for i, v in enumerate(vectors) if v is None]
 
     if not missing:
-        print("All embeddings loaded from cache.")
+        _log.info("all %d embeddings loaded from cache", len(texts))
         return vectors  # type: ignore[return-value]
 
-    print(
-        f"Cache hits: {len(texts) - len(missing)} | "
-        f"Need to embed: {len(missing)}"
-    )
+    _log.info("cache hits: %d | need to embed: %d", len(texts) - len(missing), len(missing))
 
     progress = tqdm(
         total=len(missing),

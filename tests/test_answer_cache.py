@@ -5,8 +5,6 @@ generation runs at temperature 0, so (question, retrieved chunks, model) fully
 determines the answer — same key, same CitedAnswer, forever. A repeat query
 should cost zero tokens. Single-process app -> disk file, not a cache server.
 """
-import pytest
-
 from rag.answer import CitedAnswer
 from rag.answer_cache import AnswerCache
 from rag.chunk import Chunk
@@ -44,11 +42,11 @@ def test_key_depends_on_question_chunks_and_text(tmp_path):
     assert cache.key("how much?", edited) != base  # same ids, new TEXT -> new key
 
 
-def test_corrupt_cache_file_is_a_loud_miss(tmp_path, capsys):
+def test_corrupt_cache_file_is_a_loud_miss(tmp_path, caplog):
     cache = AnswerCache(tmp_path)
     key = cache.key("q", _CHUNKS)
     cache.put(key, _ANSWER)
     (tmp_path / f"{key}.json").write_text("{not json", encoding="utf-8")
 
     assert cache.get(key) is None  # degrade to a miss, never crash
-    assert "answer cache" in capsys.readouterr().out.lower()  # loud, not silent
+    assert "corrupt cache entry" in caplog.text  # loud (WARNING), not silent

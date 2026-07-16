@@ -10,6 +10,7 @@ still works, and nobody mistakes degraded mode for the measured hybrid.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,8 @@ from rag.chunk import Chunk
 from rag.dense import DenseIndex
 from rag.embed import DiskVectorCache, EmbeddingError, cached_embed_texts
 from rag.hybrid import rrf_fuse
+
+_log = logging.getLogger(__name__)
 
 DEFAULT_CACHE_DIR = Path("data/cache/embeddings")
 _CANDIDATES = 50  # per-retriever candidate depth before fusion
@@ -47,8 +50,10 @@ class HybridRetriever:
                                    task_type="RETRIEVAL_DOCUMENT", cache=cache)
             )
         except EmbeddingError as exc:
-            print(f"retriever: dense unavailable ({exc}) — running BM25-only "
-                  "(measured hybrid quality requires embeddings)", flush=True)
+            _log.warning(
+                "dense unavailable (%s) — running BM25-only "
+                "(measured hybrid quality requires embeddings)", exc,
+            )
             return cls(chunks, doc_matrix=None, cache=cache)
         return cls(chunks, doc_matrix=matrix, cache=cache)
 
@@ -65,8 +70,9 @@ class HybridRetriever:
         try:
             query_vector = self._embed_query(question)
         except EmbeddingError as exc:
-            print(f"retriever: query embedding failed ({exc}) — falling back to BM25 "
-                  "for this question", flush=True)
+            _log.warning(
+                "query embedding failed (%s) — falling back to BM25 for this question", exc
+            )
             return lexical[:top_k]
         semantic = [c for c, _ in self._dense.query(query_vector, top_k=_CANDIDATES)]
         return rrf_fuse([lexical, semantic], top_k=top_k)

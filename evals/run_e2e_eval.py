@@ -15,6 +15,7 @@ LLM calls are paced ~7 s apart (free-tier RPM). Run:
 """
 from __future__ import annotations
 
+import os as _os
 import time
 
 from evals.checkers import citation_hits_gold, numeric_provenance_ok, refusal_cell
@@ -24,8 +25,6 @@ from evals.schema import ExpectedBehavior
 from rag.answer import AnswerError, answer_with_guard
 from rag.retrieve import HybridRetriever
 from rag.scope import out_of_scope_hazard
-
-import os as _os
 
 # Default pacing fits the FREE tier (~5 RPM measured); paid tier: EVAL_LLM_PAUSE_S=0.5
 _LLM_PAUSE_S = float(_os.environ.get("EVAL_LLM_PAUSE_S", "13.0"))
@@ -40,6 +39,9 @@ _CLAIM_JUDGE = _os.environ.get("EVAL_CLAIM_JUDGE", "") == "1"
 
 
 def main() -> None:
+    from obs.log import configure
+
+    configure()  # runner owns logging config
     gold = load_gold_set()
     chunks = build_chunks()
     retriever = HybridRetriever.build(chunks)  # the measured 91% path; loud BM25 fallback
@@ -118,6 +120,36 @@ def main() -> None:
     print(f"scope-guard refusals (pre-LLM, ungrounded by design): {scope_refusals}")
     if errors:
         print("\nERRORS:", *errors, sep="\n  ")
+
+    # Committed artifact: the numbers as a verifiable file, not README prose.
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    def _rate(flags: list[bool]) -> dict:
+        return {"passed": sum(flags), "total": len(flags)}
+
+    artifact = {
+        "run_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "gold_set_sha256_file": "evals/gold_set.sha256",
+        "top_k": _TOP_K,
+        "matrix": {cell: sorted(ids) for cell, ids in sorted(cells.items())},
+        "citation_validity": _rate(citation_valid),
+        "numeric_provenance": _rate(numeric_ok),
+        "grounded_refusals": _rate(grounded),
+        "claim_judge": (
+            {"answers_fully_supported": _rate(claims_supported),
+             "claims_supported": claim_totals[0], "claims_total": claim_totals[1]}
+            if claim_totals[1] else None
+        ),
+        "scope_guard_refusals": scope_refusals,
+        "errors": errors,
+    }
+    out_dir = Path("evals/results")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"e2e-{datetime.now(timezone.utc):%Y-%m-%d}.json"
+    out_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+    print(f"\nartifact written: {out_path} (commit it — release-gate evidence)")
 
 
 if __name__ == "__main__":

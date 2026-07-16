@@ -11,7 +11,6 @@ import pytest
 
 from agent.contracts import Hazard
 
-
 # --- SSRF: outbound targets are hardcoded constants, never caller-supplied ---
 
 def test_outbound_targets_are_pinned():

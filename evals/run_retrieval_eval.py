@@ -80,37 +80,62 @@ def build_retrievers(chunks: list[Chunk]) -> dict[str, Retriever]:
     return retrievers
 
 
-def report(label: str, items: list[tuple[EvalQuestion, list[tuple[str, int]]]]) -> None:
+def report(label: str, items: list[tuple[EvalQuestion, list[tuple[str, int]]]]) -> dict | None:
     n = len(items)
     if not n:
-        return
+        return None
     parts = []
+    row: dict = {"label": label, "n": n, "recall": {}}
     for k in K_VALUES:
         hits = sum(recall_at_k(pages, q.gold_pages, k) for q, pages in items)
         lo, hi = wilson_ci(hits, n)
         parts.append(f"R@{k} {hits/n:5.0%} [{lo:.0%}-{hi:.0%}]")
+        row["recall"][f"@{k}"] = {"rate": round(hits / n, 4),
+                                  "wilson95": [round(lo, 4), round(hi, 4)]}
     mean_mrr = sum(mrr(pages, q.gold_pages) for q, pages in items) / n
+    row["mrr"] = round(mean_mrr, 4)
     print(f"{label:22s} n={n:2d}  " + "  ".join(parts) + f"  MRR {mean_mrr:.2f}")
+    return row
 
 
 def main() -> None:
+    from obs.log import configure
+
+    configure()  # runner owns logging config
     gold = load_gold_set()
     chunks = build_chunks()
     questions = [q for q in gold.questions if q.gold_pages]
 
+    artifact_rows: dict[str, list[dict]] = {}
     for name, retrieve in build_retrievers(chunks).items():
         scored = [(q, unique_pages(retrieve(q.question))) for q in questions]
         print(f"\n===== {name} =====")
+        rows = []
         for s in Slice:
-            report(s.value, [(q, p) for q, p in scored if q.slice is s])
-        report(
+            rows.append(report(s.value, [(q, p) for q, p in scored if q.slice is s]))
+        rows.append(report(
             "HEADLINE (answer)",
             [(q, p) for q, p in scored if q.expected_behavior is ExpectedBehavior.ANSWER],
-        )
-        report(
+        ))
+        rows.append(report(
             "diagnostic (refuse)",
             [(q, p) for q, p in scored if q.expected_behavior is ExpectedBehavior.REFUSE],
-        )
+        ))
+        artifact_rows[name] = [r for r in rows if r]
+
+    # Committed artifact: the ablation as a verifiable file, not README prose.
+    import json
+    from datetime import datetime, timezone
+
+    out_dir = Path("evals/results")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"retrieval-{datetime.now(timezone.utc):%Y-%m-%d}.json"
+    out_path.write_text(json.dumps({
+        "run_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "gold_set_sha256_file": "evals/gold_set.sha256",
+        "retrievers": artifact_rows,
+    }, indent=2), encoding="utf-8")
+    print(f"\nartifact written: {out_path} (commit it — release-gate evidence)")
 
 
 if __name__ == "__main__":

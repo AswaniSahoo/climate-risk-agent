@@ -75,7 +75,11 @@ def record(
         with _sink_path().open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event) + "\n")
     except OSError as exc:
-        print(f"[telemetry] disk sink unavailable ({exc}) — keeping in-memory only")
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "disk sink unavailable (%s) — keeping in-memory only", exc
+        )
 
 
 def snapshot() -> list[dict]:

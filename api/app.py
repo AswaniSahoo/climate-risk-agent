@@ -20,6 +20,7 @@ Run:  uv run uvicorn api.app:app --port 8000
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -31,11 +32,16 @@ from agent.graph import run_agent
 from obs.telemetry import Span, snapshot, summarize
 from tools.climatology import ClimatologyError, climatology_hazard_stat
 
+_log = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    from obs.log import configure
+
+    configure()  # the API process owns logging config
     if not os.environ.get("API_KEY"):
-        print("[api] WARNING: API_KEY not set — endpoints are open (dev mode)")
+        _log.warning("API_KEY not set — endpoints are open (dev mode)")
     yield
 
 
@@ -85,7 +91,7 @@ async def create_report(request: ReportRequest) -> ReportResponse:
                 climatology_hazard_stat, request.latitude, request.longitude, request.hazard
             )
         except ClimatologyError as exc:
-            print(f"[api] climatology unavailable ({exc}) — report proceeds without it")
+            _log.warning("climatology unavailable (%s) — report proceeds without it", exc)
 
     try:
         with Span("api-report") as span:

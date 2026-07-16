@@ -1,6 +1,5 @@
 """Tests for the production retriever (rag/retrieve.py): hybrid with loud fallback."""
 import numpy as np
-import pytest
 
 import rag.retrieve as retrieve_mod
 from rag.chunk import Chunk
@@ -38,7 +37,7 @@ def test_hybrid_fuses_dense_and_bm25(monkeypatch):
     assert len(ids) == 2
 
 
-def test_query_embedding_failure_falls_back_to_bm25_loudly(monkeypatch, capsys):
+def test_query_embedding_failure_falls_back_to_bm25_loudly(monkeypatch, caplog):
     matrix = np.eye(3)
     retriever = HybridRetriever(CHUNKS, doc_matrix=matrix)
 
@@ -48,15 +47,15 @@ def test_query_embedding_failure_falls_back_to_bm25_loudly(monkeypatch, capsys):
     monkeypatch.setattr(retriever, "_embed_query", broken)
     top = retriever.retrieve("stilling winds", top_k=1)
     assert top[0].chunk_id == CHUNKS[2].chunk_id  # bm25 still answers
-    assert "falling back to BM25" in capsys.readouterr().out  # loud, not silent
+    assert "falling back to BM25" in caplog.text  # loud (WARNING), not silent
 
 
-def test_build_without_auth_degrades_to_bm25(monkeypatch, tmp_path, capsys):
+def test_build_without_auth_degrades_to_bm25(monkeypatch, tmp_path, caplog):
     def no_auth(texts, *, task_type, cache):
         raise retrieve_mod.EmbeddingError("no Gemini auth configured")
 
     monkeypatch.setattr(retrieve_mod, "cached_embed_texts", no_auth)
     retriever = HybridRetriever.build(CHUNKS, cache_dir=tmp_path)
     assert retriever.dense_enabled is False
-    assert "BM25-only" in capsys.readouterr().out
+    assert "BM25-only" in caplog.text
     assert retriever.retrieve("glaciers", top_k=1)[0].chunk_id == CHUNKS[1].chunk_id

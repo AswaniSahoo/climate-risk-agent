@@ -39,7 +39,7 @@ def get_forecast(
 
     validate_coordinates(latitude, longitude)
     validate_horizon(horizon_days)
-    params = {
+    params: dict[str, str | int | float] = {
         "latitude": latitude,
         "longitude": longitude,
         "daily": "precipitation_sum,temperature_2m_max,wind_speed_10m_max",

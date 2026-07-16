@@ -4,7 +4,6 @@ Evaluator gap #5: page-level citation checks can't catch a correctly-cited page
 being misquoted. The judge decomposes an answer into factual claims and tests
 each against ONLY the cited excerpt texts.
 """
-import pytest
 
 import evals.claim_judge as judge_mod
 from evals.claim_judge import ClaimJudgment, judge_claims

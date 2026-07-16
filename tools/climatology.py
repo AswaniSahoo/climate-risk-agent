@@ -141,7 +141,7 @@ def climatology_hazard_stat(
 
     validate_coordinates(latitude, longitude)
     cfg = _HAZARD_VARS[hazard]
-    params = {
+    params: dict[str, str | int | float] = {
         "latitude": latitude,
         "longitude": longitude,
         "start_date": f"{start_year}-01-01",

@@ -20,6 +20,7 @@ MASTER-PLAN's 4 parallel agents by *adding nodes*, not rewiring.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Optional, TypedDict
@@ -40,8 +41,10 @@ from rag.chunk import Chunk
 from rag.corpus import CorpusError, load_corpus_chunks
 from rag.gemini_client import GeminiError
 from rag.retrieve import HybridRetriever
-from tools.forecast import ForecastResult, get_forecast, OPEN_METEO_URL
+from tools.forecast import OPEN_METEO_URL, ForecastResult, get_forecast
 from tools.hazard_stats import HazardStat
+
+_log = logging.getLogger(__name__)
 
 # Hazards we can actually answer today (have a data path in get_forecast).
 _ANSWERABLE = {Hazard.HEATWAVE, Hazard.EXTREME_PRECIP, Hazard.WIND}
@@ -184,7 +187,7 @@ def research(state: AgentState) -> dict:
         chunks = _ipcc_retriever().retrieve(question, top_k=_IPCC_TOP_K)
         answer = answer_with_guard(question, chunks, cache=_answer_cache())
     except (CorpusError, AnswerError, GeminiError) as exc:
-        print(f"[research] IPCC grounding unavailable ({exc}) — report ships without citations")
+        _log.warning("IPCC grounding unavailable (%s) — report ships without citations", exc)
         return {}
     return {"ipcc_answer": answer, "ipcc_chunks": chunks}
 

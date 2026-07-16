@@ -228,7 +228,7 @@ def test_abstaining_answer_adds_no_citations(httpx_mock, monkeypatch):
     assert report.risk_level is RiskLevel.SEVERE  # forecast half still works
 
 
-def test_offline_corpus_degrades_loudly_report_still_ships(httpx_mock, capsys):
+def test_offline_corpus_degrades_loudly_report_still_ships(httpx_mock, caplog):
     # autouse fixture already makes _ipcc_retriever raise CorpusError
     httpx_mock.add_response(json=CANNED)
 
@@ -239,5 +239,5 @@ def test_offline_corpus_degrades_loudly_report_still_ships(httpx_mock, capsys):
 
     assert report.citations == []
     assert report.risk_level is RiskLevel.SEVERE
-    assert "IPCC grounding unavailable" in capsys.readouterr().out  # loud, never silent
+    assert "IPCC grounding unavailable" in caplog.text  # loud (WARNING), never silent
 

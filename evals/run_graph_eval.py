@@ -32,6 +32,9 @@ _SCENARIOS = [
 
 
 def main() -> None:
+    from obs.log import configure
+
+    configure()  # runner owns logging config
     from tqdm import tqdm
 
     failures: list[str] = []
@@ -76,8 +79,9 @@ def main() -> None:
         else:
             passed += 1
             cited = len(report.citations)
+            level = report.risk_level.value if report.risk_level else "refused"
             progress.write(
-                f"  {label}: ok — {report.risk_level.value}, "
+                f"  {label}: ok — {level}, "
                 f"confidence {report.confidence}, {cited} citations"
             )
 

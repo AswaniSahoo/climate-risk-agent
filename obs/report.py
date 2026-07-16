@@ -16,6 +16,9 @@ from obs.telemetry import summarize
 
 
 def main() -> None:
+    from obs.log import configure
+
+    configure()  # runner owns logging config
     directory = Path(os.environ.get("TELEMETRY_DIR", "data/telemetry"))
     files = sorted(directory.glob("*.jsonl"))
     if not files:

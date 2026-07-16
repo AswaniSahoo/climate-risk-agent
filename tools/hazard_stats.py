@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from scipy.stats import genextreme
 
 
-def _fit(annual_maxima: Sequence[float]) -> tuple[float, float, float]:
+def _fit(annual_maxima: "Sequence[float] | np.ndarray") -> tuple[float, float, float]:
     """Fit a GEV to the annual maxima; returns (shape c, loc, scale)."""
     c, loc, scale = genextreme.fit(np.asarray(annual_maxima, dtype=float))
     return float(c), float(loc), float(scale)

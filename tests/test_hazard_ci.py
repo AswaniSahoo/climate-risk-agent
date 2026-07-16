@@ -6,7 +6,6 @@ precision. Parametric bootstrap: resample from the FITTED distribution, refit,
 take percentile bands. Seeded -> deterministic tests.
 """
 import numpy as np
-import pytest
 from scipy.stats import genextreme
 
 from tools.hazard_stats import ReturnLevel, return_levels_with_ci
@@ -25,18 +24,21 @@ def test_ci_brackets_the_point_estimate():
         assert r.ci_low < r.ci_high  # a real band, not a collapsed point
 
 
+def _width(r: ReturnLevel) -> float:
+    return r.ci_high - r.ci_low
+
+
 def test_rarer_events_have_wider_bands():
     levels = {r.return_period_years: r for r in
               return_levels_with_ci(_MAXIMA_60, (10, 100), n_boot=200, seed=0)}
-    width = lambda r: r.ci_high - r.ci_low
-    assert width(levels[100]) > width(levels[10])  # extrapolating further = less certain
+    assert _width(levels[100]) > _width(levels[10])  # extrapolating further = less certain
 
 
 def test_more_data_shrinks_the_band():
-    w = lambda maxima: (lambda r: r.ci_high - r.ci_low)(
-        return_levels_with_ci(maxima, (100,), n_boot=200, seed=0)[0]
-    )
-    assert w(_MAXIMA_60) < w(_MAXIMA_20)
+    def band(maxima):
+        return _width(return_levels_with_ci(maxima, (100,), n_boot=200, seed=0)[0])
+
+    assert band(_MAXIMA_60) < band(_MAXIMA_20)
 
 
 def test_seeded_bootstrap_is_deterministic():

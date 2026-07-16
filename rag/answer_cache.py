@@ -13,12 +13,15 @@ under a stable id invalidates naturally. Corrupt entries are a LOUD miss.
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
 from rag.answer import CitedAnswer
 from rag.chunk import Chunk
 from rag.gemini_client import GENERATE_MODEL
+
+_log = logging.getLogger(__name__)
 
 
 class AnswerCache:
@@ -44,7 +47,7 @@ class AnswerCache:
         try:
             answer = CitedAnswer.model_validate_json(path.read_text(encoding="utf-8"))
         except Exception as exc:  # corrupt entry -> loud miss, never a crash
-            print(f"[answer cache] corrupt entry {path.name} ignored ({exc})")
+            _log.warning("corrupt cache entry %s ignored (%s)", path.name, exc)
             return None
         from obs.telemetry import record
 
