@@ -12,35 +12,71 @@ A chatbot predicts plausible text — ask it about flood risk and it invents a n
 
 ![the UI: live forecast + ERA5 GEV return levels + validated IPCC page citations in one report](assets/ui-report.png)
 
-## What works today
+## The design in one idea
 
-- **Typed output contract** — a Pydantic `RiskReport` (risk level, drivers, citations, data provenance, confidence, refusal). Bad output can't be constructed: the level is a 4-value enum, confidence is bounded `[0,1]`, and a report must either assert a risk *or* refuse — never both.
-- **ERA5 hazard statistics with honest provenance** — 60+ years of daily extremes → GEV fit → 10/50/100-year return levels. Every `HazardStat` states its statistic definition, resolution, `record_max` beside the fitted levels (degenerate tails visible at a glance), and a `representativeness` enum. Live example: Rourkela's 100-year daily-max temperature fits at 46.0 °C against a 46.1 °C record.
-- **IPCC RAG with page-level citations** — AR6 WG1 SPM + Ch.11 + Ch.12 (439 pages), row-atomic chunking for regional assessment tables, zero-dependency BM25 (+ Gemini dense / RRF hybrid), and an LLM answerer whose **citations are structurally validated**: a citation that doesn't reference a retrieved chunk cannot be constructed.
-- **A frozen benchmark with published numbers** — 45 hand-verified questions; every supporting quote is machine-checked verbatim against the PDFs and the set is frozen by content hash. Recall@k with Wilson CIs per slice, including adversarial slices. The measured progression — naive chunks 76% → row-atomic table chunks 82% → BM25+dense RRF hybrid **91%** headline R@3; the duplicate-region trap slice went **0% → 100%** — is the design philosophy: every layer earned its place with a delta on the same frozen questions (dense alone actually *underperforms* BM25 at 71%; the fusion is what wins). The current caption-carry chunking trades R@3 to 88% (R@5/10 hold at 94%) for a perfect end-to-end matrix — a documented, deliberate trade: production answers from the top-8, so what matters is behavior, and behavior only improved.
-- **Deterministic scope guard** — questions about unsupported hazards (drought, tropical cyclones, coastal flooding, wildfire) are refused in code, before the LLM, so the guard cannot be prompt-injected away.
-- **A perfect confusion matrix, earned in three measured steps** — the end-to-end eval over all 45 frozen questions scores refusal behavior as a 4-cell matrix. Current: **34 correct answers, 11 correct refusals, 0 false refusals, 0 false answers.** The zero-confabulation cell held through a retriever swap, a context-size change, and a chunking redesign; the last false refusal died when table captions (the only place the 1.5/2/4 °C column labels live) were carried onto every row chunk. Citation validity 94%, numeric provenance 85%, **claim-level LLM-judge support 93%** (claims audited against cited excerpts only — the remaining flags are the judge being stricter than PDF linearization allows), and 3 of 4 premise-injection refusals cite the page that refutes the false premise.
-- **Statistics with uncertainty** — every GEV return level ships with a 90% parametric-bootstrap confidence band; the risk verdict itself comes from the forecast peak's position on the location's return-level curve (location-relative severity), and report confidence is composed from actual grounding, not a constant.
-- **Two MCP servers** — `weather-mcp` (forecast + hazard climatology) and `ipcc-rag-mcp` (search + cited answers), stdio-only, narrow and typed.
-- **Real citations in the report** — a `research` graph node retrieves top-8 IPCC chunks and gets a schema-validated cited answer; the final `RiskReport.citations` are page-level (`Chapter11.pdf, p124`), deduped, and can only reference actually-retrieved chunks. Offline/no-LLM degrades loudly to a citation-less report — never silently, never invented.
-- **Observability at the seam** — every Gemini call is measured at the one chokepoint all traffic passes through: latency, real token counts, retries, failures, cache hits, estimated cost. Per-report rollups in the UI and API responses; `uv run python -m obs.report` aggregates across sessions. Measured: a fully-grounded report costs ~$0.001; a repeated one costs $0.
-- **Async API with access control** — `POST /report` (FastAPI, blocking layers run via `asyncio.to_thread` so the event loop never stalls), `x-api-key` gating on the endpoints that spend money or expose usage, `/metrics` for the telemetry rollups. The response carries the report *and* what it cost.
-- **Streamlit UI + Docker + CI** — one-page UI over the agent contract, a self-sufficient Docker image (corpus baked in at build; runs BM25-only without a key, hybrid with one), GitHub Actions on every push. Evals are a documented **manual release gate** (`false_answer > 0` blocks release) — see [DEPLOY.md](DEPLOY.md).
-- **174 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) are pinned as tests.
+Trust here is **structural, not prompted**. Every guarantee lives in a validator, a guard, or a chokepoint — places an LLM cannot argue with:
+
+| Guarantee | Enforced by |
+|---|---|
+| A citation must reference a retrieved chunk | Pydantic `model_validator` — fabrication is *unconstructable* |
+| Out-of-scope hazards never reach the LLM | code-level scope guard, runs before any model call |
+| A report asserts a risk XOR refuses | contract validator — the dishonest state can't exist |
+| No model call escapes measurement | telemetry at the single SDK seam all traffic crosses |
+| Numbers don't regress silently | frozen benchmark + evals as a release gate |
+
+## Measurement: the moat
+
+- **The benchmark came first.** 45 hand-verified questions authored *before* the retriever existed, every supporting quote machine-checked verbatim against the PDFs, the set frozen by content hash — with adversarial slices (duplicate-region traps, false premises, out-of-scope lures).
+- **Every layer bought its way in with a delta on the same frozen questions:** naive chunks 76% → row-atomic table chunks 82% → hybrid BM25+dense RRF **91%** headline R@3 (dense *alone* underperforms at 71% — fusion is what wins); the trap slice went **0% → 100%**. Current caption-carry chunking trades R@3 to 88% (R@5/10 hold 94%) for a perfect end-to-end matrix — a documented, deliberate trade.
+- **The end-to-end result: a perfect refusal confusion matrix** — 34 correct answers · 11 correct refusals · **0 false refusals · 0 false answers**, with the zero-confabulation cell held through a retriever swap, a context-size change, and a chunking redesign. Citation validity 94% · numeric provenance 85% · **claim-level LLM-judge support 93%** (claims audited against cited excerpts only; the remaining flags are the judge being *stricter than PDF linearization allows* — documented, not fought).
+
+## Grounding: real data, honest statistics
+
+- **ERA5 → GEV → return levels with uncertainty**: 60+ years of daily extremes per location; every 10/50/100-year level ships with a **90% parametric-bootstrap confidence band**; `record_max` sits beside the fitted levels so degenerate tails are visible at a glance, and a `representativeness` enum says how far to trust a reanalysis point value.
+- **The risk verdict is location-relative**: severity = where the forecast peak sits on *that location's* return-level curve (a 46 °C day is normal in Rourkela and record-class in Berlin). Report confidence is composed from actual grounding, never a constant.
+- **IPCC RAG with page-level citations**: AR6 WG1 SPM + Ch.11 + Ch.12 (439 pages), row-atomic chunking with table-caption carry for the regional assessment tables, hybrid retrieval, and citations that resolve to real PDF pages.
+
+## Operations
+
+- **Observability at the seam** — latency, real token counts, retries, cache hits, estimated cost for every model call; per-report rollups in the UI and API responses; `uv run python -m obs.report` aggregates across sessions. Measured: a fully-grounded report ≈ **$0.001**; a repeated one — content-keyed answer cache — **$0 and 0.8 s instead of 56 s**.
+- **Three front doors**: an async FastAPI service (`POST /report` via `asyncio.to_thread`, `x-api-key` access control, `/metrics`), a Streamlit UI that renders only the report contract, and two stdio MCP servers (`weather-mcp`, `ipcc-rag-mcp`) for AI clients.
+- **Docker + CI + release gate**: self-sufficient image (corpus baked at build; degrades loudly to BM25-only without a key), GitHub Actions on every push, and evals as a documented manual release gate — `false_answer > 0` blocks release ([DEPLOY.md](DEPLOY.md)).
+- **174 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) pinned as tests.
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    Q[query: location · hazard · horizon] --> PLAN[plan<br/>scope check]
+    PLAN -->|unsupported hazard| REF[refusal<br/>explicit, valid output]
+    PLAN --> CALL[call<br/>Open-Meteo forecast]
+    CALL --> RES[research<br/>IPCC RAG]
+    RES --> SYN[synthesize]
+    SYN --> R[RiskReport<br/>typed · cited · provenanced]
+
+    subgraph RAG [hybrid retrieval — measured 91% R@3]
+        BM25[BM25] --> RRF[RRF fusion]
+        DENSE[Gemini dense] --> RRF
+        RRF --> TOP[top-8 chunks] --> ANS[CitedAnswer<br/>schema-validated citations]
+    end
+    RES -.-> RAG
+
+    subgraph GROUND [grounding]
+        ERA5[ERA5 63-yr archive] --> GEV[GEV fit + 90% bootstrap CI]
+        GEV --> VERDICT[risk level = forecast peak<br/>vs return-level curve]
+    end
+    SYN -.-> GROUND
+
+    subgraph OBS [observability]
+        SEAM[Gemini SDK seam<br/>every call measured] --> TEL[latency · tokens · retries · est cost]
+    end
+
+    R --> UI[Streamlit UI]
+    R --> API[async FastAPI<br/>x-api-key]
+    R --> MCP[2 MCP servers]
 ```
-query (location, hazard, horizon)
-        │
-        ▼
-   LangGraph state machine
-   plan ──▶ call ──▶ research ──▶ synthesize ──▶ RiskReport (typed, cited, provenanced)
-     │      forecast   IPCC RAG      forecast + ERA5 GEV + cited IPCC answer
-     │      (live)     (hybrid top-8 → validated CitedAnswer)
-     │
-     └─(unsupported hazard)─▶ refusal (explicit, valid output)
-```
+
+Every arrow above is guarded by a validator or a test: the LLM cannot cite unretrieved chunks, a report cannot both assert and refuse, no model call escapes telemetry, and out-of-scope hazards never reach the LLM.
 
 ## Use it over MCP
 
@@ -115,24 +151,8 @@ Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · Gemini
 
 Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not station observations — see [LIMITATIONS.md](LIMITATIONS.md) and the `representativeness` field on every `HazardStat`.
 
-## Roadmap
-
-- [x] IPCC AR6 RAG with page-level citations
-- [x] ERA5 hazard statistics (return periods via extreme-value analysis) with provenance
-- [x] Eval harness with numbers (retrieval recall@k + adversarial slices; e2e citation/refusal metrics)
-- [x] MCP servers (weather-mcp + ipcc-rag-mcp), demoed in the MCP Inspector
-- [x] Hybrid dense+RRF ablation published (bm25 82% / dense 71% / hybrid 91% headline R@3)
-- [x] RAG citations wired into the `RiskReport` agent path (`research` graph node)
-- [x] Streamlit UI, Docker image, CI; evals as a documented release gate
-- [x] Risk verdict from GEV return-level position; composed confidence; bootstrap CIs on return levels
-- [x] Claim-level LLM-judge eval + graph-path (real agent) eval
-- [x] Table-caption-aware chunking → perfect matrix 34/11/0/0
-- [x] Observability: seam-level telemetry, cost-per-report, latency percentiles, `/metrics`
-- [x] Async FastAPI service with access control
-- [ ] Deployed demo on Hugging Face Spaces
-- [ ] Eval v2: 150+ questions with dev/test split · non-stationary GEV
-
-## Security & limitations
+## Security, limitations, roadmap
 
 - [SECURITY.md](SECURITY.md) — the threat model; every control that matters is pinned by a test.
 - [LIMITATIONS.md](LIMITATIONS.md) — what these numbers do and don't mean. Read it before trusting a return level.
+- [ROADMAP.md](ROADMAP.md) — what shipped (with numbers) and what's next.
