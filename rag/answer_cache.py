@@ -13,7 +13,6 @@ under a stable id invalidates naturally. Corrupt entries are a LOUD miss.
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -43,10 +42,16 @@ class AnswerCache:
         if not path.exists():
             return None
         try:
-            return CitedAnswer.model_validate_json(path.read_text(encoding="utf-8"))
+            answer = CitedAnswer.model_validate_json(path.read_text(encoding="utf-8"))
         except Exception as exc:  # corrupt entry -> loud miss, never a crash
             print(f"[answer cache] corrupt entry {path.name} ignored ({exc})")
             return None
+        from obs.telemetry import record
+
+        # a hit is a generate call that cost nothing — visible in the data
+        record(op="generate", model=GENERATE_MODEL, latency_ms=0.0,
+               tokens_in=0, tokens_out=0, retries=0, ok=True, cached=True)
+        return answer
 
     def put(self, key: str, answer: CitedAnswer) -> None:
         path = self.directory / f"{key}.json"

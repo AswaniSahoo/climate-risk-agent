@@ -42,7 +42,7 @@ def test_retry_sleeps_through_rate_limits(monkeypatch):
             raise RateLimit("quota")
         return "ok"
 
-    assert gc._with_retry(flaky) == "ok"
+    assert gc._with_retry(flaky, op="test", model="m") == "ok"
     assert len(slept) == 2
 
 
@@ -86,4 +86,4 @@ def test_non_rate_limit_error_fails_fast_and_typed(monkeypatch):
         raise RuntimeError("invalid argument")
 
     with pytest.raises(gc.GeminiError, match="invalid argument"):
-        gc._with_retry(broken)
+        gc._with_retry(broken, op="test", model="m")

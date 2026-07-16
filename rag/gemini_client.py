@@ -72,15 +72,30 @@ def _is_rate_limit(exc: Exception) -> bool:
     return getattr(exc, "code", None) == 429 or "RESOURCE_EXHAUSTED" in str(exc)
 
 
-def _with_retry(call):
+def _with_retry(call, *, op: str, model: str, extract_tokens=None):
+    """Run `call` with rate-limit retries AND record telemetry at this chokepoint.
+
+    Every Gemini call in the project passes through here, so latency, retries,
+    token counts, and failures are measured structurally — no call can opt out.
+    `extract_tokens(result) -> (tokens_in, tokens_out)`; embeds pass estimates.
+    """
+    from obs.telemetry import record
+
+    start = time.perf_counter()
     for attempt in range(_RETRY_MAX):
         try:
-            return call()
+            result = call()
         except Exception as exc:  # SDK raises its own hierarchy; classify, don't guess
             if _is_rate_limit(exc) and attempt < _RETRY_MAX - 1:
                 _sleep(min(30.0 * (attempt + 1), 120.0))
                 continue
+            record(op=op, model=model, latency_ms=(time.perf_counter() - start) * 1000,
+                   tokens_in=0, tokens_out=0, retries=attempt, ok=False)
             raise GeminiError(f"Gemini call failed: {exc}") from exc
+        tokens_in, tokens_out = extract_tokens(result) if extract_tokens else (0, 0)
+        record(op=op, model=model, latency_ms=(time.perf_counter() - start) * 1000,
+               tokens_in=tokens_in, tokens_out=tokens_out, retries=attempt, ok=True)
+        return result
     raise GeminiError("rate-limit retries exhausted")  # pragma: no cover
 
 
@@ -110,7 +125,11 @@ def embed_batch(texts: list[str], *, task_type: str, dims: int) -> list[list[flo
                 raise GeminiError("API returned no embedding for a text")
             return list(response.embeddings[0].values)
 
-        return _with_retry(call)
+        # embed responses carry no usage metadata -> chars/4 token ESTIMATE
+        return _with_retry(
+            call, op="embed", model=EMBED_MODEL,
+            extract_tokens=lambda _result: (len(text) // 4, 0),
+        )
 
     with ThreadPoolExecutor(max_workers=_EMBED_WORKERS) as pool:
         return list(pool.map(embed_one, texts))
@@ -121,7 +140,7 @@ def generate_json(prompt: str, *, schema: dict) -> str:
     from google.genai import types
 
     def call():
-        response = _client().models.generate_content(
+        return _client().models.generate_content(
             model=GENERATE_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -130,6 +149,13 @@ def generate_json(prompt: str, *, schema: dict) -> str:
                 temperature=0.0,
             ),
         )
-        return response.text
 
-    return _with_retry(call)
+    def usage(response) -> tuple[int, int]:
+        meta = getattr(response, "usage_metadata", None)
+        return (
+            getattr(meta, "prompt_token_count", 0) or 0,
+            getattr(meta, "candidates_token_count", 0) or 0,
+        )
+
+    response = _with_retry(call, op="generate", model=GENERATE_MODEL, extract_tokens=usage)
+    return response.text

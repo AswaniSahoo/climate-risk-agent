@@ -83,11 +83,14 @@ if run:
         except ClimatologyError as exc:
             st.warning(f"Climatology unavailable ({exc}) — continuing without it.")
 
+    from obs.telemetry import Span
+
     with st.spinner("Running agent (forecast → IPCC research → synthesis)…"):
-        report = agent_graph.run_agent(
-            location=location, latitude=latitude, longitude=longitude,
-            hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
-        )
+        with Span("report") as span:
+            report = agent_graph.run_agent(
+                location=location, latitude=latitude, longitude=longitude,
+                hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
+            )
 
     if report.refusal is not None:
         st.error(f"**Refused:** {report.refusal}", icon=":material/block:")
@@ -170,6 +173,20 @@ if run:
                     f"Record max in series: {round(stat.record_max, 1)} — "
                     f"representativeness: {stat.representativeness.value}"
                 )
+
+    with st.expander("Cost & latency (measured telemetry)", icon=":material/speed:"):
+        s = span.summary()
+        obs_cols = st.columns(4)
+        obs_cols[0].metric("Wall time", f"{s['wall_ms']/1000:.1f} s")
+        obs_cols[1].metric("Model calls", s["calls"], help="Live Gemini calls (cache hits excluded)")
+        obs_cols[2].metric("Cache hits", s["cache_hits"])
+        obs_cols[3].metric("Est. cost", f"${s['est_cost_usd']:.4f}",
+                           help="Estimated from token counts × configured prices — not a bill.")
+        st.caption(
+            f"tokens in/out: {s['tokens_in']}/{s['tokens_out']} · "
+            f"retries: {s['retries']} · failures: {s['failures']} — every model "
+            "call is measured at the SDK seam; none can opt out."
+        )
 
     with st.expander("Data provenance (audit trail)", icon=":material/fact_check:"):
         for p in report.provenance:
