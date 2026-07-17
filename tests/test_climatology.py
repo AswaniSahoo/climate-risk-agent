@@ -72,6 +72,54 @@ def test_wind_uses_gust_variable_with_lower_bound_caveat():
     assert "lower bound" in stat.interpretation.lower()
 
 
+def _build(years, maxima, **kw):
+    return build_hazard_stat(
+        years, maxima, hazard=Hazard.HEATWAVE, latitude=22.26, longitude=84.85,
+        timezone="Asia/Kolkata", **kw,
+    )
+
+
+def test_trending_series_reports_effective_levels(monkeypatch):
+    monkeypatch.setattr("tools.climatology._TREND_N_BOOT", 20)  # keep test fast
+    years = list(range(1960, 2023))
+    # strong deterministic warming (0.8 °C/decade) + bounded wiggle
+    maxima = [38.0 + 0.08 * i + (i % 7) * 0.4 for i in range(len(years))]
+
+    stat = _build(years, maxima)
+
+    assert stat.trend is not None
+    assert stat.trend.significant is True
+    assert stat.trend.p_value < 0.05
+    assert stat.trend.slope_per_decade == pytest.approx(0.8, abs=0.3)
+    assert stat.trend.evaluated_at_year == 2022
+    # effective levels carry the bootstrap band too
+    assert all(rl.ci_low is not None for rl in stat.return_levels)
+    # effective 10-yr level at 2022 must sit near the END of the warmed series,
+    # far above the stationary whole-period fit would put it
+    assert stat.return_levels[0].level > max(maxima) - 3.0
+
+
+def test_flat_series_keeps_stationary_levels_but_reports_the_test():
+    years = list(range(1960, 2023))
+    maxima = [40.0 + (i % 7) for i in range(len(years))]  # zero trend
+
+    stat = _build(years, maxima)
+
+    assert stat.trend is not None
+    assert stat.trend.significant is False
+    assert stat.trend.evaluated_at_year is None  # stationary levels reported
+    assert all(rl.ci_low is not None for rl in stat.return_levels)
+
+
+def test_short_series_skips_trend_test():
+    years = list(range(2000, 2010))  # 10 years < _MIN_YEARS_FOR_TREND
+    maxima = [40.0 + (i % 3) for i in range(len(years))]
+
+    stat = _build(years, maxima)
+
+    assert stat.trend is None
+
+
 def test_climatology_hazard_stat_parses_archive(httpx_mock):
     httpx_mock.add_response(json=CANNED)
 

@@ -57,6 +57,22 @@ class ReturnLevel(BaseModel):
     ci_high: float | None = None
 
 
+class TrendInfo(BaseModel):
+    """Verdict of the non-stationarity (warming-trend) test on the maxima series.
+
+    `significant` means the likelihood-ratio test preferred the drifting-location
+    GEV at p < 0.05. `evaluated_at_year` is set when the reported return levels
+    are EFFECTIVE levels (fit evaluated at that year), None when the stationary
+    fit was kept.
+    """
+
+    covariate: str = "year"
+    slope_per_decade: float
+    p_value: float
+    significant: bool
+    evaluated_at_year: int | None = None
+
+
 class Representativeness(str, Enum):
     """How faithfully the statistic represents the requested point's TRUE extreme.
 
@@ -93,6 +109,8 @@ class HazardStat(BaseModel):
     record_end_year: int
     record_max: float
     return_levels: list[ReturnLevel]
+    # None = trend test not run (backward compatible with pre-trend stats).
+    trend: TrendInfo | None = None
     is_bias_corrected: bool
     representativeness: Representativeness
     interpretation: str

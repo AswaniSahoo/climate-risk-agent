@@ -17,7 +17,14 @@ from functools import lru_cache
 import httpx
 
 from agent.contracts import Hazard
-from tools.hazard_stats import HazardStat, Representativeness, return_levels_with_ci
+from tools.gev_trend import GevTrendFit, fit_gev_trend, trend_return_levels
+from tools.hazard_stats import (
+    HazardStat,
+    Representativeness,
+    ReturnLevel,
+    TrendInfo,
+    return_levels_with_ci,
+)
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 _ERA5_RESOLUTION_DEG = 0.25
@@ -85,6 +92,45 @@ def annual_maxima(
     return years, [by_year[y] for y in years]
 
 
+# Below this many annual maxima a trend fit is statistically meaningless
+# (4 free parameters on a handful of points); we keep the stationary fit.
+_MIN_YEARS_FOR_TREND = 20
+
+# 200 bootstrap refits keeps the first (uncached) call ~7 s; the 90% band is
+# stable well below that.
+_TREND_N_BOOT = 200
+
+
+def _reported_levels(
+    fit: GevTrendFit,
+    years: Sequence[int],
+    maxima: Sequence[float],
+    return_periods: Sequence[int],
+) -> tuple[list[ReturnLevel], TrendInfo]:
+    """Decide WHICH return levels the report carries, given the trend verdict.
+
+    Standard practice (Katz et al. 2002 "effective return level"; extRemes;
+    NEVA): when the likelihood-ratio test prefers the drifting-location model,
+    report levels EVALUATED AT THE LATEST YEAR — "today's 100-year event", not
+    the 1960–2022 average. When the trend is statistically noise, injecting it
+    would fabricate drift, so the stationary fit stays — but the TrendInfo
+    always carries the slope and p-value, so the report shows the test RAN.
+    """
+    trend = TrendInfo(
+        slope_per_decade=fit.slope_per_decade,
+        p_value=fit.p_value,
+        significant=fit.significant,
+        evaluated_at_year=years[-1] if fit.significant else None,
+    )
+    if fit.significant:
+        levels = trend_return_levels(
+            fit, at=years[-1], return_periods=return_periods, n_boot=_TREND_N_BOOT,
+        )
+    else:
+        levels = return_levels_with_ci(maxima, return_periods)
+    return levels, trend
+
+
 def build_hazard_stat(
     years: Sequence[int],
     maxima: Sequence[float],
@@ -97,6 +143,11 @@ def build_hazard_stat(
 ) -> HazardStat:
     """Assemble a fully-provenanced HazardStat from annual maxima (pure; no network)."""
     cfg = _HAZARD_VARS[hazard]
+    if len(maxima) >= _MIN_YEARS_FOR_TREND:
+        fit = fit_gev_trend(maxima, years)
+        levels, trend = _reported_levels(fit, years, maxima, return_periods)
+    else:
+        levels, trend = return_levels_with_ci(maxima, return_periods), None
     return HazardStat(
         variable=cfg.daily_var,
         statistic_definition=cfg.statistic_definition,
@@ -114,7 +165,8 @@ def build_hazard_stat(
         record_max=max(maxima),
         # 90% bootstrap band on every level: a 100-yr estimate from ~60 maxima
         # has real sampling noise, and the report must say how much.
-        return_levels=return_levels_with_ci(maxima, return_periods),
+        return_levels=levels,
+        trend=trend,
         is_bias_corrected=False,
         representativeness=Representativeness.POINT_INTERPOLATED_REANALYSIS,
         interpretation=cfg.interpretation,
