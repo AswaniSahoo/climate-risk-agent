@@ -238,13 +238,26 @@ def synthesize(state: AgentState) -> dict:
         levels_txt = ", ".join(
             f"{r.return_period_years}yr={round(r.level, 1)}" for r in stat.return_levels
         )
-        drivers.append(
-            RiskDriver(
-                factor="climatology",
-                detail=f"{stat.n_years}-yr ERA5 GEV ({stat.variable})",
+        # Non-stationary verdict changes what the numbers MEAN, so the text
+        # must say which regime was fitted (effective at latest year vs
+        # stationary), and that the trend test ran either way.
+        trend = stat.trend
+        if trend is not None and trend.significant:
+            clim_detail = (
+                f"{stat.n_years}-yr ERA5 non-stationary GEV ({stat.variable}), "
+                f"levels effective at {trend.evaluated_at_year}"
             )
-        )
-        summary += f" ERA5 return levels ({levels_txt})."
+            summary += (
+                f" ERA5 effective return levels at {trend.evaluated_at_year} "
+                f"({levels_txt}; warming trend {trend.slope_per_decade:+.1f} "
+                f"{stat.unit}/decade, p={trend.p_value:.3f})."
+            )
+        else:
+            clim_detail = f"{stat.n_years}-yr ERA5 GEV ({stat.variable})"
+            if trend is not None:
+                clim_detail += f", no significant trend (p={trend.p_value:.2f})"
+            summary += f" ERA5 return levels ({levels_txt})."
+        drivers.append(RiskDriver(factor="climatology", detail=clim_detail))
         # GEV-grounded verdict: severity = the forecast peak's position on THIS
         # location's return-level curve. Only when forecast metric and fitted
         # variable are the same quantity — wind is excluded (forecast = sustained

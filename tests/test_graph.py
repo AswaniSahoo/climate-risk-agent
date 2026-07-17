@@ -14,7 +14,7 @@ from rag.answer import CitedAnswer
 from rag.chunk import Chunk
 from rag.corpus import CorpusError
 from tools.climatology import build_hazard_stat
-from tools.hazard_stats import HazardStat, Representativeness, ReturnLevel
+from tools.hazard_stats import HazardStat, Representativeness, ReturnLevel, TrendInfo
 
 
 @pytest.fixture(autouse=True)
@@ -153,6 +153,42 @@ def test_gev_verdict_overrides_absolute_thresholds(httpx_mock):
     assert report.risk_level is RiskLevel.LOW  # location-relative, not absolute
     basis = [d for d in report.drivers if d.factor == "severity_basis"]
     assert basis and "GEV return levels" in basis[0].detail
+
+
+def test_significant_trend_surfaces_in_summary_and_driver(httpx_mock):
+    # When the stat carries a significant warming trend, the report must SAY
+    # the levels are effective (evaluated at the latest year), not 60-yr averages.
+    httpx_mock.add_response(json=CANNED)
+    stat = _precip_stat(100.0, 140.0, 160.0).model_copy(update={
+        "trend": TrendInfo(slope_per_decade=2.5, p_value=0.003,
+                           significant=True, evaluated_at_year=2022),
+    })
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.EXTREME_PRECIP, horizon_days=3, hazard_stat=stat,
+    )
+
+    clim = [d for d in report.drivers if d.factor == "climatology"][0]
+    assert "non-stationary" in clim.detail
+    assert "2022" in report.summary and "trend" in report.summary.lower()
+
+
+def test_insignificant_trend_reports_the_test_ran(httpx_mock):
+    httpx_mock.add_response(json=CANNED)
+    stat = _precip_stat(100.0, 140.0, 160.0).model_copy(update={
+        "trend": TrendInfo(slope_per_decade=0.4, p_value=0.61,
+                           significant=False, evaluated_at_year=None),
+    })
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.EXTREME_PRECIP, horizon_days=3, hazard_stat=stat,
+    )
+
+    clim = [d for d in report.drivers if d.factor == "climatology"][0]
+    assert "no significant trend" in clim.detail
+    assert "p=0.61" in clim.detail
 
 
 def test_gev_verdict_flags_record_class_event(httpx_mock):

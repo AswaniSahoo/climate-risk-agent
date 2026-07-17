@@ -196,6 +196,20 @@ if report is not None:
                     f"Record max in series: {round(stat.record_max, 1)} — "
                     f"representativeness: {stat.representativeness.value}"
                 )
+                if stat.trend is not None:
+                    if stat.trend.significant:
+                        st.warning(
+                            f"Warming trend detected: {stat.trend.slope_per_decade:+.1f} "
+                            f"{stat.unit}/decade (p={stat.trend.p_value:.3f}). Return levels "
+                            f"above are EFFECTIVE at {stat.trend.evaluated_at_year} — "
+                            "today's climate, not the historical average.",
+                            icon=":material/trending_up:",
+                        )
+                    else:
+                        st.caption(
+                            f"Non-stationarity tested: no significant trend "
+                            f"(p={stat.trend.p_value:.2f}) — stationary fit reported."
+                        )
 
     with st.expander("Cost & latency (measured telemetry)", icon=":material/speed:"):
         s = span.summary()
