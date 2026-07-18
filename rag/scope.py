@@ -14,6 +14,14 @@ from __future__ import annotations
 
 import re
 
+# A marine heatwave is an oceanic extreme-heat EVENT — a hazard, not background
+# earth-system science — but the phrase contains "heatwave" (a supported term),
+# so it must be tested BEFORE the supported-hazard check or it slips through
+# (held-out eval v2 caught exactly this false answer). Cryosphere topics
+# (glaciers, sea ice, snowlines) are deliberately NOT here: they are answerable
+# background science, consistent with the dev set's glacier-commitment item.
+_MARINE_HEATWAVE = re.compile(r"\bmarine heat ?waves?\b|\bocean heat ?waves?\b", re.IGNORECASE)
+
 # term-pattern -> canonical hazard name reported in the refusal
 _UNSUPPORTED: dict[str, str] = {
     r"\bdroughts?\b|\baridity\b": "drought",
@@ -36,8 +44,12 @@ def out_of_scope_hazard(question: str) -> str | None:
     """Name the unsupported hazard a question is about, or None if in scope.
 
     A supported hazard anywhere in the question keeps it in scope (compound
-    events involving our hazards are our business).
+    events involving our hazards are our business) — except a marine heatwave,
+    which is an oceanic hazard we do not assess, checked first so its embedded
+    "heatwave" cannot wave it through.
     """
+    if _MARINE_HEATWAVE.search(question):
+        return "marine heatwave"
     if _SUPPORTED.search(question):
         return None
     for pattern, name in _UNSUPPORTED.items():
