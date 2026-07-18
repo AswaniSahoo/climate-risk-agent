@@ -17,10 +17,11 @@ Run:  uv run python -m evals.run_retrieval_eval
 """
 from __future__ import annotations
 
+import os as _os
 from collections.abc import Callable
 from pathlib import Path
 
-from evals.gold_set import load_gold_set
+from evals.gold_set import load_gold_set, load_test_set
 from evals.metrics import mrr, recall_at_k, unique_pages, wilson_ci
 from evals.schema import EvalQuestion, ExpectedBehavior, Slice
 from rag.bm25 import BM25Index
@@ -102,7 +103,10 @@ def main() -> None:
     from obs.log import configure
 
     configure()  # runner owns logging config
-    gold = load_gold_set()
+    # EVAL_SET=test = the held-out v2 set: release gates ONLY (see DEPLOY.md).
+    eval_set = _os.environ.get("EVAL_SET", "dev")
+    gold = load_test_set() if eval_set == "test" else load_gold_set()
+    print(f"eval set: {eval_set} ({len(gold.questions)} questions)")
     chunks = build_chunks()
     questions = [q for q in gold.questions if q.gold_pages]
 
@@ -129,10 +133,14 @@ def main() -> None:
 
     out_dir = Path("evals/results")
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"retrieval-{datetime.now(timezone.utc):%Y-%m-%d}.json"
+    suffix = "-test" if eval_set == "test" else ""
+    out_path = out_dir / f"retrieval{suffix}-{datetime.now(timezone.utc):%Y-%m-%d}.json"
     out_path.write_text(json.dumps({
         "run_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "gold_set_sha256_file": "evals/gold_set.sha256",
+        "eval_set": eval_set,
+        "gold_set_sha256_file": (
+            "evals/gold_set_v2.sha256" if eval_set == "test" else "evals/gold_set.sha256"
+        ),
         "retrievers": artifact_rows,
     }, indent=2), encoding="utf-8")
     print(f"\nartifact written: {out_path} (commit it — release-gate evidence)")

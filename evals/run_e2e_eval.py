@@ -19,7 +19,7 @@ import os as _os
 import time
 
 from evals.checkers import citation_hits_gold, numeric_provenance_ok, refusal_cell
-from evals.gold_set import load_gold_set
+from evals.gold_set import load_gold_set, load_test_set
 from evals.run_retrieval_eval import build_chunks
 from evals.schema import ExpectedBehavior
 from rag.answer import AnswerError, answer_with_guard
@@ -36,13 +36,18 @@ _TOP_K = int(_os.environ.get("EVAL_TOP_K", "8"))
 # non-abstaining answer) — reported NEXT TO the deterministic checkers, never
 # instead of them.
 _CLAIM_JUDGE = _os.environ.get("EVAL_CLAIM_JUDGE", "") == "1"
+# EVAL_SET=test runs the HELD-OUT v2 set — release gates ONLY (exposure
+# protocol in DEPLOY.md). Default dev: an accidental run must never burn
+# the test set.
+_EVAL_SET = _os.environ.get("EVAL_SET", "dev")
 
 
 def main() -> None:
     from obs.log import configure
 
     configure()  # runner owns logging config
-    gold = load_gold_set()
+    gold = load_test_set() if _EVAL_SET == "test" else load_gold_set()
+    print(f"eval set: {_EVAL_SET} ({len(gold.questions)} questions)")
     chunks = build_chunks()
     retriever = HybridRetriever.build(chunks)  # the measured 91% path; loud BM25 fallback
     print(f"retriever: dense_enabled={retriever.dense_enabled}")
@@ -131,7 +136,10 @@ def main() -> None:
 
     artifact = {
         "run_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "gold_set_sha256_file": "evals/gold_set.sha256",
+        "eval_set": _EVAL_SET,
+        "gold_set_sha256_file": (
+            "evals/gold_set_v2.sha256" if _EVAL_SET == "test" else "evals/gold_set.sha256"
+        ),
         "top_k": _TOP_K,
         "matrix": {cell: sorted(ids) for cell, ids in sorted(cells.items())},
         "citation_validity": _rate(citation_valid),
@@ -147,7 +155,8 @@ def main() -> None:
     }
     out_dir = Path("evals/results")
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"e2e-{datetime.now(timezone.utc):%Y-%m-%d}.json"
+    suffix = "-test" if _EVAL_SET == "test" else ""
+    out_path = out_dir / f"e2e{suffix}-{datetime.now(timezone.utc):%Y-%m-%d}.json"
     out_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
     print(f"\nartifact written: {out_path} (commit it — release-gate evidence)")
 

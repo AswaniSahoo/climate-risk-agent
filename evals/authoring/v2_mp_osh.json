@@ -1,0 +1,476 @@
+{
+  "questions": [
+    {
+      "id": "OSH2-01",
+      "slice": "out_of_scope_hazard",
+      "question": "Has India experienced a long-term change in meteorological and hydrological droughts since the late 19th century, and which regions show intensified drought?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 35
+        }
+      ],
+      "supporting_quote": "There was no observed overall long-term change of both meteorological droughts and hydrological droughts over India during 1870–2018 (Mishra, 2020), but there were strong trends towards drying of soil moisture in north-central India (Ganeshi et al., 2020) and intensified droughts in north-west India",
+      "hazard": "drought",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-02",
+      "slice": "out_of_scope_hazard",
+      "question": "Has human-induced climate change contributed to increases in agricultural and ecological droughts?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 8
+        }
+      ],
+      "supporting_quote": "Human-induced climate change has contributed to increases in agricultural and ecological droughts",
+      "hazard": "drought",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-03",
+      "slice": "out_of_scope_hazard",
+      "question": "How does the rate of global mean sea level rise since 1900 compare with previous centuries?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 8
+        }
+      ],
+      "supporting_quote": "Global mean sea level has risen faster since 1900 than over any preceding century in at least the last 3000 years",
+      "hazard": "sea_level_rise",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-04",
+      "slice": "out_of_scope_hazard",
+      "question": "How much is relative sea level projected to rise in the oceans around Asia by 2081-2100 under low versus high emissions scenarios?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 37
+        }
+      ],
+      "supporting_quote": "Relative sea level rise is very likely to continue in the oceans around Asia. Regional mean RSLR projections for the oceans around Asia range from 0.3–0.5 m under SSP1-2.6 to 0.7–0.8 m under SSP5-8.5",
+      "hazard": "sea_level_rise",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-05",
+      "slice": "out_of_scope_hazard",
+      "question": "Has the number of intense tropical cyclones in the Bay of Bengal increased since the mid-1980s?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 35
+        }
+      ],
+      "supporting_quote": "There was an increase in the number and intensification rate of intense tropical cyclones (TC), such as Category 4–5 (wind speeds >58 m s –1), in the Western North Pacific (WNP) and Bay of Bengal since the mid-1980s",
+      "hazard": "tropical_cyclone",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-07",
+      "slice": "out_of_scope_hazard",
+      "question": "How has the frequency of marine heatwaves changed since the 1980s, and what role did human influence play?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 8
+        }
+      ],
+      "supporting_quote": "Marine heatwaves have approximately doubled in frequency since the 1980s ( high confidence ), and human influence has very likely contributed to most of them since at least 2006",
+      "hazard": "marine_heatwave",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-08",
+      "slice": "out_of_scope_hazard",
+      "question": "In how many regions, and on which continents, are agricultural and ecological droughts projected to increase relative to 1850-1900?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 24
+        }
+      ],
+      "supporting_quote": "agricultural and ecological droughts are projected in a few regions in all inhabited continents except Asia",
+      "hazard": "drought",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-09",
+      "slice": "out_of_scope_hazard",
+      "question": "How much more often are extreme sea level events that historically occurred once per century projected to occur due to relative sea level rise?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 25
+        }
+      ],
+      "supporting_quote": "extreme sea level events that occurred once per century in the recent past are projected to occur at least annually at more than half of all tide gauge locations",
+      "hazard": "sea_level_rise",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-10",
+      "slice": "out_of_scope_hazard",
+      "question": "By how much is the proportion of the most intense (Category 4-5) tropical cyclones projected to change at the global scale?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 16
+        }
+      ],
+      "supporting_quote": "The proportion of intense tropical cyclones (Category 4–5) and peak wind speeds of the most intense tropical cyclones are projected to increase at the global scale",
+      "hazard": "tropical_cyclone",
+      "notes": ""
+    },
+    {
+      "id": "MP2-01",
+      "slice": "multi_page",
+      "question": "On which continents has heavy precipitation likely increased at the continental scale?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 48
+        }
+      ],
+      "supporting_quote": "Heavy precipitation has likely increased on the continental scale over three continents: North America, Europe, and Asia",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-02",
+      "slice": "multi_page",
+      "question": "How have the frequency and intensity of heavy precipitation events changed at the global scale and across land regions?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 48
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 98
+        }
+      ],
+      "supporting_quote": "The frequency and intensity of heavy precipitation events have increased at the global scale and over a majority of land regions",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-03",
+      "slice": "multi_page",
+      "question": "How is the frequency of rare heavy precipitation events (such as 10-year and 50-year events) projected to change at 4 degrees of global warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 55
+        }
+      ],
+      "supporting_quote": "The increase in the frequency of heavy precipitation events will be non-linear with more warming and will be higher for rarer events ( high confidence), with a likely doubling and tripling in the frequency of 10-year and 50-year events, respectively, compared to the recent past at 4°C of global warming",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-04",
+      "slice": "multi_page",
+      "question": "What factors cause projected increases in extreme precipitation intensity to vary between regions?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 55
+        }
+      ],
+      "supporting_quote": "Increases in the intensity of extreme precipitation at regional scales will vary, depending on the amount of regional warming, changes in atmospheric circulation and storm dynamics",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-05",
+      "slice": "multi_page",
+      "question": "What is the main driver of observed changes in hot and cold extremes, and with what confidence globally and by continent?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 20
+        }
+      ],
+      "supporting_quote": "Human-induced greenhouse gas forcing is the main driver of the observed changes in hot and cold extremes on the global scale ( virtually certain) and on most continents",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-07",
+      "slice": "multi_page",
+      "question": "Could some recent hot extreme events have occurred without human influence on the climate system?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 99
+        }
+      ],
+      "supporting_quote": "Some recent hot extreme events would have been extremely unlikely to occur without human influence on the climate system",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-06",
+      "slice": "out_of_scope_hazard",
+      "question": "Has fire weather - compound hot, dry and windy conditions - become more frequent in some regions?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 20
+        }
+      ],
+      "supporting_quote": "Medium confidence that fire weather, i.e. compound hot, dry and windy events, have become more frequent in some regions",
+      "hazard": "fire_weather",
+      "notes": ""
+    },
+    {
+      "id": "MP2-06",
+      "slice": "multi_page",
+      "question": "As global warming increases, what happens to the occurrence of extreme events that are unprecedented in the observed record?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 98
+        }
+      ],
+      "supporting_quote": "The occurrence of extreme events unprecedented in the observed record will rise with increasing global warming",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "MP2-08",
+      "slice": "multi_page",
+      "question": "Have changes in anthropogenic aerosol concentrations affected trends in hot extremes in some regions?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 36
+        }
+      ],
+      "supporting_quote": "Changes in anthropogenic aerosol concentrations have likely affected trends in hot extremes in some regions",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-09",
+      "slice": "multi_page",
+      "question": "Have irrigation and crop expansion influenced summer hot extremes in some regions such as the Midwestern USA?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 36
+        }
+      ],
+      "supporting_quote": "Irrigation and crop expansion have attenuated increases in summer hot extremes in some regions, such as the Midwestern USA",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-10",
+      "slice": "multi_page",
+      "question": "How will the number of hot days and hot nights and the frequency of heatwaves change over most land areas with warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 44
+        }
+      ],
+      "supporting_quote": "The number of hot days and hot nights and the length, frequency, and/or intensity of warm spells or heatwaves will increase over most land areas",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-11",
+      "slice": "multi_page",
+      "question": "In which regions is the temperature of the hottest days projected to increase fastest relative to global warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 21
+        }
+      ],
+      "supporting_quote": "The highest increase of temperature of hottest days is projected in some mid-latitude and semi-arid regions and in the South American Monsoon region",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-12",
+      "slice": "multi_page",
+      "question": "Where is the temperature of the coldest days projected to increase fastest, and by how much relative to global warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 21
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 45
+        },
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 15
+        }
+      ],
+      "supporting_quote": "The highest increase of temperature of coldest days is projected in Arctic regions, at about three times the rate of global warming",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-13",
+      "slice": "multi_page",
+      "question": "With what confidence is the increase in frequency and intensity of heavy precipitation assessed across continents and AR6 regions?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 54
+        }
+      ],
+      "supporting_quote": "The increase in frequency and intensity is extremely likely for most continents and very likely for most AR6 regions",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-14",
+      "slice": "multi_page",
+      "question": "At the global scale, what determines the rate at which heavy precipitation intensifies as the climate warms?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 54
+        }
+      ],
+      "supporting_quote": "the intensification of heavy precipitation will follow the rate of increase in the maximum amount of moisture that the atmosphere can hold as it warms",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-15",
+      "slice": "multi_page",
+      "question": "Can climate models capture the large-scale spatial distribution of precipitation extremes over land?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 50
+        }
+      ],
+      "supporting_quote": "Models are able to capture the large-scale spatial distribution of precipitation extremes over land",
+      "hazard": "extreme_precip",
+      "notes": ""
+    }
+  ]
+}

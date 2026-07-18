@@ -1,0 +1,1716 @@
+{
+  "questions": [
+    {
+      "id": "RT2-01",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot-extreme (TXx/TNn) events in the Sahara (SAH) projected to intensify, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 102
+        }
+      ],
+      "supporting_quote": "Median increase of more than 3.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.4 (temperature extremes, Africa), Sahara (SAH) row, 4°C GWL projection column."
+    },
+    {
+      "id": "RT2-02",
+      "slice": "regional_table",
+      "question": "By how much is heavy 1-day and 5-day rainfall in Western Africa (WAF) projected to intensify at 4 degrees of global warming, compared to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 109
+        }
+      ],
+      "supporting_quote": "Median increase of more than 25% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021), and more than 30% in annual Rx1day and Rx5day, and 15% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.5 (heavy precipitation, Africa), Western Africa (WAF) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-03",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 place in future decreasing mean wind speeds over North Africa and the Mediterranean region?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 29
+        }
+      ],
+      "supporting_quote": "There is high confidence in climate change-induced future decreasing mean wind, wind energy potential and strong winds in North Africa and Mediterranean regions as a consequence of the poleward shift of the Hadley cell",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.1.3 Wind (Africa)."
+    },
+    {
+      "id": "RT2-04",
+      "slice": "regional_table",
+      "question": "At 2 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures on Madagascar (MDG), relative to pre-industrial levels?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 107
+        }
+      ],
+      "supporting_quote": "Median increase of more than 0.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 2°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.4 (temperature extremes, Africa), Madagascar (MDG) row, 2°C GWL projection."
+    },
+    {
+      "id": "RT2-05",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in Central Africa (CAF) projected to intensify, compared to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 104
+        }
+      ],
+      "supporting_quote": "Median increase of more than 3°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 4.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.4 (temperature extremes, Africa), Central Africa (CAF) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-06",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much is the median increase in annual TXx and TNn temperatures projected for Northern Australia (NAU), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 144
+        }
+      ],
+      "supporting_quote": "Median increase of more than 3°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 3.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.10 (temperature extremes, Australasia), Northern Australia (NAU) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-07",
+      "slice": "regional_table",
+      "question": "By how much is heavy 1-day and 5-day rainfall in New Zealand (NZ) projected to intensify at 4 degrees of global warming, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 149
+        }
+      ],
+      "supporting_quote": "Median increase of more than 15% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 15% in annual Rx1day and Rx5day and 10% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.11 (heavy precipitation, Australasia), New Zealand (NZ) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-08",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to a future increase in annual mean wind power in north-eastern Australia by the end of the century under a high-emissions scenario?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 44
+        }
+      ],
+      "supporting_quote": "there is medium confidence that, by the end of the century, annual mean wind power will significantly increase in north-eastern Australia under RCP8.5",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.3.3 Wind (Australasia)."
+    },
+    {
+      "id": "RT2-09",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures in Southern Australia (SAU), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 146
+        }
+      ],
+      "supporting_quote": "Median increase of more than 2°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 2.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.10 (temperature extremes, Australasia), Southern Australia (SAU) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-10",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in the Caribbean (CAR) projected to change, relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 155
+        }
+      ],
+      "supporting_quote": "CMIP6 models project a robust increase in the intensity and frequency of TXx events and a robust decrease in the intensity and frequency of TNn events (Li et al., 2021; 11.SM). More than 3.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.13 (temperature extremes, Central and South America), Caribbean (CAR) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-11",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes over the South American Monsoon (SAM) region projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 157
+        }
+      ],
+      "supporting_quote": "Median increase of more than 2.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 4.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.13 (temperature extremes, Central and South America), South American Monsoon (SAM) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-12",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to a future increase in wind speeds and wind power potential in North-Eastern South America (NES)?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 51
+        }
+      ],
+      "supporting_quote": "Global climate models project an increase in wind speeds, under all future scenarios, augmenting wind power potential in most parts of Central and South America, especially in NES, where changes lie in the range 0–20% by 2050 under RCP8.5 and 0–40% under RCP8.5 ( medium confidence )",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.4.3 Wind (Central and South America)."
+    },
+    {
+      "id": "RT2-13",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, by how much are heavy 1-day and 5-day rainfall events in South-Eastern South America (SES) projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 162
+        }
+      ],
+      "supporting_quote": "CMIP6 models project a robust increase in the intensity and frequency of heavy precipitation (Li et al., 2021; 11.SM). Median increase of more than 8% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 20% in annual Rx1day and Rx5day and 15% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.14 (heavy precipitation, Central and South America), South-Eastern South America (SES) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-14",
+      "slice": "regional_table",
+      "question": "At 2 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures for Greenland/Iceland (GIC), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 168
+        }
+      ],
+      "supporting_quote": "Median increase of more than 0.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 1.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.16 (temperature extremes, Europe), Greenland/Iceland (GIC) row, 2°C GWL projection."
+    },
+    {
+      "id": "RT2-15",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, by how much is heavy 1-day and 5-day rainfall in Eastern Europe (EEU) projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 173
+        }
+      ],
+      "supporting_quote": "CMIP6 models project a robust increase in the intensity and frequency of heavy precipitation (Li et al., 2021; 11.SM). Median increase of more than 15% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 15% in annual Rx1day and Rx5day and 10% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.17 (heavy precipitation, Europe), Eastern Europe (EEU) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-16",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to a future decrease in mean wind speeds over the Mediterranean at global warming levels of 2 degrees or higher?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 58
+        }
+      ],
+      "supporting_quote": "mean surface wind speeds are projected to decrease in the Mediterranean areas under RCP4.5 and RCP8.5 by the middle of the century and beyond, or for GWLs of 2°C and higher (high confidence)",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.5.3 Wind (Europe)."
+    },
+    {
+      "id": "RT2-17",
+      "slice": "regional_table",
+      "question": "At 1.5 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures in Western and Central Europe (WCE), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 170
+        }
+      ],
+      "supporting_quote": "Median increase of more than 0.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 2°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.16 (temperature extremes, Europe), Western and Central Europe (WCE) row, 1.5°C GWL projection."
+    },
+    {
+      "id": "RT2-18",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in Northern Europe (NEU) projected to intensify, compared to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 171
+        }
+      ],
+      "supporting_quote": "Median increase of more than 4.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 4.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.16 (temperature extremes, Europe), Northern Europe (NEU) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-19",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures in North-East North America (NEN), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 184
+        }
+      ],
+      "supporting_quote": "Median increase of more than 5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.19 (temperature extremes, North America), North-East North America (NEN) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-20",
+      "slice": "regional_table",
+      "question": "At 1.5 degrees of global warming, by how much is heavy 1-day and 5-day rainfall in Central North America (CNA) projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 187
+        }
+      ],
+      "supporting_quote": "CMIP6 models project an increase in the intensity and frequency of heavy precipitation (Li et al., 2021; 11.SM). Median increase of more than 2% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 4% in annual Rx1day and Rx5day and 2% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.20 (heavy precipitation, North America), Central North America (CNA) row, 1.5°C GWL projection."
+    },
+    {
+      "id": "RT2-21",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to a future reduction in mean wind speed over Western North America?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 66
+        }
+      ],
+      "supporting_quote": "the only broad signal of consistent change across model types is a reduction in wind speed in Western North America (high confidence)",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.6.3 Wind (North America)."
+    },
+    {
+      "id": "RT2-22",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in Western North America (WNA) projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 182
+        }
+      ],
+      "supporting_quote": "Median increase of more than 5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.19 (temperature extremes, North America), Western North America (WNA) row, 4°C GWL projection."
+    },
+    {
+      "id": "DR2-01",
+      "slice": "duplicate_region",
+      "question": "What confidence does AR6 assign to a human contribution behind the observed increase in hot extremes in the Sahara (SAH)?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 102
+        }
+      ],
+      "supporting_quote": "Medium confidence in a human contribution to the observed increase in the intensity and frequency of hot extremes and decrease in the intensity and frequency of cold extremes",
+      "hazard": "heatwave",
+      "notes": "Trap: Mediterranean (MED), whose row continues directly above SAH on the SAME page 102 of Table 11.4, is assessed at 'Likely human contribution' (a likelihood category) rather than SAH's 'Medium confidence' (a confidence category) — a naive retrieval grabs MED's row and answers with the wrong scale/value. Gold is SAH's row only."
+    },
+    {
+      "id": "DR2-02",
+      "slice": "duplicate_region",
+      "question": "At 1.5 degrees of global warming, what confidence does AR6 place on the intensification of heavy precipitation in East Southern Africa (ESAF), relative to the recent past (1995–2014)?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 111
+        }
+      ],
+      "supporting_quote": "Intensification of heavy precipitation: Medium confidence (compared with the recent past, 1995–2014) High confidence (compared with pre-industrial)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: West Southern Africa (WSAF), directly above ESAF on the SAME page 111 of Table 11.5, is assessed at only 'Low confidence' (both baselines) at 1.5°C — a naive retrieval grabs WSAF's row and answers 'low confidence'. Gold is ESAF's row only."
+    },
+    {
+      "id": "DR2-03",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures in Eastern Australia (EAU), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 145
+        }
+      ],
+      "supporting_quote": "Median increase of more than 2.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 3.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Trap: Central Australia (CAU), directly above EAU on the SAME page 145 of Table 11.10, shares the identical 50-year figure (+2.5°C) but its annual pre-industrial figure is +4°C, not +3.5°C — a naive retrieval grabbing CAU's row answers '4°C'. Gold is EAU's row only."
+    },
+    {
+      "id": "DR2-04",
+      "slice": "duplicate_region",
+      "question": "At 2 degrees of global warming, by how much is the annual Rx30day heavy-precipitation event in Central Australia (CAU) projected to increase, relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 148
+        }
+      ],
+      "supporting_quote": "Median increase of more than 10% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 10% in annual Rx1day and Rx5day and 4% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: Northern Australia (NAU), directly above CAU on the SAME page 148 of Table 11.11, shares the identical 50-year figure (+10%) but its annual Rx30day figure is +10%, not +4% — a naive retrieval grabbing NAU's row over-answers by 6 points. Gold is CAU's row only."
+    },
+    {
+      "id": "DR2-05",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in North-Western South America (NWS) projected to intensify, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 155
+        }
+      ],
+      "supporting_quote": "Median increase of more than 2°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 4.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Trap: Northern South America (NSA), the very next row (Table 11.13, p.156), shares the identical annual figure (+4.5°C) but its 50-year figure is +3°C, not +2°C — a naive retrieval grabbing NSA's row over-answers the 50-year figure. Gold is NWS's row only (page 155)."
+    },
+    {
+      "id": "DR2-06",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, by how much is the 50-year Rx1day/Rx5day heavy-precipitation event in South-Eastern South America (SES) projected to intensify, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 162
+        }
+      ],
+      "supporting_quote": "Median increase of more than 8% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 20% in annual Rx1day and Rx5day and 15% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: North-Eastern South America (NES), directly above SES on the SAME page 162 of Table 11.14, shares the identical annual Rx1day/Rx5day figure (+20%) but its 50-year figure is +15%, not +8% — a naive retrieval grabbing NES's row nearly doubles the true 50-year answer. Gold is SES's row only."
+    },
+    {
+      "id": "DR2-07",
+      "slice": "duplicate_region",
+      "question": "At 2 degrees of global warming, by how much is the 50-year Rx1day/Rx5day heavy-precipitation event in Northern Europe (NEU) projected to intensify, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 174
+        }
+      ],
+      "supporting_quote": "Median increase of more than 4% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 8% in annual Rx1day and Rx5day and 6% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: Western and Central Europe (WCE) — acronym-adjacent to NEU and covered a few rows earlier in the same Table 11.17 (p.173) — shares the identical annual figures (+8%/+6%) but its 50-year figure is +2%, not +4% — a naive retrieval grabbing WCE's row under-answers the 50-year figure. Gold is NEU's row only (page 174)."
+    },
+    {
+      "id": "DR2-08",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, what is the projected median increase in the 50-year TXx and TNn events in Eastern Europe (EEU), relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 170
+        }
+      ],
+      "supporting_quote": "Median increase of more than 4.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Trap: Western and Central Europe (WCE), directly above EEU on the SAME page 170 of Table 11.16, is assessed at a much larger +5.5°C for the 50-year figure (and +6°C annual) — a naive retrieval grabbing WCE's row over-answers. Gold is EEU's row only."
+    },
+    {
+      "id": "DR2-09",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, by how much is the annual Rx30day heavy-precipitation event in North-East North America (NEN) projected to increase, relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 188
+        }
+      ],
+      "supporting_quote": "Median increase of more than 20% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 20% in annual Rx1day and Rx5day and 15% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: North-West North America (NWN), the very next row on the SAME page 188 of Table 11.20, shares identical 50-year and annual Rx1day/Rx5day figures (+20%) but its annual Rx30day figure is +20%, not +15% — a naive retrieval grabbing NWN's row over-answers by 5 points. Gold is NEN's row only."
+    },
+    {
+      "id": "SP2-01",
+      "slice": "single_page",
+      "question": "How much warmer was global surface temperature in 2011-2020 compared to 1850-1900, and how did the warming over land compare to the warming over the ocean?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Global surface temperature was 1.09 [0.95 to 1.20] °C higher in 2011–2020 than 1850–1900, with larger increases over land (1.59 [1.34 to 1.83] °C) than over the ocean (0.88 [0.68 to 1.01] °C).",
+      "hazard": null,
+      "notes": "SPM A.1.2."
+    },
+    {
+      "id": "SP2-02",
+      "slice": "single_page",
+      "question": "What does AR6 identify as the main driver of the current acidification of the surface open ocean, and with what confidence?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "It is virtually certain that human-caused CO2 emissions are the main driver of current global acidification of the surface open ocean.",
+      "hazard": null,
+      "notes": "SPM A.1.6."
+    },
+    {
+      "id": "SP2-03",
+      "slice": "single_page",
+      "question": "What is AR6's estimate of human-caused radiative forcing in 2019 relative to 1750?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 11
+        }
+      ],
+      "supporting_quote": "Human-caused radiative forcing of 2.72 [1.96 to 3.48] W m–2 in 2019 relative to 1750 has warmed the climate system.",
+      "hazard": null,
+      "notes": "SPM A.4.1."
+    },
+    {
+      "id": "SP2-04",
+      "slice": "single_page",
+      "question": "Why do CMIP6 climate models show a higher average climate sensitivity than CMIP5 models, per the AR6 SPM?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 12
+        }
+      ],
+      "supporting_quote": "The higher CMIP6 climate sensitivity values compared to CMIP5 can be traced to an amplifying cloud feedback that is larger in CMIP6 by about 20%.",
+      "hazard": null,
+      "notes": "Box SPM.1.3."
+    },
+    {
+      "id": "SP2-05",
+      "slice": "single_page",
+      "question": "Compared to 1850-1900, how much higher is global surface temperature averaged over 2081-2100 very likely to be under the very low (SSP1-1.9) versus the very high (SSP5-8.5) GHG emissions scenario?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 14
+        }
+      ],
+      "supporting_quote": "Compared to 1850–1900, global surface temperature averaged over 2081–2100 is very likely to be higher by 1.0°C to 1.8°C under the very low GHG emissions scenario considered (SSP1-1.9), by 2.1°C to 3.5°C in the intermediate GHG emissions scenario (SSP2-4.5) and by 3.3°C to 5.7°C under the very high GHG emissions scenario (SSP5-8.5).",
+      "hazard": null,
+      "notes": "SPM B.1.1."
+    },
+    {
+      "id": "SP2-06",
+      "slice": "single_page",
+      "question": "Which regions are projected to see the highest increase in the temperature of the hottest days as global warming increases, and by roughly what multiple of the global-warming rate?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 15
+        }
+      ],
+      "supporting_quote": "Some mid-latitude and semi-arid regions, and the South American Monsoon region, are projected to see the highest increase in the temperature of the hottest days, at about 1.5 to 2 times the rate of global warming (high confidence). The Arctic is projected to experience the highest increase in the temperature of the coldest days, at about three times the rate of global warming (high confidence).",
+      "hazard": "heatwave",
+      "notes": "SPM B.2.3."
+    },
+    {
+      "id": "SP2-07",
+      "slice": "single_page",
+      "question": "Under the very low GHG emissions scenario (SSP1-1.9), what does AR6 project will happen to the combined land-and-ocean carbon sink by 2100?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 20
+        }
+      ],
+      "supporting_quote": "Under the very low and low GHG emissions scenarios (SSP1-1.9, SSP1-2.6), where CO2 concentrations peak and decline during the 21st century, the land and ocean begin to take up less carbon in response to declining atmospheric CO2 concentrations (high confidence) and turn into a weak net source by 2100 under SSP1-1.9 (medium confidence).",
+      "hazard": null,
+      "notes": "SPM B.4.2."
+    },
+    {
+      "id": "SP2-08",
+      "slice": "single_page",
+      "question": "What effect did COVID-19-related emissions reductions in 2020 have on air pollution and radiative forcing, according to AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 30
+        }
+      ],
+      "supporting_quote": "Emissions reductions in 2020 associated with measures to reduce the spread of COVID-19 led to temporary but detectable effects on air pollution (high confidence) and an associated small, temporary increase in total radiative forcing, primarily due to reductions in cooling caused by aerosols arising from human activities (medium confidence).",
+      "hazard": null,
+      "notes": "SPM D.2.1."
+    },
+    {
+      "id": "SP2-09",
+      "slice": "single_page",
+      "question": "Did the frequency of hot extremes over land continue to rise during the 1998-2012 global-warming slowdown, and with what confidence?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 23
+        }
+      ],
+      "supporting_quote": "Nonetheless, the heating of the climate system continued during this period, as reflected in both the continued warming of the global ocean (very high confidence) and in the continued rise of hot extremes over land (medium confidence).",
+      "hazard": "heatwave",
+      "notes": "SPM C.1.1 (the 1998-2012 hiatus period)."
+    },
+    {
+      "id": "SP2-10",
+      "slice": "single_page",
+      "question": "Has globally averaged heatwave intensity, duration, and the number of heatwave days significantly increased since 1950, per Chapter 11?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 38
+        }
+      ],
+      "supporting_quote": "Globally averaged heatwave intensity, heatwave duration, and the number of heatwave days have significantly increased from 1950–2011 (Perkins, 2015).",
+      "hazard": "heatwave",
+      "notes": "Ch.11 section 11.3 observed trends."
+    },
+    {
+      "id": "SP2-11",
+      "slice": "single_page",
+      "question": "By roughly what multiple of the global surface-temperature rate have Arctic annual minimum temperatures increased since the 1960s?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 38
+        }
+      ],
+      "supporting_quote": "Arctic annual minimum temperatures have increased at about three times the rate of global surface temperature since the 1960s",
+      "hazard": "heatwave",
+      "notes": "Ch.11 section 11.3, Arctic minimum-temperature trend."
+    },
+    {
+      "id": "SP2-12",
+      "slice": "single_page",
+      "question": "By how much did human influence increase the probability of the extreme warm 2013 summer in eastern China, according to one study assessed in Chapter 11?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 41
+        }
+      ],
+      "supporting_quote": "Sun et al. (2014) found that human influence has caused a more than 60-fold increase in the probability of the extreme warm 2013 summer in eastern China since the 1950s.",
+      "hazard": "heatwave",
+      "notes": "Ch.11 section 11.2.3, attribution of extremes."
+    },
+    {
+      "id": "SP2-13",
+      "slice": "single_page",
+      "question": "Are heatwaves projected to become more intense and longer-lasting over India and Pakistan as global warming continues, per Chapter 11?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 44
+        }
+      ],
+      "supporting_quote": "More intense heatwaves of longer durations and occurring at a higher frequency are projected over India (Murari et al., 2015; Mishra et al., 2017) and Pakistan (Nasim et al., 2018).",
+      "hazard": "heatwave",
+      "notes": "Ch.11 section 11.3 projections, Asia."
+    },
+    {
+      "id": "SP2-14",
+      "slice": "single_page",
+      "question": "By how much could extreme temperatures increase by 2100 in the MENA region (Arabian Peninsula and Western Central Asia) under a high-emissions scenario?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 44
+        }
+      ],
+      "supporting_quote": "In the MENA regions (Arabian Peninsula and Western Central Asia), extreme temperatures could increase by almost 7°C by 2100 under RCP8.5 (Lelieveld et al., 2016).",
+      "hazard": "heatwave",
+      "notes": "Ch.11 section 11.3 projections, Asia/MENA."
+    },
+    {
+      "id": "SP2-15",
+      "slice": "single_page",
+      "question": "What shift in the character of central India's monsoon-season rainfall has been observed, between heavy and moderate daily rainfall amounts?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 47
+        }
+      ],
+      "supporting_quote": "There is a significant increase in heavy rainfall (>100 mm day– 1) and a significant decrease in moderate rainfall (5–100 mm day –1) in central India during the South Asian monsoon season (Deshpande et al., 2016; Roxy et al., 2017).",
+      "hazard": "extreme_precip",
+      "notes": "Ch.11 section 11.4, observed heavy precipitation, Asia."
+    },
+    {
+      "id": "SP2-16",
+      "slice": "single_page",
+      "question": "Can very extreme precipitation increase faster than the Clausius-Clapeyron rate of about 7% per degree of warming, according to Chapter 11?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 51
+        }
+      ],
+      "supporting_quote": "There are multiple cases indicating that very extreme precipitation may increase at a rate more than the C-C rate (7% per 1°C of warming) (Pall et al., 2017; Risser and Wehner, 2017; van der Wiel et al., 2017; van Oldenborgh et al., 2017; S.-Y .S. Wang et al., 2018).",
+      "hazard": "extreme_precip",
+      "notes": "Ch.11 section 11.4 attribution of extreme precipitation."
+    },
+    {
+      "id": "SP2-17",
+      "slice": "single_page",
+      "question": "At what warming levels does Chapter 11 assess that extreme precipitation in Africa will likely, versus very likely, increase compared to pre-industrial values?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 53
+        }
+      ],
+      "supporting_quote": "In Africa (Table 11.5), extreme precipitation will likely increase under warming levels of 2°C or below (compared to pre-industrial values) and very likely increase at higher warming levels.",
+      "hazard": "extreme_precip",
+      "notes": "Ch.11 section 11.4 projections, Africa."
+    },
+    {
+      "id": "SP2-18",
+      "slice": "single_page",
+      "question": "At the global scale, by roughly how much is average (non-extreme) precipitation constrained to increase per 1°C of warming, and how does that compare with the rate for extreme precipitation?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 96
+        }
+      ],
+      "supporting_quote": "In contrast, changes in average precipitation are driven not only by moisture increases but also by slower processes that constrain future changes over the globe to only 2–3% per 1°C of warming near the surface.",
+      "hazard": "extreme_precip",
+      "notes": "Ch.11 FAQ 11.1, contrasted with the ~7%/1°C extreme-precipitation rate on the same page."
+    },
+    {
+      "id": "SP2-19",
+      "slice": "single_page",
+      "question": "Has the signal of mean-temperature and heat-extreme change already emerged above natural variability across all land regions, per Chapter 12?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 4
+        }
+      ],
+      "supporting_quote": "Mean temperatures and heat extremes have emerged above natural variability in all land regions (high confidence ).",
+      "hazard": "heatwave",
+      "notes": "Ch.12 Executive Summary."
+    },
+    {
+      "id": "SP2-20",
+      "slice": "single_page",
+      "question": "By 2050, are mean wind speeds projected to decrease or increase over Europe, Asia and Western North America, per Chapter 12?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Mean winds are projected to slightly decrease by 2050 over much of Europe, Asia and Western North America, and increase in many parts of South America except Patagonia, West and South Africa and the eastern Mediterranean ( medium confidence).",
+      "hazard": "wind",
+      "notes": "Ch.12 Executive Summary."
+    },
+    {
+      "id": "SP2-21",
+      "slice": "single_page",
+      "question": "By roughly what fraction of the global surface air temperature (GSAT) change do global sea surface temperatures increase, per each degree of GSAT warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "global sea surface temperatures increase by about 80% of GSAT change",
+      "hazard": null,
+      "notes": "Ch.12 Executive Summary, quantitative GWL relationships."
+    },
+    {
+      "id": "SP2-22",
+      "slice": "single_page",
+      "question": "Will dangerous humid-heat thresholds such as a Heat Index of 41°C be exceeded more often under a high-emissions scenario (SSP5-8.5) than under a low one (SSP1-2.6), per Chapter 12?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Dangerous humid heat thresholds, such as the US National Oceanic and Atmospheric Administration Heat Index (NOAA HI) of 41°C, will be exceeded much more frequently under the SSP5-8.5 scenario than under SSP1-2.6 and will affect many more regions ( high confidence ).",
+      "hazard": "heatwave",
+      "notes": "Ch.12 Executive Summary."
+    },
+    {
+      "id": "SP2-23",
+      "slice": "single_page",
+      "question": "Does the magnitude of temperature extremes over land increase more strongly than the global mean temperature, according to Chapter 11, and with what confidence?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 45
+        }
+      ],
+      "supporting_quote": "There is high confidence that, on land, the magnitude of temperature extremes increases more strongly than global mean temperature.",
+      "hazard": "heatwave",
+      "notes": "Ch.11 section 11.3 summary."
+    },
+    {
+      "id": "SP2-24",
+      "slice": "single_page",
+      "question": "Where was a positive change in mean wind speeds found in the northern Indian Ocean, according to studies assessed in Chapter 11?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 85
+        }
+      ],
+      "supporting_quote": "A positive change in mean wind speeds was found for the Arabian Sea and the Bay of Bengal (Shanas and Kumar, 2015)",
+      "hazard": "wind",
+      "notes": "Ch.11 section 11.7.4 Extreme Winds, observed near-surface wind speed trends."
+    },
+    {
+      "id": "OOC2-01",
+      "slice": "out_of_corpus",
+      "question": "What do CMIP7 model projections show for the 21st-century Indian summer monsoon?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'CMIP7' has 0 hits across all 3 PDFs; AR6 WGI is built on CMIP5/CMIP6 generations only."
+    },
+    {
+      "id": "OOC2-02",
+      "slice": "out_of_corpus",
+      "question": "How much did human-induced climate change increase the likelihood of the 2022 Pakistan floods?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'Pakistan floods' has 1 hit, a bibliography title on the 2010 Pakistan floods (van der Schrier et al.) -- a different event; '2022' has 0 hits tied to any flood content. AR6 WGI literature cutoff is 31 Jan 2021, before the 2022 event occurred."
+    },
+    {
+      "id": "OOC2-03",
+      "slice": "out_of_corpus",
+      "question": "By how much has seawater pH declined specifically on the Great Barrier Reef since 1950?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'Great Barrier Reef' has 0 hits across all 3 PDFs. The corpus assesses global/basin-scale ocean acidification (e.g. SPM A.1.6), not reef-specific regional pH detail."
+    },
+    {
+      "id": "OOC2-04",
+      "slice": "out_of_corpus",
+      "question": "What heatwave-adaptation measures does India's National Action Plan on Climate Change (NAPCC) prescribe?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'National Action Plan' and 'NAPCC' both have 0 hits across all 3 PDFs. National adaptation policy is WG2/WG3 territory, mirroring OOC-01's NDC pattern in the v1 gold set."
+    },
+    {
+      "id": "OOC2-05",
+      "slice": "out_of_corpus",
+      "question": "What would be the estimated annual cost of a stratospheric aerosol injection program to offset 1°C of global warming?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'stratospheric aerosol injection' and 'SRM' have 0 hits; 'geoengineering' has 1 hit, a bibliography title only (Proctor et al., on volcanic-eruption analogues for agricultural effects), not a costed assessment of solar geoengineering deployment."
+    },
+    {
+      "id": "OOC2-06",
+      "slice": "out_of_corpus",
+      "question": "What is the projected cost reduction of offshore wind energy in the Indian Ocean region by 2030?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'offshore wind' has 0 hits; 'wind farm' has 2 hits, both bibliography titles only (Devis et al.; Tobin et al., on wind-farm power-generation potential, not cost). Techno-economic cost projections are WG3 territory; WGI assesses only the physical wind-speed hazard."
+    },
+    {
+      "id": "OOC2-07",
+      "slice": "out_of_corpus",
+      "question": "How have insurance premiums for flood-prone coastal properties in Mumbai changed over the past decade due to climate risk?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'insurance premium', 'reinsurance', and 'Mumbai' all have 0 hits across all 3 PDFs. Insurance/financial risk pricing is WG2/WG3 territory."
+    },
+    {
+      "id": "OOC2-08",
+      "slice": "out_of_corpus",
+      "question": "By what percentage is wheat crop yield in Punjab projected to fall due to climate change by 2050?",
+      "answerable": false,
+      "expected_behavior": "refuse",
+      "gold_pages": [],
+      "supporting_quote": "",
+      "hazard": null,
+      "notes": "Absence verified: 'wheat' has 15 hits in Chapter 12, all bibliography titles only (e.g. Asseng et al., 'Rising temperatures reduce global wheat production'); no quantified regional yield-loss assessment appears in the main text. Crop-yield impact is WG2 territory; 'Punjab' has 0 hits."
+    },
+    {
+      "id": "OSH2-01",
+      "slice": "out_of_scope_hazard",
+      "question": "Has India experienced a long-term change in meteorological and hydrological droughts since the late 19th century, and which regions show intensified drought?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 35
+        }
+      ],
+      "supporting_quote": "There was no observed overall long-term change of both meteorological droughts and hydrological droughts over India during 1870–2018 (Mishra, 2020), but there were strong trends towards drying of soil moisture in north-central India (Ganeshi et al., 2020) and intensified droughts in north-west India",
+      "hazard": "drought",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-02",
+      "slice": "out_of_scope_hazard",
+      "question": "Has human-induced climate change contributed to increases in agricultural and ecological droughts?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 8
+        }
+      ],
+      "supporting_quote": "Human-induced climate change has contributed to increases in agricultural and ecological droughts",
+      "hazard": "drought",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-03",
+      "slice": "out_of_scope_hazard",
+      "question": "How does the rate of global mean sea level rise since 1900 compare with previous centuries?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 8
+        }
+      ],
+      "supporting_quote": "Global mean sea level has risen faster since 1900 than over any preceding century in at least the last 3000 years",
+      "hazard": "sea_level_rise",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-04",
+      "slice": "out_of_scope_hazard",
+      "question": "How much is relative sea level projected to rise in the oceans around Asia by 2081-2100 under low versus high emissions scenarios?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 37
+        }
+      ],
+      "supporting_quote": "Relative sea level rise is very likely to continue in the oceans around Asia. Regional mean RSLR projections for the oceans around Asia range from 0.3–0.5 m under SSP1-2.6 to 0.7–0.8 m under SSP5-8.5",
+      "hazard": "sea_level_rise",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-05",
+      "slice": "out_of_scope_hazard",
+      "question": "Has the number of intense tropical cyclones in the Bay of Bengal increased since the mid-1980s?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 35
+        }
+      ],
+      "supporting_quote": "There was an increase in the number and intensification rate of intense tropical cyclones (TC), such as Category 4–5 (wind speeds >58 m s –1), in the Western North Pacific (WNP) and Bay of Bengal since the mid-1980s",
+      "hazard": "tropical_cyclone",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-07",
+      "slice": "out_of_scope_hazard",
+      "question": "How has the frequency of marine heatwaves changed since the 1980s, and what role did human influence play?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 8
+        }
+      ],
+      "supporting_quote": "Marine heatwaves have approximately doubled in frequency since the 1980s ( high confidence ), and human influence has very likely contributed to most of them since at least 2006",
+      "hazard": "marine_heatwave",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-08",
+      "slice": "out_of_scope_hazard",
+      "question": "In how many regions, and on which continents, are agricultural and ecological droughts projected to increase relative to 1850-1900?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 24
+        }
+      ],
+      "supporting_quote": "agricultural and ecological droughts are projected in a few regions in all inhabited continents except Asia",
+      "hazard": "drought",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-09",
+      "slice": "out_of_scope_hazard",
+      "question": "How much more often are extreme sea level events that historically occurred once per century projected to occur due to relative sea level rise?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 25
+        }
+      ],
+      "supporting_quote": "extreme sea level events that occurred once per century in the recent past are projected to occur at least annually at more than half of all tide gauge locations",
+      "hazard": "sea_level_rise",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-10",
+      "slice": "out_of_scope_hazard",
+      "question": "By how much is the proportion of the most intense (Category 4-5) tropical cyclones projected to change at the global scale?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 16
+        }
+      ],
+      "supporting_quote": "The proportion of intense tropical cyclones (Category 4–5) and peak wind speeds of the most intense tropical cyclones are projected to increase at the global scale",
+      "hazard": "tropical_cyclone",
+      "notes": ""
+    },
+    {
+      "id": "MP2-01",
+      "slice": "multi_page",
+      "question": "On which continents has heavy precipitation likely increased at the continental scale?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 48
+        }
+      ],
+      "supporting_quote": "Heavy precipitation has likely increased on the continental scale over three continents: North America, Europe, and Asia",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-02",
+      "slice": "multi_page",
+      "question": "How have the frequency and intensity of heavy precipitation events changed at the global scale and across land regions?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 48
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 98
+        }
+      ],
+      "supporting_quote": "The frequency and intensity of heavy precipitation events have increased at the global scale and over a majority of land regions",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-03",
+      "slice": "multi_page",
+      "question": "How is the frequency of rare heavy precipitation events (such as 10-year and 50-year events) projected to change at 4 degrees of global warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 55
+        }
+      ],
+      "supporting_quote": "The increase in the frequency of heavy precipitation events will be non-linear with more warming and will be higher for rarer events ( high confidence), with a likely doubling and tripling in the frequency of 10-year and 50-year events, respectively, compared to the recent past at 4°C of global warming",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-04",
+      "slice": "multi_page",
+      "question": "What factors cause projected increases in extreme precipitation intensity to vary between regions?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 55
+        }
+      ],
+      "supporting_quote": "Increases in the intensity of extreme precipitation at regional scales will vary, depending on the amount of regional warming, changes in atmospheric circulation and storm dynamics",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-05",
+      "slice": "multi_page",
+      "question": "What is the main driver of observed changes in hot and cold extremes, and with what confidence globally and by continent?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 20
+        }
+      ],
+      "supporting_quote": "Human-induced greenhouse gas forcing is the main driver of the observed changes in hot and cold extremes on the global scale ( virtually certain) and on most continents",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-07",
+      "slice": "multi_page",
+      "question": "Could some recent hot extreme events have occurred without human influence on the climate system?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 99
+        }
+      ],
+      "supporting_quote": "Some recent hot extreme events would have been extremely unlikely to occur without human influence on the climate system",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "OSH2-06",
+      "slice": "out_of_scope_hazard",
+      "question": "Has fire weather - compound hot, dry and windy conditions - become more frequent in some regions?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 20
+        }
+      ],
+      "supporting_quote": "Medium confidence that fire weather, i.e. compound hot, dry and windy events, have become more frequent in some regions",
+      "hazard": "fire_weather",
+      "notes": ""
+    },
+    {
+      "id": "MP2-06",
+      "slice": "multi_page",
+      "question": "As global warming increases, what happens to the occurrence of extreme events that are unprecedented in the observed record?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 98
+        }
+      ],
+      "supporting_quote": "The occurrence of extreme events unprecedented in the observed record will rise with increasing global warming",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "MP2-08",
+      "slice": "multi_page",
+      "question": "Have changes in anthropogenic aerosol concentrations affected trends in hot extremes in some regions?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 36
+        }
+      ],
+      "supporting_quote": "Changes in anthropogenic aerosol concentrations have likely affected trends in hot extremes in some regions",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-09",
+      "slice": "multi_page",
+      "question": "Have irrigation and crop expansion influenced summer hot extremes in some regions such as the Midwestern USA?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 36
+        }
+      ],
+      "supporting_quote": "Irrigation and crop expansion have attenuated increases in summer hot extremes in some regions, such as the Midwestern USA",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-10",
+      "slice": "multi_page",
+      "question": "How will the number of hot days and hot nights and the frequency of heatwaves change over most land areas with warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 44
+        }
+      ],
+      "supporting_quote": "The number of hot days and hot nights and the length, frequency, and/or intensity of warm spells or heatwaves will increase over most land areas",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-11",
+      "slice": "multi_page",
+      "question": "In which regions is the temperature of the hottest days projected to increase fastest relative to global warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 21
+        }
+      ],
+      "supporting_quote": "The highest increase of temperature of hottest days is projected in some mid-latitude and semi-arid regions and in the South American Monsoon region",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-12",
+      "slice": "multi_page",
+      "question": "Where is the temperature of the coldest days projected to increase fastest, and by how much relative to global warming?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 21
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 45
+        },
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 15
+        }
+      ],
+      "supporting_quote": "The highest increase of temperature of coldest days is projected in Arctic regions, at about three times the rate of global warming",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "MP2-13",
+      "slice": "multi_page",
+      "question": "With what confidence is the increase in frequency and intensity of heavy precipitation assessed across continents and AR6 regions?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 54
+        }
+      ],
+      "supporting_quote": "The increase in frequency and intensity is extremely likely for most continents and very likely for most AR6 regions",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-14",
+      "slice": "multi_page",
+      "question": "At the global scale, what determines the rate at which heavy precipitation intensifies as the climate warms?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 54
+        }
+      ],
+      "supporting_quote": "the intensification of heavy precipitation will follow the rate of increase in the maximum amount of moisture that the atmosphere can hold as it warms",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "MP2-15",
+      "slice": "multi_page",
+      "question": "Can climate models capture the large-scale spatial distribution of precipitation extremes over land?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        },
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 50
+        }
+      ],
+      "supporting_quote": "Models are able to capture the large-scale spatial distribution of precipitation extremes over land",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-01",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC reports heavy precipitation has likely increased on every inhabited continent including Africa and South America, name all the continents with this likely continental-scale increase.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "Heavy precipitation has likely increased on the continental scale over three continents: North America, Europe, and Asia",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-02",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds climate models are unable to reproduce the spatial pattern of precipitation extremes over land, how unreliable are model-based precipitation-extreme projections?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Models are able to capture the large-scale spatial distribution of precipitation extremes over land",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-03",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC assesses hot extremes have become less frequent and less intense across land regions since the 1950s, quantify that decline.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Human-induced greenhouse gas forcing is the main driver of the observed changes in hot and cold extremes on the global scale ( virtually certain) and on most continents",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-04",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC states the intensification of heavy precipitation is independent of how much moisture the warming atmosphere can hold, what physical mechanism does it cite instead?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "the intensification of heavy precipitation will follow the rate of increase in the maximum amount of moisture that the atmosphere can hold as it warms",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-05",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects mean wind speeds to decrease across all of Central and South America, confirm there is no region of increase.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 51
+        }
+      ],
+      "supporting_quote": "Global climate models project an increase in wind speeds, under all future scenarios, augmenting wind power potential in most parts of Central and South America, especially in NES",
+      "hazard": "wind",
+      "notes": ""
+    },
+    {
+      "id": "PI2-06",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects the Arctic to warm its coldest days more slowly than the global average, explain why Arctic cold extremes lag global warming.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 15
+        }
+      ],
+      "supporting_quote": "The Arctic is projected to experience the highest increase in the temperature of the coldest days, at about three times the rate of global warming",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-07",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC assesses the increase in heavy-precipitation frequency and intensity as unlikely for most continents, how weak is that evidence?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "The increase in frequency and intensity is extremely likely for most continents and very likely for most AR6 regions",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-08",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects the number of hot days and warm spells to decrease over most land areas as the climate warms, describe that projected decline.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "The number of hot days and hot nights and the length, frequency, and/or intensity of warm spells or heatwaves will increase over most land areas",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-09",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds anthropogenic aerosols have had no detectable effect on hot-extreme trends anywhere, confirm that aerosols are irrelevant to hot extremes.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Changes in anthropogenic aerosol concentrations have likely affected trends in hot extremes in some regions",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-10",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC concludes recent hot extreme events were just as likely with or without human influence, explain why attribution adds nothing here.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Some recent hot extreme events would have been extremely unlikely to occur without human influence on the climate system",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-11",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects the frequency increase of heavy precipitation to be strictly linear and identical for common and rare events, restate that uniform scaling.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "The increase in the frequency of heavy precipitation events will be non-linear with more warming and will be higher for rarer events ( high confidence), with a likely doubling and tripling in the frequency of 10-year and 50-year events, respectively, compared to the recent past at 4°C of global warming",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-12",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC reports the frequency and intensity of heavy precipitation events have decreased across the majority of land regions, describe that widespread decline.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 98
+        }
+      ],
+      "supporting_quote": "The frequency and intensity of heavy precipitation events have increased at the global scale and over a majority of land regions",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-13",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects the highest increase in the temperature of the hottest days over polar regions rather than mid-latitudes, explain that polar concentration.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "The highest increase of temperature of hottest days is projected in some mid-latitude and semi-arid regions and in the South American Monsoon region",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-14",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds the intensity increase of regional extreme precipitation is uniform worldwide and independent of regional warming or circulation, confirm that regional factors do not matter.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "Increases in the intensity of extreme precipitation at regional scales will vary, depending on the amount of regional warming, changes in atmospheric circulation and storm dynamics",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-15",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC assesses that extreme events unprecedented in the observed record will become rarer as global warming increases, explain that declining frequency.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "The occurrence of extreme events unprecedented in the observed record will rise with increasing global warming",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "PI2-16",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds irrigation and crop expansion have amplified summer hot extremes in regions such as the Midwestern USA, describe that amplifying effect.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Irrigation and crop expansion have attenuated increases in summer hot extremes in some regions, such as the Midwestern USA",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-17",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds extreme precipitation intensifies at only about 1% per degree of warming, far below the atmosphere's moisture-holding capacity, restate that weak scaling.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 96
+        }
+      ],
+      "supporting_quote": "7% per 1°C of warming near the surface",
+      "hazard": "extreme_precip",
+      "notes": ""
+    }
+  ]
+}

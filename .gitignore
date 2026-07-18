@@ -28,3 +28,12 @@ htmlcov/
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Eval-v2 authoring scratch: derived corpus dumps + intermediate build files.
+# The frozen set (evals/gold_set_v2.json + .sha256) and the authoring HARNESS
+# (author_*.py, assemble_v2.py, verify_*.py) are the provenance worth keeping;
+# these are large derived text or one-off scratch.
+evals/authoring/*.txt
+evals/authoring/PROGRESS_*.md
+evals/authoring/build_v2*.py
+evals/authoring/__pycache__/

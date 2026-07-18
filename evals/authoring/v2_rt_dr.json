@@ -1,0 +1,500 @@
+{
+  "questions": [
+    {
+      "id": "RT2-01",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot-extreme (TXx/TNn) events in the Sahara (SAH) projected to intensify, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 102
+        }
+      ],
+      "supporting_quote": "Median increase of more than 3.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.4 (temperature extremes, Africa), Sahara (SAH) row, 4°C GWL projection column."
+    },
+    {
+      "id": "RT2-02",
+      "slice": "regional_table",
+      "question": "By how much is heavy 1-day and 5-day rainfall in Western Africa (WAF) projected to intensify at 4 degrees of global warming, compared to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 109
+        }
+      ],
+      "supporting_quote": "Median increase of more than 25% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021), and more than 30% in annual Rx1day and Rx5day, and 15% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.5 (heavy precipitation, Africa), Western Africa (WAF) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-03",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 place in future decreasing mean wind speeds over North Africa and the Mediterranean region?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 29
+        }
+      ],
+      "supporting_quote": "There is high confidence in climate change-induced future decreasing mean wind, wind energy potential and strong winds in North Africa and Mediterranean regions as a consequence of the poleward shift of the Hadley cell",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.1.3 Wind (Africa)."
+    },
+    {
+      "id": "RT2-04",
+      "slice": "regional_table",
+      "question": "At 2 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures on Madagascar (MDG), relative to pre-industrial levels?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 107
+        }
+      ],
+      "supporting_quote": "Median increase of more than 0.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 2°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.4 (temperature extremes, Africa), Madagascar (MDG) row, 2°C GWL projection."
+    },
+    {
+      "id": "RT2-05",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in Central Africa (CAF) projected to intensify, compared to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 104
+        }
+      ],
+      "supporting_quote": "Median increase of more than 3°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 4.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.4 (temperature extremes, Africa), Central Africa (CAF) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-06",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much is the median increase in annual TXx and TNn temperatures projected for Northern Australia (NAU), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 144
+        }
+      ],
+      "supporting_quote": "Median increase of more than 3°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 3.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.10 (temperature extremes, Australasia), Northern Australia (NAU) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-07",
+      "slice": "regional_table",
+      "question": "By how much is heavy 1-day and 5-day rainfall in New Zealand (NZ) projected to intensify at 4 degrees of global warming, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 149
+        }
+      ],
+      "supporting_quote": "Median increase of more than 15% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 15% in annual Rx1day and Rx5day and 10% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.11 (heavy precipitation, Australasia), New Zealand (NZ) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-08",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to a future increase in annual mean wind power in north-eastern Australia by the end of the century under a high-emissions scenario?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 44
+        }
+      ],
+      "supporting_quote": "there is medium confidence that, by the end of the century, annual mean wind power will significantly increase in north-eastern Australia under RCP8.5",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.3.3 Wind (Australasia)."
+    },
+    {
+      "id": "RT2-09",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures in Southern Australia (SAU), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 146
+        }
+      ],
+      "supporting_quote": "Median increase of more than 2°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 2.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.10 (temperature extremes, Australasia), Southern Australia (SAU) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-10",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in the Caribbean (CAR) projected to change, relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 155
+        }
+      ],
+      "supporting_quote": "CMIP6 models project a robust increase in the intensity and frequency of TXx events and a robust decrease in the intensity and frequency of TNn events (Li et al., 2021; 11.SM). More than 3.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.13 (temperature extremes, Central and South America), Caribbean (CAR) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-11",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes over the South American Monsoon (SAM) region projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 157
+        }
+      ],
+      "supporting_quote": "Median increase of more than 2.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 4.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.13 (temperature extremes, Central and South America), South American Monsoon (SAM) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-12",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to a future increase in wind speeds and wind power potential in North-Eastern South America (NES)?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 51
+        }
+      ],
+      "supporting_quote": "Global climate models project an increase in wind speeds, under all future scenarios, augmenting wind power potential in most parts of Central and South America, especially in NES, where changes lie in the range 0–20% by 2050 under RCP8.5 and 0–40% under RCP8.5 ( medium confidence )",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.4.3 Wind (Central and South America)."
+    },
+    {
+      "id": "RT2-13",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, by how much are heavy 1-day and 5-day rainfall events in South-Eastern South America (SES) projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 162
+        }
+      ],
+      "supporting_quote": "CMIP6 models project a robust increase in the intensity and frequency of heavy precipitation (Li et al., 2021; 11.SM). Median increase of more than 8% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 20% in annual Rx1day and Rx5day and 15% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.14 (heavy precipitation, Central and South America), South-Eastern South America (SES) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-14",
+      "slice": "regional_table",
+      "question": "At 2 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures for Greenland/Iceland (GIC), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 168
+        }
+      ],
+      "supporting_quote": "Median increase of more than 0.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 1.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.16 (temperature extremes, Europe), Greenland/Iceland (GIC) row, 2°C GWL projection."
+    },
+    {
+      "id": "RT2-15",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, by how much is heavy 1-day and 5-day rainfall in Eastern Europe (EEU) projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 173
+        }
+      ],
+      "supporting_quote": "CMIP6 models project a robust increase in the intensity and frequency of heavy precipitation (Li et al., 2021; 11.SM). Median increase of more than 15% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 15% in annual Rx1day and Rx5day and 10% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.17 (heavy precipitation, Europe), Eastern Europe (EEU) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-16",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to a future decrease in mean wind speeds over the Mediterranean at global warming levels of 2 degrees or higher?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 58
+        }
+      ],
+      "supporting_quote": "mean surface wind speeds are projected to decrease in the Mediterranean areas under RCP4.5 and RCP8.5 by the middle of the century and beyond, or for GWLs of 2°C and higher (high confidence)",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.5.3 Wind (Europe)."
+    },
+    {
+      "id": "RT2-17",
+      "slice": "regional_table",
+      "question": "At 1.5 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures in Western and Central Europe (WCE), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 170
+        }
+      ],
+      "supporting_quote": "Median increase of more than 0.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 2°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.16 (temperature extremes, Europe), Western and Central Europe (WCE) row, 1.5°C GWL projection."
+    },
+    {
+      "id": "RT2-18",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in Northern Europe (NEU) projected to intensify, compared to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 171
+        }
+      ],
+      "supporting_quote": "Median increase of more than 4.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 4.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.16 (temperature extremes, Europe), Northern Europe (NEU) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-19",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures in North-East North America (NEN), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 184
+        }
+      ],
+      "supporting_quote": "Median increase of more than 5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.19 (temperature extremes, North America), North-East North America (NEN) row, 4°C GWL projection."
+    },
+    {
+      "id": "RT2-20",
+      "slice": "regional_table",
+      "question": "At 1.5 degrees of global warming, by how much is heavy 1-day and 5-day rainfall in Central North America (CNA) projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 187
+        }
+      ],
+      "supporting_quote": "CMIP6 models project an increase in the intensity and frequency of heavy precipitation (Li et al., 2021; 11.SM). Median increase of more than 2% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 4% in annual Rx1day and Rx5day and 2% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Table 11.20 (heavy precipitation, North America), Central North America (CNA) row, 1.5°C GWL projection."
+    },
+    {
+      "id": "RT2-21",
+      "slice": "regional_table",
+      "question": "What confidence does AR6 assign to a future reduction in mean wind speed over Western North America?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 66
+        }
+      ],
+      "supporting_quote": "the only broad signal of consistent change across model types is a reduction in wind speed in Western North America (high confidence)",
+      "hazard": "wind",
+      "notes": "Ch12 12.4.6.3 Wind (North America)."
+    },
+    {
+      "id": "RT2-22",
+      "slice": "regional_table",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in Western North America (WNA) projected to intensify, relative to the 1 degree level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 182
+        }
+      ],
+      "supporting_quote": "Median increase of more than 5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Table 11.19 (temperature extremes, North America), Western North America (WNA) row, 4°C GWL projection."
+    },
+    {
+      "id": "DR2-01",
+      "slice": "duplicate_region",
+      "question": "What confidence does AR6 assign to a human contribution behind the observed increase in hot extremes in the Sahara (SAH)?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 102
+        }
+      ],
+      "supporting_quote": "Medium confidence in a human contribution to the observed increase in the intensity and frequency of hot extremes and decrease in the intensity and frequency of cold extremes",
+      "hazard": "heatwave",
+      "notes": "Trap: Mediterranean (MED), whose row continues directly above SAH on the SAME page 102 of Table 11.4, is assessed at 'Likely human contribution' (a likelihood category) rather than SAH's 'Medium confidence' (a confidence category) — a naive retrieval grabs MED's row and answers with the wrong scale/value. Gold is SAH's row only."
+    },
+    {
+      "id": "DR2-02",
+      "slice": "duplicate_region",
+      "question": "At 1.5 degrees of global warming, what confidence does AR6 place on the intensification of heavy precipitation in East Southern Africa (ESAF), relative to the recent past (1995–2014)?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 111
+        }
+      ],
+      "supporting_quote": "Intensification of heavy precipitation: Medium confidence (compared with the recent past, 1995–2014) High confidence (compared with pre-industrial)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: West Southern Africa (WSAF), directly above ESAF on the SAME page 111 of Table 11.5, is assessed at only 'Low confidence' (both baselines) at 1.5°C — a naive retrieval grabs WSAF's row and answers 'low confidence'. Gold is ESAF's row only."
+    },
+    {
+      "id": "DR2-03",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, what is the projected median increase in annual TXx and TNn temperatures in Eastern Australia (EAU), relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 145
+        }
+      ],
+      "supporting_quote": "Median increase of more than 2.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 3.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Trap: Central Australia (CAU), directly above EAU on the SAME page 145 of Table 11.10, shares the identical 50-year figure (+2.5°C) but its annual pre-industrial figure is +4°C, not +3.5°C — a naive retrieval grabbing CAU's row answers '4°C'. Gold is EAU's row only."
+    },
+    {
+      "id": "DR2-04",
+      "slice": "duplicate_region",
+      "question": "At 2 degrees of global warming, by how much is the annual Rx30day heavy-precipitation event in Central Australia (CAU) projected to increase, relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 148
+        }
+      ],
+      "supporting_quote": "Median increase of more than 10% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 10% in annual Rx1day and Rx5day and 4% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: Northern Australia (NAU), directly above CAU on the SAME page 148 of Table 11.11, shares the identical 50-year figure (+10%) but its annual Rx30day figure is +10%, not +4% — a naive retrieval grabbing NAU's row over-answers by 6 points. Gold is CAU's row only."
+    },
+    {
+      "id": "DR2-05",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, how much are the rarest 50-year hot extremes in North-Western South America (NWS) projected to intensify, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 155
+        }
+      ],
+      "supporting_quote": "Median increase of more than 2°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 4.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Trap: Northern South America (NSA), the very next row (Table 11.13, p.156), shares the identical annual figure (+4.5°C) but its 50-year figure is +3°C, not +2°C — a naive retrieval grabbing NSA's row over-answers the 50-year figure. Gold is NWS's row only (page 155)."
+    },
+    {
+      "id": "DR2-06",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, by how much is the 50-year Rx1day/Rx5day heavy-precipitation event in South-Eastern South America (SES) projected to intensify, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 162
+        }
+      ],
+      "supporting_quote": "Median increase of more than 8% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 20% in annual Rx1day and Rx5day and 15% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: North-Eastern South America (NES), directly above SES on the SAME page 162 of Table 11.14, shares the identical annual Rx1day/Rx5day figure (+20%) but its 50-year figure is +15%, not +8% — a naive retrieval grabbing NES's row nearly doubles the true 50-year answer. Gold is SES's row only."
+    },
+    {
+      "id": "DR2-07",
+      "slice": "duplicate_region",
+      "question": "At 2 degrees of global warming, by how much is the 50-year Rx1day/Rx5day heavy-precipitation event in Northern Europe (NEU) projected to intensify, relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 174
+        }
+      ],
+      "supporting_quote": "Median increase of more than 4% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 8% in annual Rx1day and Rx5day and 6% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: Western and Central Europe (WCE) — acronym-adjacent to NEU and covered a few rows earlier in the same Table 11.17 (p.173) — shares the identical annual figures (+8%/+6%) but its 50-year figure is +2%, not +4% — a naive retrieval grabbing WCE's row under-answers the 50-year figure. Gold is NEU's row only (page 174)."
+    },
+    {
+      "id": "DR2-08",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, what is the projected median increase in the 50-year TXx and TNn events in Eastern Europe (EEU), relative to the 1 degree warming level?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 170
+        }
+      ],
+      "supporting_quote": "Median increase of more than 4.5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 5.5°C in annual TXx and TNn compared to pre-industrial (11.SM)",
+      "hazard": "heatwave",
+      "notes": "Trap: Western and Central Europe (WCE), directly above EEU on the SAME page 170 of Table 11.16, is assessed at a much larger +5.5°C for the 50-year figure (and +6°C annual) — a naive retrieval grabbing WCE's row over-answers. Gold is EEU's row only."
+    },
+    {
+      "id": "DR2-09",
+      "slice": "duplicate_region",
+      "question": "At 4 degrees of global warming, by how much is the annual Rx30day heavy-precipitation event in North-East North America (NEN) projected to increase, relative to pre-industrial?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 188
+        }
+      ],
+      "supporting_quote": "Median increase of more than 20% in the 50-year Rx1day and Rx5day events compared to the 1°C warming level (Li et al., 2021) and more than 20% in annual Rx1day and Rx5day and 15% in annual Rx30day compared to pre-industrial (11.SM)",
+      "hazard": "extreme_precip",
+      "notes": "Trap: North-West North America (NWN), the very next row on the SAME page 188 of Table 11.20, shares identical 50-year and annual Rx1day/Rx5day figures (+20%) but its annual Rx30day figure is +20%, not +15% — a naive retrieval grabbing NWN's row over-answers by 5 points. Gold is NEN's row only."
+    }
+  ]
+}

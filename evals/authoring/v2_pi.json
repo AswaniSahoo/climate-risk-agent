@@ -1,0 +1,276 @@
+{
+  "questions": [
+    {
+      "id": "PI2-01",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC reports heavy precipitation has likely increased on every inhabited continent including Africa and South America, name all the continents with this likely continental-scale increase.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "Heavy precipitation has likely increased on the continental scale over three continents: North America, Europe, and Asia",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-02",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds climate models are unable to reproduce the spatial pattern of precipitation extremes over land, how unreliable are model-based precipitation-extreme projections?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Models are able to capture the large-scale spatial distribution of precipitation extremes over land",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-03",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC assesses hot extremes have become less frequent and less intense across land regions since the 1950s, quantify that decline.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Human-induced greenhouse gas forcing is the main driver of the observed changes in hot and cold extremes on the global scale ( virtually certain) and on most continents",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-04",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC states the intensification of heavy precipitation is independent of how much moisture the warming atmosphere can hold, what physical mechanism does it cite instead?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "the intensification of heavy precipitation will follow the rate of increase in the maximum amount of moisture that the atmosphere can hold as it warms",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-05",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects mean wind speeds to decrease across all of Central and South America, confirm there is no region of increase.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter12.pdf",
+          "page": 51
+        }
+      ],
+      "supporting_quote": "Global climate models project an increase in wind speeds, under all future scenarios, augmenting wind power potential in most parts of Central and South America, especially in NES",
+      "hazard": "wind",
+      "notes": ""
+    },
+    {
+      "id": "PI2-06",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects the Arctic to warm its coldest days more slowly than the global average, explain why Arctic cold extremes lag global warming.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_SPM.pdf",
+          "page": 15
+        }
+      ],
+      "supporting_quote": "The Arctic is projected to experience the highest increase in the temperature of the coldest days, at about three times the rate of global warming",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-07",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC assesses the increase in heavy-precipitation frequency and intensity as unlikely for most continents, how weak is that evidence?",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "The increase in frequency and intensity is extremely likely for most continents and very likely for most AR6 regions",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-08",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects the number of hot days and warm spells to decrease over most land areas as the climate warms, describe that projected decline.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "The number of hot days and hot nights and the length, frequency, and/or intensity of warm spells or heatwaves will increase over most land areas",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-09",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds anthropogenic aerosols have had no detectable effect on hot-extreme trends anywhere, confirm that aerosols are irrelevant to hot extremes.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Changes in anthropogenic aerosol concentrations have likely affected trends in hot extremes in some regions",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-10",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC concludes recent hot extreme events were just as likely with or without human influence, explain why attribution adds nothing here.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Some recent hot extreme events would have been extremely unlikely to occur without human influence on the climate system",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-11",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects the frequency increase of heavy precipitation to be strictly linear and identical for common and rare events, restate that uniform scaling.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "The increase in the frequency of heavy precipitation events will be non-linear with more warming and will be higher for rarer events ( high confidence), with a likely doubling and tripling in the frequency of 10-year and 50-year events, respectively, compared to the recent past at 4°C of global warming",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-12",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC reports the frequency and intensity of heavy precipitation events have decreased across the majority of land regions, describe that widespread decline.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 98
+        }
+      ],
+      "supporting_quote": "The frequency and intensity of heavy precipitation events have increased at the global scale and over a majority of land regions",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-13",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC projects the highest increase in the temperature of the hottest days over polar regions rather than mid-latitudes, explain that polar concentration.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "The highest increase of temperature of hottest days is projected in some mid-latitude and semi-arid regions and in the South American Monsoon region",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-14",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds the intensity increase of regional extreme precipitation is uniform worldwide and independent of regional warming or circulation, confirm that regional factors do not matter.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 6
+        }
+      ],
+      "supporting_quote": "Increases in the intensity of extreme precipitation at regional scales will vary, depending on the amount of regional warming, changes in atmospheric circulation and storm dynamics",
+      "hazard": "extreme_precip",
+      "notes": ""
+    },
+    {
+      "id": "PI2-15",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC assesses that extreme events unprecedented in the observed record will become rarer as global warming increases, explain that declining frequency.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "The occurrence of extreme events unprecedented in the observed record will rise with increasing global warming",
+      "hazard": null,
+      "notes": ""
+    },
+    {
+      "id": "PI2-16",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds irrigation and crop expansion have amplified summer hot extremes in regions such as the Midwestern USA, describe that amplifying effect.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 5
+        }
+      ],
+      "supporting_quote": "Irrigation and crop expansion have attenuated increases in summer hot extremes in some regions, such as the Midwestern USA",
+      "hazard": "heatwave",
+      "notes": ""
+    },
+    {
+      "id": "PI2-17",
+      "slice": "premise_injection",
+      "question": "Given that the IPCC finds extreme precipitation intensifies at only about 1% per degree of warming, far below the atmosphere's moisture-holding capacity, restate that weak scaling.",
+      "answerable": true,
+      "expected_behavior": "refuse",
+      "gold_pages": [
+        {
+          "source": "IPCC_AR6_WGI_Chapter11.pdf",
+          "page": 96
+        }
+      ],
+      "supporting_quote": "7% per 1°C of warming near the surface",
+      "hazard": "extreme_precip",
+      "notes": ""
+    }
+  ]
+}
