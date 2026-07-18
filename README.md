@@ -1,158 +1,106 @@
 # Climate-Risk Analyst Agent
 
-[![ci](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
+![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
+![LangGraph](https://img.shields.io/badge/agent-LangGraph-8A2BE2.svg)
+![RAG](https://img.shields.io/badge/retrieval-hybrid%20RAG-orange.svg)
+![Climate risk](https://img.shields.io/badge/domain-climate%20risk-2ea44f.svg)
 
-An open-source **AI agent** (not a chatbot) that turns live weather data and authoritative climate documents into a **grounded, cited, structured risk report** — with the **evaluation, guardrails, and observability** systems production AI actually needs.
+<!-- TODO(owner): no LICENSE file found at the repo root as of this draft. Add one (MIT assumed from CLAUDE.md) and confirm the badge above is accurate. -->
 
-> **The 30-second version:** LangGraph agent · frozen 45-question benchmark (refusal confusion matrix **34/11/0/0 — zero fabricated answers**, held through 3 system redesigns) · citations structurally validated (the LLM *cannot* cite what it didn't retrieve) · claim-level LLM-judge audit (93%) · code-level scope guard · GEV return levels **with bootstrap CIs** · every model call telemetried at the SDK seam (latency, tokens, **est. cost per report: ~$0.001**) · two-layer measured caching (repeat query **56 s → 0.8 s**) · async FastAPI + Streamlit + 2 MCP servers · Docker + CI · **174 tests green**. Every number reproducible from the frozen benchmark in this repo.
+This is an agent, not a chatbot. Ask a plain-language question, for example *"How risky are heatwaves in Tokyo over the next 5 days?"*, and it returns a typed, cited risk report built from real forecast data and IPCC climate science. When a question falls outside what it can actually check, it refuses instead of guessing.
 
-## Why an agent, not a chatbot
+<!-- TODO(owner): capture this screenshot. assets/ui-report.png does not exist yet. -->
+![Climate-Risk Agent UI: forecast, ERA5 return levels, and cited IPCC excerpts in one report](assets/ui-report.png)
 
-A chatbot predicts plausible text — ask it about flood risk and it invents a number. This agent **plans, fetches real data, and grounds every claim**, then returns a typed report it can back up (or refuses when a question is out of scope).
+## The measurement moat
 
-![the UI: live forecast + ERA5 GEV return levels + validated IPCC page citations in one report](assets/ui-report.png)
+- **ERA5 GEV hazard statistics.** Every hazard number comes from a Generalized Extreme Value distribution fit to 60+ years of ERA5 annual maxima at the query location. Risk severity is where the forecast peak lands on that location's own return-level curve, not a fixed threshold, and every return level ships with a 90% bootstrap confidence interval.
+- **Non-stationary GEV.** Alongside the stationary fit, a drifting-location GEV checks whether the climate at that location is actually warming, using a likelihood-ratio test to decide. When the trend is real, return levels are reported "effective" at the latest year instead of averaged across six decades. Berlin comes back at +0.76°C per decade (p < 0.0001) with effective levels; Delhi comes back stationary (p = 0.56), which agrees with the published literature on aerosol masking suppressing South Asian heat trends.
+- **IPCC AR6 RAG with citations that have to hold up.** Every citation is checked structurally against the pages actually retrieved for that question. If the model can't point to a real retrieved page, it refuses rather than cite one anyway.
 
-## The design in one idea
+## How it works
 
-Trust here is **structural, not prompted**. Every guarantee lives in a validator, a guard, or a chokepoint — places an LLM cannot argue with:
-
-| Guarantee | Enforced by |
-|---|---|
-| A citation must reference a retrieved chunk | Pydantic `model_validator` — fabrication is *unconstructable* |
-| Out-of-scope hazards never reach the LLM | code-level scope guard, runs before any model call |
-| A report asserts a risk XOR refuses | contract validator — the dishonest state can't exist |
-| No model call escapes measurement | telemetry at the single SDK seam all traffic crosses |
-| Numbers don't regress silently | frozen benchmark + evals as a release gate |
-
-## Measurement: the moat
-
-- **The benchmark came first.** 45 hand-verified questions authored *before* the retriever existed, every supporting quote machine-checked verbatim against the PDFs, the set frozen by content hash — with adversarial slices (duplicate-region traps, false premises, out-of-scope lures).
-- **Every layer bought its way in with a delta on the same frozen questions:** naive chunks 76% → row-atomic table chunks 82% → hybrid BM25+dense RRF **91%** headline R@3 (dense *alone* underperforms at 71% — fusion is what wins); the trap slice went **0% → 100%**. Current caption-carry chunking trades R@3 to 88% (R@5/10 hold 94%) for a perfect end-to-end matrix — a documented, deliberate trade.
-- **The end-to-end result: a perfect refusal confusion matrix** — 34 correct answers · 11 correct refusals · **0 false refusals · 0 false answers**, with the zero-confabulation cell held through a retriever swap, a context-size change, and a chunking redesign. Citation validity 94% · numeric provenance 85% · **claim-level LLM-judge support 93%** (claims audited against cited excerpts only; the remaining flags are the judge being *stricter than PDF linearization allows* — documented, not fought).
-
-## Grounding: real data, honest statistics
-
-- **ERA5 → GEV → return levels with uncertainty**: 60+ years of daily extremes per location; every 10/50/100-year level ships with a **90% parametric-bootstrap confidence band**; `record_max` sits beside the fitted levels so degenerate tails are visible at a glance, and a `representativeness` enum says how far to trust a reanalysis point value.
-- **The risk verdict is location-relative**: severity = where the forecast peak sits on *that location's* return-level curve (a 46 °C day is normal in Rourkela and record-class in Berlin). Report confidence is composed from actual grounding, never a constant.
-- **IPCC RAG with page-level citations**: AR6 WG1 SPM + Ch.11 + Ch.12 (439 pages), row-atomic chunking with table-caption carry for the regional assessment tables, hybrid retrieval, and citations that resolve to real PDF pages.
-
-## Operations
-
-- **Observability at the seam** — latency, real token counts, retries, cache hits, estimated cost for every model call; per-report rollups in the UI and API responses; `uv run python -m obs.report` aggregates across sessions. Measured: a fully-grounded report ≈ **$0.001**; a repeated one — content-keyed answer cache — **$0 and 0.8 s instead of 56 s**.
-- **Three front doors**: an async FastAPI service (`POST /report` via `asyncio.to_thread`, `x-api-key` access control, `/metrics`), a Streamlit UI that renders only the report contract, and two stdio MCP servers (`weather-mcp`, `ipcc-rag-mcp`) for AI clients.
-- **Docker + CI + release gate**: self-sufficient image (corpus baked at build; degrades loudly to BM25-only without a key), GitHub Actions on every push, and evals as a documented manual release gate — `false_answer > 0` blocks release ([DEPLOY.md](DEPLOY.md)).
-- **174 tests, all green** — HTTP mocked throughout; security invariants (host pinning, boundary validation, secret-leak checks) pinned as tests.
-
-## Architecture
+A free-text question moves through parsing, geocoding, and IPCC AR6 region mapping before it reaches the agent. From there a four-node LangGraph agent (plan, forecast, research, synthesize) either produces a typed `RiskReport` or refuses.
 
 ```mermaid
 flowchart LR
-    Q[query: location · hazard · horizon] --> PLAN[plan<br/>scope check]
-    PLAN -->|unsupported hazard| REF[refusal<br/>explicit, valid output]
-    PLAN --> CALL[call<br/>Open-Meteo forecast]
-    CALL --> RES[research<br/>IPCC RAG]
-    RES --> SYN[synthesize]
-    SYN --> R[RiskReport<br/>typed · cited · provenanced]
+    Q[free-text question] --> PARSE[parse<br/>location · hazard · horizon]
+    PARSE --> GEO[geocode<br/>Open-Meteo]
+    GEO --> REGION[map to IPCC AR6 region<br/>Iturbide-2020 polygons]
+    REGION --> PLAN[agent: plan<br/>scope check]
+    PLAN -->|unsupported hazard| REFUSE[refusal<br/>valid typed output]
+    PLAN --> FORECAST[agent: forecast]
+    FORECAST --> RESEARCH[agent: research]
+    RESEARCH --> SYNTH[agent: synthesize]
+    SYNTH --> REPORT[RiskReport<br/>typed · cited · grounded]
 
-    subgraph RAG [hybrid retrieval — measured 91% R@3]
-        BM25[BM25] --> RRF[RRF fusion]
-        DENSE[Gemini dense] --> RRF
-        RRF --> TOP[top-8 chunks] --> ANS[CitedAnswer<br/>schema-validated citations]
+    subgraph HAZARD [ERA5 to GEV hazard statistics]
+        ERA5[ERA5<br/>60+ yr annual maxima] --> GEV[stationary + drifting-location GEV]
+        GEV --> LRT[likelihood-ratio test<br/>is the trend real?]
+        LRT --> LEVELS[return levels + 90% bootstrap CI<br/>effective at latest year if trend holds]
     end
-    RES -.-> RAG
+    FORECAST -.-> HAZARD
+    HAZARD -.-> SYNTH
 
-    subgraph GROUND [grounding]
-        ERA5[ERA5 63-yr archive] --> GEV[GEV fit + 90% bootstrap CI]
-        GEV --> VERDICT[risk level = forecast peak<br/>vs return-level curve]
+    subgraph RAG [IPCC AR6 RAG]
+        HYBRID[BM25 + dense hybrid<br/>RRF fusion] --> VALID[citations validated<br/>against retrieved pages]
     end
-    SYN -.-> GROUND
-
-    subgraph OBS [observability]
-        SEAM[Gemini SDK seam<br/>every call measured] --> TEL[latency · tokens · retries · est cost]
-    end
-
-    R --> UI[Streamlit UI]
-    R --> API[async FastAPI<br/>x-api-key]
-    R --> MCP[2 MCP servers]
+    RESEARCH -.-> RAG
+    RAG -.-> SYNTH
 ```
 
-Every arrow above is guarded by a validator or a test: the LLM cannot cite unretrieved chunks, a report cannot both assert and refuse, no model call escapes telemetry, and out-of-scope hazards never reach the LLM.
+## Evaluation
 
-## Use it over MCP
+- **Dev set:** 45 questions, used to steer development choices like chunking and retrieval configuration.
+- **Test set:** 105 new questions, written after the dev set existed, never used to tune anything, frozen by SHA-256 so neither set can quietly change.
 
-The tools are exposed as two [MCP](https://modelcontextprotocol.io) servers, so any MCP client (Claude Desktop, Cursor, the MCP Inspector) can call them — no custom glue per app.
+Held-out results, first exposure:
+
+- Retrieval: R@3 87%, R@5 91%, R@10 96% on answerable questions.
+- Zero false answers across the full held-out refusal matrix. No confabulation.
+- Citation validity: 94%.
+
+Refusals are scored on a 4-cell confusion matrix (correct answer, correct refusal, false refusal, false answer). One false answer on that matrix blocks release.
+
+## Operations
+
+- Structured logging and per-request telemetry measured at the single SDK seam every model call passes through: latency, tokens, retries, and cost. A fully grounded report runs about $0.001.
+- Async FastAPI service (`POST /report`) with per-request API-key access control and a `/metrics` endpoint.
+- Two MCP servers (weather, IPCC RAG) exposing the same tools over the Model Context Protocol.
+- Disk-backed answer cache for repeat queries.
+- Docker image, plus CI running ruff, mypy, and pytest. 238 tests green.
+
+## Run it
 
 ```bash
-uv run mcp dev tools/weather_mcp.py   # forecast + hazard climatology
-uv run mcp dev tools/ipcc_mcp.py      # IPCC search + cited answers
+uv sync
+uv run streamlit run ui/app.py
 ```
 
-`get_forecast` exposed as an MCP tool — the input schema is auto-generated from the Python function's type hints:
-
-![forecast tool exposed over MCP](assets/mcp-inspector-tools.png)
-
-Calling it live from the Inspector (real Open-Meteo data, fetched through MCP):
-
-![calling the forecast tool over MCP](assets/mcp-inspector-run.gif)
-
-![forecast tool result](assets/mcp-inspector-result.png)
-
-## Quickstart
+With Docker:
 
 ```bash
-uv sync                        # install dependencies
-uv run pytest                  # run the test suite (174 green)
-uv run python -m scripts.demo  # live end-to-end demo → prints a RiskReport
-uv run streamlit run ui/app.py # the UI (localhost:8501)
-uv run uvicorn api.app:app --port 8000   # the API (POST /report, /metrics; set API_KEY)
-uv run python -m obs.report    # telemetry rollup: latency percentiles + est cost per op
-
-# evals — run the numbers yourself
-uv run python -m scripts.download_ipcc      # fetch the corpus (once)
-uv run python -m evals.run_retrieval_eval   # recall@{3,5,10} + MRR per slice, Wilson CIs
-uv run python -m evals.run_e2e_eval         # refusal matrix + citation/numeric checkers (needs Gemini auth)
-EVAL_CLAIM_JUDGE=1 uv run python -m evals.run_e2e_eval  # + claim-level LLM-judge audit
-uv run python -m evals.run_graph_eval       # the REAL agent path, live scenarios, contract checks
-
-# or containerized (corpus bakes in at build; see DEPLOY.md for HF Spaces)
-docker build -t climate-risk-agent . && docker run -p 7860:7860 climate-risk-agent
+docker build -t climate-risk-agent .
+docker run -p 7860:7860 -e GEMINI_API_KEY=... climate-risk-agent
 ```
 
-The gold set (`evals/gold_set.json`) was authored **before** retrieval existed and is frozen by content hash — editing a question breaks the suite until the freeze is deliberately renewed. Questions are never edited to make retrieval look better.
+For a hosted demo on Hugging Face Spaces, see [DEPLOY.md](DEPLOY.md).
 
-Example output (real Open-Meteo data + real IPCC citations from a live run):
-
-```json
-{
-  "location": "Rourkela, India",
-  "hazard": "extreme_precip",
-  "risk_level": "moderate",
-  "summary": "Peak daily rainfall of 46.2 mm over 7 days. ERA5 return levels (10yr=134.4, 50yr=187.3, 100yr=212.0). IPCC AR6: Extreme precipitation is projected to increase in South Asia [...] (high confidence).",
-  "confidence": 0.6,
-  "citations": [
-    { "source": "IPCC_AR6_WGI_Chapter11.pdf", "locator": "p53" },
-    { "source": "IPCC_AR6_WGI_Chapter11.pdf", "locator": "p54" }
-  ],
-  "provenance": [{ "source": "Open-Meteo", "retrieved_at": "..." }]
-}
-```
-
-Every `locator` is a real PDF page, and the answerer structurally cannot cite a chunk it didn't retrieve.
+<!-- TODO(owner): optional, capture a screenshot of the deployed HF Space. assets/deploy.png does not exist yet. -->
+![Deployed on Hugging Face Spaces](assets/deploy.png)
 
 ## Tech stack
 
-Python · [uv](https://docs.astral.sh/uv/) · Pydantic v2 · LangGraph · Gemini (google-genai SDK; AI Studio or Vertex) · numpy/scipy (GEV) · FastAPI (async) · httpx · MCP Python SDK · Streamlit · pytest · Docker · GitHub Actions.
+Python, LangGraph, Google Gemini (via Vertex AI), BM25 + gemini-embedding-2 hybrid retrieval (RRF fusion), Pydantic, FastAPI, Streamlit, MCP Python SDK, scipy, Docker, GitHub Actions.
 
-## Data & attribution
+## Limitations
 
-- **Forecasts & climatology:** [Open-Meteo](https://open-meteo.com/) (forecast + ERA5 archive APIs), licensed **CC-BY 4.0**.
-- **Reanalysis:** ERA5, Copernicus Climate Change Service (C3S) / ECMWF.
-- **Climate assessment:** IPCC AR6 WG1 (SPM + Chapters 11 & 12), © IPCC — reused for research under IPCC's terms.
+- ERA5 is gridded reanalysis, not station observations. Hazard stats describe an interpolated grid cell near the query location, not a measurement taken there.
+- Scope is heat, extreme precipitation, and wind. Anything else should get a refusal, not an answer.
+- The scope guard that keeps out-of-scope hazards away from the LLM is lexical (keyword-based). A paraphrase that avoids the known vocabulary could slip past it.
 
-Hazard return levels are point-interpolated ERA5 reanalysis (~25 km), not station observations — see [LIMITATIONS.md](LIMITATIONS.md) and the `representativeness` field on every `HazardStat`.
+Data: forecasts and ERA5 climatology from [Open-Meteo](https://open-meteo.com/) (CC-BY 4.0); climate assessment from IPCC AR6 WG1, reused for research under IPCC's terms.
 
-## Security, limitations, roadmap
-
-- [SECURITY.md](SECURITY.md) — the threat model; every control that matters is pinned by a test.
-- [LIMITATIONS.md](LIMITATIONS.md) — what these numbers do and don't mean. Read it before trusting a return level.
-- [ROADMAP.md](ROADMAP.md) — what shipped (with numbers) and what's next.
+See [LIMITATIONS.md](LIMITATIONS.md) for the full list and [SECURITY.md](SECURITY.md) for the threat model. Shipped features and what's next: [ROADMAP.md](ROADMAP.md).

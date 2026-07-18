@@ -46,7 +46,7 @@ Open http://localhost:7860.
 
 ## Release gate (evals are NOT in CI — by decision)
 
-CI runs the 126 unit/integration tests (corpus-dependent ones auto-skip).
+CI runs the unit/integration tests (corpus-dependent ones auto-skip).
 The retrieval + e2e evals need the corpus, the embedding cache, and Gemini
 auth, so they are a **manual pre-release gate**:
 
@@ -57,3 +57,16 @@ uv run python -m evals.run_e2e_eval         # refusal matrix — false_answer MU
 
 Rule: run both, publish the numbers in README/STATE, THEN tag/deploy.
 A `false_answer > 0` is a release blocker, full stop.
+
+## Held-out test set — exposure protocol (dev/test split, 2026-07-17)
+
+Two frozen sets exist:
+
+- `evals/gold_set.json` (45 q) — the **dev set**. It steered development
+  (top_k, chunking, scope guard), so it can never claim "held-out". Run it
+  freely; diagnose against it.
+- `evals/gold_set_v2.json` (105 q) — the **held-out test set**. Runs at
+  **release gates only** (`EVAL_SET=test`, artifact gets a `-test` suffix).
+  Failures found there are diagnosed on the DEV set — never by iterating
+  against the test set. Every published test-set number carries its exposure
+  count ("held-out, Nth exposure"). Peeking between gates burns the split.
