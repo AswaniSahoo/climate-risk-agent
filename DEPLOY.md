@@ -18,47 +18,39 @@ Open http://localhost:7860.
   (measured: 82% vs 91% headline R@3) and `answer_ipcc`-style LLM answers are
   unavailable; the UI reports both degradations honestly.
 
-## Hugging Face Space — Streamlit SDK (free, recommended)
+## Streamlit Community Cloud (free, recommended)
 
-HF gates the **Docker** SDK behind a paid tier, but the **Streamlit** SDK is
-free (2 vCPU, 16 GB RAM) and runs this app natively — it already is a Streamlit
-app, so no rewrite. This is the recommended path.
+As of 2026, Hugging Face gates every Python-app Space (Docker, Gradio, and the
+now-deprecated Streamlit SDK) behind HF PRO; only Static is free. Streamlit
+Community Cloud hosts this app for free and is purpose-built for Streamlit, so
+it is the recommended live-demo host.
 
-1. Create a Space → SDK = **Streamlit** (free). Set the License field to `mit`.
-2. Put this YAML frontmatter at the **top of the Space's README.md**
-   (the GitHub README stays clean):
+1. Push the repo to public GitHub (`origin`), CI green.
+2. Go to https://share.streamlit.io, sign in with GitHub, **New app**.
+3. Repo `AswaniSahoo/climate-risk-agent`, branch `main`, **main file path
+   `ui/app.py`**. Deploy.
+4. It installs `requirements.txt`, then the app self-provisions: on first boot
+   it sees no corpus and downloads the IPCC PDFs once (~50 MB, shown with a
+   spinner). The geospatial wheels (rasterio/shapely/pyproj) are self-contained,
+   so no `packages.txt` is needed.
+5. Optional **Advanced settings → Secrets** → add `GEMINI_API_KEY` (an
+   AI-Studio key) for hybrid retrieval + cited LLM answers. Without it the app
+   runs BM25-only, **loudly** (measured 82% vs 91% headline R@3); the UI reports
+   the degradation honestly.
 
-   ```yaml
-   ---
-   title: Climate-Risk Analyst Agent
-   emoji: 🌍
-   colorFrom: blue
-   colorTo: green
-   sdk: streamlit
-   app_file: ui/app.py
-   pinned: false
-   license: mit
-   ---
-   ```
+Note: the free tier is memory-limited. If the app OOMs on boot, run it
+BM25-only (no key) — that path avoids loading the embedding stack — or trim
+optional deps.
 
-3. Push this repo to the Space (`git remote add space https://huggingface.co/spaces/<user>/<space>` then `git push space main`). HF installs `requirements.txt` and runs `streamlit run ui/app.py`.
-4. The app self-provisions: on first boot it detects the HF `SPACE_ID` env var,
-   sees no baked corpus, and downloads the IPCC PDFs once (~50 MB, shown with a
-   spinner). No Dockerfile bake step needed.
-5. Optional **Settings → Variables and secrets** → add secret `GEMINI_API_KEY`
-   (AI-Studio key; Vertex ADC does not exist on Spaces) for hybrid retrieval +
-   cited LLM answers. Without it the Space runs BM25-only, **loudly** (measured
-   82% vs 91% headline R@3); the UI reports the degradation honestly. First boot
-   with a key embeds the corpus once (ephemeral storage, so a restart re-embeds).
+## Hugging Face Space — Docker SDK (requires HF PRO)
 
-## Hugging Face Space — Docker SDK (paid alternative)
-
-Only if you have the paid Docker tier. The verified 4.76 GB image
-(`docker build`, boots clean) deploys directly:
+If you have HF PRO ($9/mo), the verified 4.76 GB image (`docker build`, boots
+clean) deploys directly:
 
 1. Create a Space → SDK = **Docker**. Frontmatter `sdk: docker`, `app_port: 7860`.
 2. Push the repo; the Dockerfile bakes the corpus + AR6 polygons at build.
-3. Add the `GEMINI_API_KEY` secret as above (or run BM25-only).
+3. Add the `GEMINI_API_KEY` secret (or run BM25-only). Vertex ADC does not exist
+   on Spaces.
    ⚠️ The 4.76 GB image may exceed the Space's storage ceiling — slim it with a
    multi-stage build first (see docs/DEBT.md) if the build is rejected.
 

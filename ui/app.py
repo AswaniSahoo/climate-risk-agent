@@ -61,16 +61,16 @@ st.caption(
     "0 confabulated answers on a 45-question frozen benchmark."
 )
 
-# On a Hugging Face Streamlit Space (which skips the Dockerfile's corpus-bake
-# step) fetch the IPCC PDFs once. Gated on SPACE_ID — the env var HF sets — so
-# this NEVER fires in tests or CI (no network there); locally the corpus is
+# On a hosted deploy without the baked corpus (Streamlit Community Cloud, a
+# fresh clone, etc.) fetch the IPCC PDFs once. Skipped when PYTEST_CURRENT_TEST
+# is set, so tests and CI stay hermetic and offline; locally the corpus is
 # already on disk. Cheap file check per rerun; download runs only when missing.
 import os as _os  # noqa: E402
 
 from rag.corpus import corpus_present  # noqa: E402
 
-if _os.environ.get("SPACE_ID") and not corpus_present():
-    with st.spinner("First run on this Space: fetching the IPCC AR6 corpus (~50 MB, one time)…"):
+if not _os.environ.get("PYTEST_CURRENT_TEST") and not corpus_present():
+    with st.spinner("First run: fetching the IPCC AR6 corpus (~50 MB, one time)…"):
         from scripts.download_ipcc import main as _download_corpus  # noqa: E402
 
         _download_corpus()
