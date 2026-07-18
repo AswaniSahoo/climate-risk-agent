@@ -27,6 +27,7 @@ from agent import graph as agent_graph  # noqa: E402
 from agent.contracts import Hazard, RiskLevel  # noqa: E402
 from tools import climatology  # noqa: E402
 from tools.climatology import ClimatologyError  # noqa: E402
+from tools.forecast import ForecastError  # noqa: E402
 
 # Demo locations (geocoding is a documented DEBT item; these cover the
 # India-weighted eval set plus one non-Indian sanity point).
@@ -60,6 +61,20 @@ st.caption(
     "0 confabulated answers on a 45-question frozen benchmark."
 )
 
+# On a Hugging Face Streamlit Space (which skips the Dockerfile's corpus-bake
+# step) fetch the IPCC PDFs once. Gated on SPACE_ID — the env var HF sets — so
+# this NEVER fires in tests or CI (no network there); locally the corpus is
+# already on disk. Cheap file check per rerun; download runs only when missing.
+import os as _os  # noqa: E402
+
+from rag.corpus import corpus_present  # noqa: E402
+
+if _os.environ.get("SPACE_ID") and not corpus_present():
+    with st.spinner("First run on this Space: fetching the IPCC AR6 corpus (~50 MB, one time)…"):
+        from scripts.download_ipcc import main as _download_corpus  # noqa: E402
+
+        _download_corpus()
+
 # Natural-language front door: any place on Earth, plain English.
 nl_query = st.text_input(
     "Ask in plain language",
@@ -85,13 +100,23 @@ with st.sidebar:
     )
 
 report = None
+# The live forecast is the agent's core input; if Open-Meteo is down (503s
+# happen) even after the tool's retries, show a clean message instead of a raw
+# traceback — the same graceful posture the climatology/RAG layers already take.
+_FORECAST_DOWN = (
+    "The forecast service (Open-Meteo) is temporarily unavailable. "
+    "This is an upstream outage, not a problem with your request — please try again in a moment."
+)
 if ask and nl_query.strip():
     from agent.nl import run_agent_nl  # noqa: E402
     from obs.telemetry import Span
 
     with st.spinner("Parsing → geocoding → AR6 region → agent…"):
         with Span("report") as span:
-            report = run_agent_nl(nl_query)
+            try:
+                report = run_agent_nl(nl_query)
+            except ForecastError:
+                st.error(_FORECAST_DOWN, icon=":material/cloud_off:")
 elif run:
     latitude, longitude = LOCATIONS[location]
 
@@ -109,10 +134,13 @@ elif run:
 
     with st.spinner("Running agent (forecast → IPCC research → synthesis)…"):
         with Span("report") as span:
-            report = agent_graph.run_agent(
-                location=location, latitude=latitude, longitude=longitude,
-                hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
-            )
+            try:
+                report = agent_graph.run_agent(
+                    location=location, latitude=latitude, longitude=longitude,
+                    hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
+                )
+            except ForecastError:
+                st.error(_FORECAST_DOWN, icon=":material/cloud_off:")
 
 if report is not None:
     if report.refusal is not None:

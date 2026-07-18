@@ -7,6 +7,7 @@ guaranteed fields.
 """
 from __future__ import annotations
 
+import time
 from datetime import date
 
 import httpx
@@ -14,9 +15,23 @@ from pydantic import BaseModel
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
+# The forecast is the agent's core input: a transient Open-Meteo blip (503s are
+# common there, and timeouts happen) must not sink the whole report, so we retry
+# with a short exponential backoff. 4xx is our own bad request — fail fast.
+_MAX_ATTEMPTS = 3
+_BACKOFF_BASE_S = 0.5
+_SLEEP = time.sleep  # module attr so tests can neutralize the backoff
+
 
 class ForecastError(RuntimeError):
     """Raised when the Open-Meteo request fails (network error or bad status)."""
+
+
+def _is_transient(exc: httpx.HTTPError) -> bool:
+    """A transient failure is worth retrying; a 4xx (our bad params) is not."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)  # timeouts, connect/protocol errors
 
 
 class ForecastResult(BaseModel):
@@ -46,11 +61,15 @@ def get_forecast(
         "forecast_days": horizon_days,
         "timezone": "auto",
     }
-    try:
-        response = httpx.get(OPEN_METEO_URL, params=params, timeout=10)
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise ForecastError(f"Open-Meteo request failed: {exc}") from exc
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            response = httpx.get(OPEN_METEO_URL, params=params, timeout=10)
+            response.raise_for_status()
+            break
+        except httpx.HTTPError as exc:
+            if not _is_transient(exc) or attempt == _MAX_ATTEMPTS - 1:
+                raise ForecastError(f"Open-Meteo request failed: {exc}") from exc
+            _SLEEP(_BACKOFF_BASE_S * 2**attempt)
 
     data = response.json()
     daily = data["daily"]

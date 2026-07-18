@@ -43,8 +43,39 @@ def test_get_forecast_parses_daily_series(httpx_mock):
     assert result.timezone == "Asia/Kolkata"
 
 
-def test_get_forecast_raises_forecasterror_on_http_error(httpx_mock):
-    httpx_mock.add_response(status_code=500)
+@pytest.fixture(autouse=True)
+def _no_backoff_sleep(monkeypatch):
+    """Retry backoff must not actually sleep during tests."""
+    monkeypatch.setattr("tools.forecast._SLEEP", lambda _s: None)
+
+
+def test_get_forecast_retries_transient_5xx_then_succeeds(httpx_mock):
+    # Open-Meteo throws intermittent 503s (seen live) — a transient blip on the
+    # agent's core input must not sink the whole report.
+    httpx_mock.add_response(status_code=503)
+    httpx_mock.add_response(json=CANNED)
+
+    result = get_forecast(latitude=22.26, longitude=84.85, horizon_days=3)
+
+    assert result.temperature_2m_max[2] == 33.0
+    assert len(httpx_mock.get_requests()) == 2  # retried once
+
+
+def test_get_forecast_does_not_retry_client_error(httpx_mock):
+    # A 400 is our bug (bad params) — retrying wastes time and money, so fail fast.
+    httpx_mock.add_response(status_code=400)
 
     with pytest.raises(ForecastError):
         get_forecast(latitude=22.26, longitude=84.85, horizon_days=3)
+
+    assert len(httpx_mock.get_requests()) == 1  # no retry on 4xx
+
+
+def test_get_forecast_raises_after_exhausting_retries(httpx_mock):
+    for _ in range(3):  # every one of the 3 bounded attempts sees a 503
+        httpx_mock.add_response(status_code=503)
+
+    with pytest.raises(ForecastError):
+        get_forecast(latitude=22.26, longitude=84.85, horizon_days=3)
+
+    assert len(httpx_mock.get_requests()) == 3  # bounded, not infinite
