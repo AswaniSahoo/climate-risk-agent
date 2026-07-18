@@ -11,14 +11,17 @@
 
 This is an agent, not a chatbot. Ask a plain-language question, for example *"How risky are heatwaves in Tokyo over the next 5 days?"*, and it returns a typed, cited risk report built from real forecast data and IPCC climate science. When a question falls outside what it can actually check, it refuses instead of guessing.
 
-<!-- TODO(owner): capture this screenshot. assets/ui-report.png does not exist yet. -->
-![Climate-Risk Agent UI: forecast, ERA5 return levels, and cited IPCC excerpts in one report](assets/ui-report.png)
+![Climate-Risk Agent UI: a Berlin heatwave report with the ERA5 non-stationary GEV trend, effective return levels, and validator-guaranteed IPCC citations](assets/ui-report.png)
 
 ## The measurement moat
 
 - **ERA5 GEV hazard statistics.** Every hazard number comes from a Generalized Extreme Value distribution fit to 60+ years of ERA5 annual maxima at the query location. Risk severity is where the forecast peak lands on that location's own return-level curve, not a fixed threshold, and every return level ships with a 90% bootstrap confidence interval.
 - **Non-stationary GEV.** Alongside the stationary fit, a drifting-location GEV checks whether the climate at that location is actually warming, using a likelihood-ratio test to decide. When the trend is real, return levels are reported "effective" at the latest year instead of averaged across six decades. Berlin comes back at +0.76°C per decade (p < 0.0001) with effective levels; Delhi comes back stationary (p = 0.56), which agrees with the published literature on aerosol masking suppressing South Asian heat trends.
 - **IPCC AR6 RAG with citations that have to hold up.** Every citation is checked structurally against the pages actually retrieved for that question. If the model can't point to a real retrieved page, it refuses rather than cite one anyway.
+
+The same report, scrolled down: the ERA5 return-level table with bootstrap confidence intervals, the warming-trend banner, and the measured cost and latency for that run.
+
+![ERA5 return levels with 90% bootstrap CIs, the effective-at-2022 warming-trend banner, and per-request cost and latency telemetry](assets/ui-report-details.png)
 
 ## How it works
 
@@ -86,10 +89,7 @@ docker build -t climate-risk-agent .
 docker run -p 7860:7860 -e GEMINI_API_KEY=... climate-risk-agent
 ```
 
-For a hosted demo on Hugging Face Spaces, see [DEPLOY.md](DEPLOY.md).
-
-<!-- TODO(owner): optional, capture a screenshot of the deployed HF Space. assets/deploy.png does not exist yet. -->
-![Deployed on Hugging Face Spaces](assets/deploy.png)
+For a free hosted demo (Streamlit Community Cloud) or a Docker deploy, see [DEPLOY.md](DEPLOY.md).
 
 ## Tech stack
 
