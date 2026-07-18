@@ -18,11 +18,15 @@ Open http://localhost:7860.
   (measured: 82% vs 91% headline R@3) and `answer_ipcc`-style LLM answers are
   unavailable; the UI reports both degradations honestly.
 
-## Hugging Face Space (Docker SDK)
+## Hugging Face Space — Streamlit SDK (free, recommended)
 
-1. Create a Space → SDK = **Docker** (blank template).
-2. Add this YAML frontmatter to the **top of the Space's README.md**
-   (HF requires it; keep the GitHub README clean):
+HF gates the **Docker** SDK behind a paid tier, but the **Streamlit** SDK is
+free (2 vCPU, 16 GB RAM) and runs this app natively — it already is a Streamlit
+app, so no rewrite. This is the recommended path.
+
+1. Create a Space → SDK = **Streamlit** (free). Set the License field to `mit`.
+2. Put this YAML frontmatter at the **top of the Space's README.md**
+   (the GitHub README stays clean):
 
    ```yaml
    ---
@@ -30,19 +34,33 @@ Open http://localhost:7860.
    emoji: 🌍
    colorFrom: blue
    colorTo: green
-   sdk: docker
-   app_port: 7860
+   sdk: streamlit
+   app_file: ui/app.py
    pinned: false
+   license: mit
    ---
    ```
 
-3. Push this repo to the Space (or `git remote add space https://huggingface.co/spaces/<user>/<space>` and push).
-4. Space **Settings → Variables and secrets** → add secret `GEMINI_API_KEY`
-   (AI-Studio key; Vertex ADC does not exist on Spaces). Without it the Space
-   still runs, BM25-only.
-5. First boot with a key embeds the 2730-chunk corpus once (progress in the
-   container log; resumable disk cache — but note Space storage is ephemeral,
-   so a Space RESTART re-embeds unless you attach persistent storage).
+3. Push this repo to the Space (`git remote add space https://huggingface.co/spaces/<user>/<space>` then `git push space main`). HF installs `requirements.txt` and runs `streamlit run ui/app.py`.
+4. The app self-provisions: on first boot it detects the HF `SPACE_ID` env var,
+   sees no baked corpus, and downloads the IPCC PDFs once (~50 MB, shown with a
+   spinner). No Dockerfile bake step needed.
+5. Optional **Settings → Variables and secrets** → add secret `GEMINI_API_KEY`
+   (AI-Studio key; Vertex ADC does not exist on Spaces) for hybrid retrieval +
+   cited LLM answers. Without it the Space runs BM25-only, **loudly** (measured
+   82% vs 91% headline R@3); the UI reports the degradation honestly. First boot
+   with a key embeds the corpus once (ephemeral storage, so a restart re-embeds).
+
+## Hugging Face Space — Docker SDK (paid alternative)
+
+Only if you have the paid Docker tier. The verified 4.76 GB image
+(`docker build`, boots clean) deploys directly:
+
+1. Create a Space → SDK = **Docker**. Frontmatter `sdk: docker`, `app_port: 7860`.
+2. Push the repo; the Dockerfile bakes the corpus + AR6 polygons at build.
+3. Add the `GEMINI_API_KEY` secret as above (or run BM25-only).
+   ⚠️ The 4.76 GB image may exceed the Space's storage ceiling — slim it with a
+   multi-stage build first (see docs/DEBT.md) if the build is rejected.
 
 ## Release gate (evals are NOT in CI — by decision)
 
