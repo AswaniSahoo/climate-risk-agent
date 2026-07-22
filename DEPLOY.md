@@ -29,6 +29,9 @@ embedding cache (~9 MB) is baked into the image and the container starts on
 hybrid retrieval instead of re-embedding the corpus (and hitting 429s) on every
 cold start.
 
+Auth and models run on **Vertex AI via the `global` endpoint** (ADC through the
+Cloud Run service account — no API key to manage):
+
 ```bash
 # Deploy from source; Cloud Build runs the docker build, then Cloud Run hosts it.
 gcloud run deploy climate-risk-agent \
@@ -36,17 +39,24 @@ gcloud run deploy climate-risk-agent \
   --region us-central1 \
   --port 7860 \
   --allow-unauthenticated \
-  --memory 2Gi \
-  --set-env-vars GEMINI_API_KEY=...        # omit for BM25-only (loud fallback)
+  --min-instances 2 \
+  --memory 4Gi --cpu 2 \
+  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=climate-risk-agent,GOOGLE_CLOUD_LOCATION=global,CRG_GENERATE_MODEL=gemini-3.6-flash,CRG_EMBED_MODEL=gemini-embedding-2
 ```
 
+- **`GOOGLE_CLOUD_LOCATION=global` is required.** `gemini-embedding-2` is served
+  on `global` / `us` / `eu`, **not** the single region `us-central1`; a regional
+  endpoint 404s the embedding call and the app silently drops to BM25-only.
+  `gemini-3.6-flash` is also served on `global`.
+- `--region us-central1` is where the *Cloud Run service* (the container host)
+  runs — independent of the Vertex model endpoint (`global`).
+- **`--min-instances 2`** keeps two warm instances, so demo clicks never pay a
+  cold start.
 - `--port 7860` matches the container's `EXPOSE` / Streamlit port.
-- Size memory to fit the embedding stack; drop to BM25-only (no key) to run leaner.
-- Without `GEMINI_API_KEY` the app runs BM25-only, **loudly** (measured 82% vs
-  91% dev-set R@3); the UI reports the degradation honestly.
-
-> The exact flags above are representative — match them to your own
-> project/region and service settings.
+- The Cloud Run service account needs the **Vertex AI User** role
+  (`roles/aiplatform.user`).
+- The startup self-test logs `DENSE DEGRADED` (and the UI shows a banner) if the
+  embedding endpoint is unreachable — a misconfig is loud, never silent.
 
 ## Streamlit Community Cloud (free alternative)
 

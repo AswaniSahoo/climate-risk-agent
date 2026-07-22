@@ -17,8 +17,10 @@ import os
 import threading
 import time
 
-EMBED_MODEL = "gemini-embedding-2"
-GENERATE_MODEL = "gemini-2.5-flash"
+# Model IDs are env-overridable so a deploy can pin/upgrade without a code change
+# (a real production knob); the defaults are the deliberately-chosen GA models.
+EMBED_MODEL = os.environ.get("CRG_EMBED_MODEL", "gemini-embedding-2")
+GENERATE_MODEL = os.environ.get("CRG_GENERATE_MODEL", "gemini-3.6-flash")
 
 _RETRY_MAX = 6
 _sleep = time.sleep  # module-level so tests can stub the waiting out
@@ -133,6 +135,23 @@ def embed_batch(texts: list[str], *, task_type: str, dims: int) -> list[list[flo
 
     with ThreadPoolExecutor(max_workers=_EMBED_WORKERS) as pool:
         return list(pool.map(embed_one, texts))
+
+
+def embedding_available(*, dims: int = 768) -> tuple[bool, str]:
+    """Probe the embedding endpoint with a 1-token query at startup.
+
+    The whole point of this project's "loud fallback" rule: a wrong embedding
+    region/model (e.g. requesting gemini-embedding-2 from a single region that
+    only serves it on global/us/eu) must FAIL LOUD here, not hide behind a
+    citation-less report while every live query silently 404s to BM25-only.
+
+    Returns (ok, human-readable detail); never raises.
+    """
+    try:
+        embed_batch(["healthcheck"], task_type="RETRIEVAL_QUERY", dims=dims)
+    except Exception as exc:  # noqa: BLE001 — a probe must classify, never crash the app
+        return False, f"dense embeddings unavailable [{EMBED_MODEL}]: {exc}"
+    return True, f"dense OK [{EMBED_MODEL}]"
 
 
 def generate_json(prompt: str, *, schema: dict) -> str:

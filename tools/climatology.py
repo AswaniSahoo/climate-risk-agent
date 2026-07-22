@@ -10,9 +10,13 @@ offline) and the `climatology_hazard_stat` network edge (mocked in tests).
 """
 from __future__ import annotations
 
+import hashlib
+import logging
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 
 import httpx
 
@@ -173,6 +177,64 @@ def build_hazard_stat(
     )
 
 
+_log = logging.getLogger(__name__)
+
+# Disk cache for the fitted GEV stat. The 1960–2022 ERA5 record is STATIC, so a
+# (location, hazard) statistic never changes — persisting it across process
+# restarts turns every cold-start (Cloud Run scale events) repeat query from a
+# ~20 s archive fetch + bootstrap into an instant disk read. The in-process
+# lru_cache below still handles same-instance repeats; this survives restarts.
+_STAT_CACHE_DIR = Path(os.environ.get("CLIMATOLOGY_CACHE_DIR", "data/cache/climatology"))
+
+
+def _stat_cache_enabled() -> bool:
+    # Hermetic tests: never touch the shared on-disk cache during pytest (mirrors
+    # the corpus-download guard in ui/app.py), so network-mocked tests stay exact.
+    return not os.environ.get("PYTEST_CURRENT_TEST")
+
+
+def _stat_cache_key(
+    latitude: float,
+    longitude: float,
+    hazard: Hazard,
+    start_year: int,
+    end_year: int,
+    return_periods: tuple[int, ...],
+) -> str:
+    # ~4 dp ≈ 11 m, well inside the ERA5 ~25 km grid cell, so nearby coords that
+    # resolve to the same cell still share a cache entry.
+    raw = (
+        f"{round(latitude, 4)}|{round(longitude, 4)}|{hazard.value}|"
+        f"{start_year}|{end_year}|{tuple(return_periods)}"
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _stat_cache_load(key: str) -> HazardStat | None:
+    if not _stat_cache_enabled():
+        return None
+    path = _STAT_CACHE_DIR / f"{key}.json"
+    if not path.exists():
+        return None
+    try:
+        return HazardStat.model_validate_json(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 — a corrupt/stale cache file must never break a request
+        _log.warning("climatology cache read failed (%s) — refetching", exc)
+        return None
+
+
+def _stat_cache_store(key: str, stat: HazardStat) -> None:
+    if not _stat_cache_enabled():
+        return
+    try:
+        _STAT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        (_STAT_CACHE_DIR / f"{key}.json").write_text(
+            stat.model_dump_json(), encoding="utf-8"
+        )
+    except OSError as exc:
+        _log.warning("climatology cache write failed (%s) — continuing", exc)
+
+
 @lru_cache(maxsize=256)
 def climatology_hazard_stat(
     latitude: float,
@@ -185,13 +247,24 @@ def climatology_hazard_stat(
 ) -> HazardStat:
     """Live: fetch ERA5 daily history from the Open-Meteo Archive → GEV → HazardStat.
 
-    Cached (lru_cache): historical archive data is static, so the fitted statistic
-    for a (location, hazard) never changes — repeat calls are instant and make no
-    network request (also a denial-of-wallet guard on the free Archive tier).
+    Two cache tiers, because the historical archive is static so the fitted
+    statistic for a (location, hazard) never changes:
+    - in-process `lru_cache`: instant repeats within one running instance;
+    - on-disk cache (`_STAT_CACHE_DIR`): survives restarts / cold starts, so a
+      re-scheduled Cloud Run container skips the ~20 s archive fetch + bootstrap.
+    Both also act as denial-of-wallet guards on the free Archive tier.
     """
     from tools.validation import validate_coordinates
 
     validate_coordinates(latitude, longitude)
+
+    cache_key = _stat_cache_key(
+        latitude, longitude, hazard, start_year, end_year, return_periods
+    )
+    cached = _stat_cache_load(cache_key)
+    if cached is not None:
+        return cached
+
     cfg = _HAZARD_VARS[hazard]
     params: dict[str, str | int | float] = {
         "latitude": latitude,
@@ -211,7 +284,7 @@ def climatology_hazard_stat(
     data = response.json()
     daily = data["daily"]
     years, maxima = annual_maxima(daily["time"], daily[cfg.daily_var])
-    return build_hazard_stat(
+    stat = build_hazard_stat(
         years,
         maxima,
         hazard=hazard,
@@ -220,3 +293,5 @@ def climatology_hazard_stat(
         timezone=data.get("timezone", "auto"),
         return_periods=return_periods,
     )
+    _stat_cache_store(cache_key, stat)
+    return stat

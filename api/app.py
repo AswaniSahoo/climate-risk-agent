@@ -43,6 +43,20 @@ async def _lifespan(app: FastAPI):
     configure()  # the API process owns logging config
     if not os.environ.get("API_KEY"):
         _log.warning("API_KEY not set — endpoints are open (dev mode)")
+    # Dense-retrieval self-test at startup: fail loud in logs if the embedding
+    # model/region is unreachable, instead of silently serving BM25-only.
+    # Skipped under pytest so the TestClient startup stays hermetic/offline.
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        from rag.gemini_client import embedding_available
+
+        ok, detail = embedding_available()
+        if ok:
+            _log.info("dense retrieval self-test OK — %s", detail)
+        else:
+            _log.warning(
+                "DENSE DEGRADED — %s. Serving BM25-only until embeddings are "
+                "reachable (check embedding model/region).", detail
+            )
     yield
 
 

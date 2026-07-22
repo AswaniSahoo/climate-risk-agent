@@ -93,7 +93,7 @@ The [live demo](https://climate-risk-agent-714882950125.us-central1.run.app/) ru
 
 ## Tech stack
 
-Python, LangGraph, Google Gemini (via Vertex AI), BM25 + gemini-embedding-2 hybrid retrieval (RRF fusion), Pydantic, FastAPI, Streamlit, MCP Python SDK, scipy, Docker, GitHub Actions.
+Python, LangGraph, Google Gemini 3.6 Flash (generation) + gemini-embedding-2 (dense) on Vertex AI (global endpoint), BM25 + dense hybrid retrieval (RRF fusion), Pydantic, FastAPI, Streamlit, MCP Python SDK, scipy, Docker, GitHub Actions.
 
 ## Limitations
 

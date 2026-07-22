@@ -28,6 +28,13 @@ _EVENTS: list[dict] = []
 # USD per 1M tokens — ESTIMATES (verify against the current Google price sheet;
 # override without a code change via env). Cost output is always labeled "est".
 _PRICE_PER_MTOK = {
+    # Active generation model. Prices are ESTIMATES — verify against the current
+    # Google price sheet and override via PRICE_FLASH_IN / PRICE_FLASH_OUT.
+    "gemini-3.6-flash": (
+        float(os.environ.get("PRICE_FLASH_IN", "0.30")),
+        float(os.environ.get("PRICE_FLASH_OUT", "2.50")),
+    ),
+    # Kept for back-compat / historical telemetry rows (same env knobs).
     "gemini-2.5-flash": (
         float(os.environ.get("PRICE_FLASH_IN", "0.30")),
         float(os.environ.get("PRICE_FLASH_OUT", "2.50")),

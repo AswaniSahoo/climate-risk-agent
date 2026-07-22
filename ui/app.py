@@ -57,8 +57,8 @@ st.set_page_config(
 st.title("🌍 Climate-Risk Analyst Agent")
 st.caption(
     "Live forecast (Open-Meteo) + ERA5 GEV return levels + IPCC AR6 citations "
-    "→ one structured, validated RiskReport. Measured: 91% retrieval R@3, "
-    "0 confabulated answers on a 45-question frozen benchmark."
+    "→ one structured, validated RiskReport. Measured: 87% retrieval R@3, "
+    "0 confabulated answers on a 105-question held-out test set."
 )
 
 # On a hosted deploy without the baked corpus (Streamlit Community Cloud, a
@@ -74,6 +74,23 @@ if not _os.environ.get("PYTEST_CURRENT_TEST") and not corpus_present():
         from scripts.download_ipcc import main as _download_corpus  # noqa: E402
 
         _download_corpus()
+
+# Dense-retrieval self-test (once per session). A wrong embedding region/model
+# must surface LOUDLY here — not hide behind a citation-less report while every
+# query silently 404s to BM25-only. Skipped under pytest (hermetic UI tests).
+if not _os.environ.get("PYTEST_CURRENT_TEST"):
+    if "dense_ok" not in st.session_state:
+        from rag.gemini_client import embedding_available  # noqa: E402
+
+        st.session_state.dense_ok, st.session_state.dense_detail = embedding_available()
+    if not st.session_state.dense_ok:
+        st.error(
+            f"**Degraded mode:** {st.session_state.dense_detail}. Retrieval is "
+            "running **BM25-only** (measured ~82% vs 87% hybrid R@3), so IPCC "
+            "citations may be sparse. This is an embedding config issue "
+            "(model / region), not a data problem.",
+            icon=":material/warning:",
+        )
 
 # Natural-language front door: any place on Earth, plain English.
 nl_query = st.text_input(
