@@ -1,0 +1,31 @@
+# Cloud Build upload filter — mirrors .dockerignore, NOT .gitignore.
+#
+# Key difference from .gitignore: data/ is INCLUDED so the embedding cache
+# (data/cache/embeddings/, ~9 MB) is uploaded to Cloud Build. This lets the
+# Docker build bake the cache into the image, so the container starts on
+# hybrid retrieval without calling the Gemini embedding API at runtime.
+#
+# Without this file, gcloud falls back to .gitignore which excludes data/,
+# causing every Cloud Run cold start to re-embed 2730 chunks and hit 429s.
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+htmlcov
+.env
+.env.*
+docs
+MASTER-PLAN*.md
+.claude
+.agents
+.serena
+.kiro
+.code-review-graph
+.devcontainer
+assets
+evals
+tests
