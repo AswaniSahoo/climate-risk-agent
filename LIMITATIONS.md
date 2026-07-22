@@ -15,35 +15,44 @@ possible, so a downstream consumer can check it programmatically.
   wind statistic says so in its `interpretation` field.
 - **`record_max` ships beside the fitted return levels** so a degenerate
   extreme-value fit (100-year level ≈ record max) is visible at a glance.
-- **GEV fitting assumes a stationary climate.** Return levels fitted on
-  1960–2022 describe that record, not a warming future. Non-stationary
-  extensions are out of scope for v1.
+- **GEV fit is stationary by default; a non-stationary check runs beside it.**
+  Baseline return levels are fitted on 1960–2022 as a stationary record. A
+  drifting-location GEV (`tools/gev_trend.py`) also fits a linear warming trend,
+  and a likelihood-ratio test decides whether it is signal (p < 0.05); when it
+  is, return levels are reported "effective" at the latest year instead of
+  averaged across the record. Residual limitation: the trend model assumes the
+  drift is *linear* in year and still fits a GEV, so it will not capture abrupt
+  or non-linear regime shifts.
 
 ## Retrieval and answers
 
 - **Corpus = IPCC AR6 WG1 SPM + Chapter 11 + Chapter 12 only.** Questions whose
   evidence lives elsewhere (WG2 adaptation, WG3 mitigation, the Atlas) are out
   of corpus and should be refused; the eval's out-of-corpus slice measures this.
-- **Retrieval quality is published, not perfect.** Current headline recall@3 is
-  91% (95% CI 77–97) with the hybrid BM25+dense retriever — 82% on BM25-only,
-  which is what a keyless deployment falls back to — on a frozen, hash-pinned
-  benchmark of 45 hand-verified questions (`evals/gold_set.json`). Per-slice
-  numbers, including the ones we are not proud of (premise-injection R@3 = 75%
-  hybrid / 50% BM25-only; 1 remaining false refusal on a column-ambiguous table
-  row), are in the eval output — rerun with `uv run python -m evals.run_retrieval_eval`.
-- **The eval set is small (n=45) and doubles as the development set.** Retrieval
-  and context-size choices (chunking, top_k) were selected using deltas on the
-  same frozen questions the headline numbers come from, so those numbers carry
-  optimistic bias. There is no held-out split yet; eval v2 (larger set, dev/test
-  split, claim-level checking) is planned. The freeze prevents question-editing,
-  not configuration-overfitting — we say so here on purpose.
+- **Retrieval quality is published, not perfect.** On the held-out test set
+  (105 questions, first exposure) the hybrid BM25+dense retriever gets headline
+  recall@3 87% / @5 91% / @10 96% on answerable questions. On the 45-question
+  dev set it reads recall@3 91% (82% on BM25-only, which is what a keyless
+  deployment falls back to). Per-slice numbers, including the ones we are not
+  proud of (test-set premise-injection R@3 = 59%; the regional-table slice at
+  77%), are in the eval output — rerun with
+  `uv run python -m evals.run_retrieval_eval`.
+- **Dev and test sets are split (eval v2).** The 45-question set
+  (`evals/gold_set.json`) steered retrieval and context-size choices (chunking,
+  top_k), so its numbers carry optimistic bias and it is kept for diagnosis
+  only. A second hash-pinned set of 105 questions (`evals/gold_set_v2.json`),
+  authored after the dev set and never used to tune anything, is the held-out
+  test set; it runs at release gates only and every published test number
+  carries its exposure count. Failures are diagnosed on the dev set, never by
+  iterating against the test set.
 - **The scope guard is lexical (v1).** It matches hazard vocabulary; a
   paraphrase that avoids all known terms can slip past it to the LLM layer,
   whose prompt-level rules are best-effort. The refusal confusion matrix in the
   e2e eval measures how often this happens.
 - **Citation validity is checked at page level.** A citation is scored valid
   when it lands on a page that answers the question; claim-level entailment
-  (does this sentence support this exact claim) is not yet automated.
+  (does this sentence support this exact claim) is not yet automated in the
+  release gate.
 - **Figures and maps are not read.** The corpus is the PDFs' text layer. Values
   are never extracted from charts (a model reading a chart is unverifiable);
   where a figure is the only source, the honest behavior is to point to it.
@@ -57,6 +66,7 @@ possible, so a downstream consumer can check it programmatically.
 
 ## Day-1 remnants
 
-- Risk-level thresholds in the forecast path are documented placeholders until
-  climatology-conditioned levels land.
-- Geocoding is not implemented; the demo uses fixed coordinates.
+- Risk-level thresholds in the forecast path (`_heat_level` / `_precip_level` /
+  `_wind_level` in `agent/graph.py`) are documented placeholders — fixed
+  cutoffs, not climatology-conditioned — still used to assign the qualitative
+  risk band during report synthesis.

@@ -30,7 +30,7 @@ RUN uv run python -m scripts.download_ipcc
 # Bake the AR6 region polygons (~1 MB) so lat/lon->region works offline at runtime.
 RUN uv run python -c "from tools.ar6_regions import _land_regions; _land_regions()"
 
-# HF Spaces (Docker SDK) routes traffic to this port; runs as non-root there.
+# Cloud Run (and HF Spaces Docker SDK) route traffic to this port; runs as non-root.
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 EXPOSE 7860

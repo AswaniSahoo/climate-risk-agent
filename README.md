@@ -7,7 +7,7 @@
 ![RAG](https://img.shields.io/badge/retrieval-hybrid%20RAG-orange.svg)
 ![Climate risk](https://img.shields.io/badge/domain-climate%20risk-2ea44f.svg)
 
-<!-- TODO(owner): no LICENSE file found at the repo root as of this draft. Add one (MIT assumed from CLAUDE.md) and confirm the badge above is accurate. -->
+**Live demo:** https://climate-risk-agent-714882950125.us-central1.run.app/ — a public [Google Cloud Run](https://cloud.google.com/run) deployment.
 
 This is an agent, not a chatbot. Ask a plain-language question, for example *"How risky are heatwaves in Tokyo over the next 5 days?"*, and it returns a typed, cited risk report built from real forecast data and IPCC climate science. When a question falls outside what it can actually check, it refuses instead of guessing.
 
@@ -73,7 +73,7 @@ Refusals are scored on a 4-cell confusion matrix (correct answer, correct refusa
 - Async FastAPI service (`POST /report`) with per-request API-key access control and a `/metrics` endpoint.
 - Two MCP servers (weather, IPCC RAG) exposing the same tools over the Model Context Protocol.
 - Disk-backed answer cache for repeat queries.
-- Docker image, plus CI running ruff, mypy, and pytest. 238 tests green.
+- Docker image, plus CI running ruff, mypy, and pytest. 240 tests green.
 
 ## Run it
 
@@ -89,7 +89,7 @@ docker build -t climate-risk-agent .
 docker run -p 7860:7860 -e GEMINI_API_KEY=... climate-risk-agent
 ```
 
-For a free hosted demo (Streamlit Community Cloud) or a Docker deploy, see [DEPLOY.md](DEPLOY.md).
+The [live demo](https://climate-risk-agent-714882950125.us-central1.run.app/) runs on Google Cloud Run. For deployment (Cloud Run, or local Docker and other hosts), see [DEPLOY.md](DEPLOY.md).
 
 ## Tech stack
 

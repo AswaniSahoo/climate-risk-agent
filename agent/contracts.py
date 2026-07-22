@@ -50,7 +50,10 @@ class RiskDriver(BaseModel):
 class Citation(BaseModel):
     """A reference to a source document backing a claim.
 
-    Minimal Day-1 placeholder; real RAG-derived citations arrive in Wk2.
+    RAG-derived and validated at page level against the chunks actually
+    retrieved for the question: a citation that cannot be tied to a retrieved
+    page forces a refusal rather than a fabricated reference. `source` is the
+    document; `locator` is the page.
     """
 
     source: str

@@ -1,4 +1,4 @@
-# Deploy — Docker + Hugging Face Spaces
+# Deploy — Docker + Google Cloud Run
 
 ## Local Docker
 
@@ -18,12 +18,42 @@ Open http://localhost:7860.
   (measured: 82% vs 91% headline R@3) and `answer_ipcc`-style LLM answers are
   unavailable; the UI reports both degradations honestly.
 
-## Streamlit Community Cloud (free, recommended)
+## Google Cloud Run (live demo)
+
+The public demo runs here:
+**https://climate-risk-agent-714882950125.us-central1.run.app/**
+
+Cloud Run serves the same Docker image described above. `.gcloudignore` mirrors
+`.dockerignore` and deliberately keeps `data/` in the Cloud Build upload, so the
+embedding cache (~9 MB) is baked into the image and the container starts on
+hybrid retrieval instead of re-embedding the corpus (and hitting 429s) on every
+cold start.
+
+```bash
+# Deploy from source; Cloud Build runs the docker build, then Cloud Run hosts it.
+gcloud run deploy climate-risk-agent \
+  --source . \
+  --region us-central1 \
+  --port 7860 \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --set-env-vars GEMINI_API_KEY=...        # omit for BM25-only (loud fallback)
+```
+
+- `--port 7860` matches the container's `EXPOSE` / Streamlit port.
+- Size memory to fit the embedding stack; drop to BM25-only (no key) to run leaner.
+- Without `GEMINI_API_KEY` the app runs BM25-only, **loudly** (measured 82% vs
+  91% dev-set R@3); the UI reports the degradation honestly.
+
+> The exact flags above are representative — match them to your own
+> project/region and service settings.
+
+## Streamlit Community Cloud (free alternative)
 
 As of 2026, Hugging Face gates every Python-app Space (Docker, Gradio, and the
 now-deprecated Streamlit SDK) behind HF PRO; only Static is free. Streamlit
-Community Cloud hosts this app for free and is purpose-built for Streamlit, so
-it is the recommended live-demo host.
+Community Cloud also hosts this app for free and is purpose-built for Streamlit,
+a good no-cost alternative to the Cloud Run demo above.
 
 1. Push the repo to public GitHub (`origin`), CI green.
 2. Go to https://share.streamlit.io, sign in with GitHub, **New app**.

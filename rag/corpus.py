@@ -27,7 +27,7 @@ class CorpusError(RuntimeError):
 def corpus_present() -> bool:
     """Cheap pre-check: are all corpus PDFs on disk? (No parsing, no exception —
     lets an entrypoint decide to fetch the corpus before first use, e.g. a fresh
-    Hugging Face Streamlit Space where the Dockerfile bake step never ran.)"""
+    Cloud Run container where the Docker bake step never ran.)"""
     return all((CORPUS_DIR / name).exists() for name in CORPUS_FILES)
 
 
