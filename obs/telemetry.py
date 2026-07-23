@@ -16,11 +16,14 @@ being measured — behavior, latency, and reliability become queryable data.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 _LOCK = threading.RLock()
 _EVENTS: list[dict] = []
@@ -101,13 +104,31 @@ def reset() -> None:
         _EVENTS.clear()
 
 
+def unpriced_models(events: list[dict]) -> list[str]:
+    """Models in `events` with no entry in the price table (cost is UNKNOWN)."""
+    return sorted({e["model"] for e in events if e["model"] not in _PRICE_PER_MTOK})
+
+
 def estimate_cost_usd(events: list[dict]) -> float:
-    """Estimated spend for `events` — cache hits are free by definition."""
+    """Estimated spend for `events` — cache hits are free by definition.
+
+    An UNPRICED model contributes 0 to the total, which would silently read as
+    "free". That is the one failure this project refuses to make quietly, so it
+    is logged loudly here and reported as `unpriced_models` in `summarize()`:
+    a $0.00 cost must be distinguishable from an unknown cost.
+    """
     total = 0.0
     for e in events:
         if e.get("cached"):
             continue
-        price_in, price_out = _PRICE_PER_MTOK.get(e["model"], (0.0, 0.0))
+        if e["model"] not in _PRICE_PER_MTOK:
+            _log.warning(
+                "no price for model %r — its cost is UNKNOWN, not zero; "
+                "add it to _PRICE_PER_MTOK before quoting this number",
+                e["model"],
+            )
+            continue
+        price_in, price_out = _PRICE_PER_MTOK[e["model"]]
         total += e["tokens_in"] / 1e6 * price_in + e["tokens_out"] / 1e6 * price_out
     return round(total, 6)
 
@@ -172,4 +193,9 @@ def summarize(events: list[dict]) -> dict:
             "p95_ms": _percentile(latencies, 0.95),
             "est_cost_usd": estimate_cost_usd(group),
         }
+        # Cost is only meaningful if every model in the group has a price. A
+        # reader of this rollup must be able to tell "$0" from "we don't know".
+        missing = unpriced_models(group)
+        if missing:
+            stats[op]["cost_incomplete_unpriced_models"] = missing
     return stats

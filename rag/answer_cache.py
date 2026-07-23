@@ -1,11 +1,21 @@
-"""Disk cache for cited answers: same question + same evidence = same answer, free.
+"""Disk cache for cited answers: a repeat query costs zero tokens and zero latency.
 
-Why this exists (and why not Redis): the corpus is frozen and generation runs
-at temperature 0, so (question, retrieved chunk texts, model) fully determines
-the CitedAnswer — a repeat query should cost zero tokens and zero latency.
-This is a single-process app (Streamlit / stdio MCP), so the right cache is a
-directory of JSON files, not a cache server. Redis earns its place only when
-multiple replicas need shared state (recorded in DEBT with that trigger).
+MEASURED CAVEAT (2026-07-22, evals/determinism_probe.py): temperature 0 does
+NOT make generation deterministic. Repeating one fixed (question, chunks) pair
+produced different answers from BOTH model families — gemini-2.5-flash gave 4
+vs 5 citations across 5 runs, and gemini-3.6-flash varied on every run once it
+stopped abstaining. So (question, chunk texts, model) does not *determine* the
+CitedAnswer; it selects ONE VALID answer and pins it.
+
+That is still the behaviour we want here — a user re-asking the same question
+should get a stable reply rather than a reshuffled one — but it is a
+consistency choice, not a correctness guarantee, and it is why the e2e eval
+must never use this cache (it would freeze one sample of a distribution and
+hide model drift). Run the probe again after any model change.
+
+Why not Redis: single-process app (Streamlit / stdio MCP), so the right cache
+is a directory of JSON files, not a cache server. Redis earns its place only
+when multiple replicas need shared state (recorded in DEBT with that trigger).
 
 The key hashes the chunk TEXTS, not just ids: a re-chunk that changes content
 under a stable id invalidates naturally. Corrupt entries are a LOUD miss.

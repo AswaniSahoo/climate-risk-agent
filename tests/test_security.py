@@ -23,7 +23,7 @@ def test_outbound_targets_are_pinned():
     # Gemini goes through the official SDK (Google-controlled endpoints); what we
     # pin is the MODEL choice — stable GA versions, upgraded deliberately.
     assert EMBED_MODEL == "gemini-embedding-2"
-    assert GENERATE_MODEL == "gemini-3.6-flash"
+    assert GENERATE_MODEL == "gemini-2.5-flash"
 
 
 def test_gemini_auth_is_explicit_never_a_silent_fallback(monkeypatch):

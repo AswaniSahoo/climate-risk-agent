@@ -20,7 +20,7 @@ import time
 # Model IDs are env-overridable so a deploy can pin/upgrade without a code change
 # (a real production knob); the defaults are the deliberately-chosen GA models.
 EMBED_MODEL = os.environ.get("CRG_EMBED_MODEL", "gemini-embedding-2")
-GENERATE_MODEL = os.environ.get("CRG_GENERATE_MODEL", "gemini-3.6-flash")
+GENERATE_MODEL = os.environ.get("CRG_GENERATE_MODEL", "gemini-2.5-flash")
 
 _RETRY_MAX = 6
 _sleep = time.sleep  # module-level so tests can stub the waiting out
@@ -170,10 +170,17 @@ def generate_json(prompt: str, *, schema: dict) -> str:
         )
 
     def usage(response) -> tuple[int, int]:
+        """(input, output) tokens. Reasoning models report the tokens they spent
+        THINKING separately from the visible answer, and Google bills them as
+        output — counting only `candidates_token_count` undercounted a measured
+        3.6-flash call ~20x (50 visible vs 987 thinking). Cost telemetry must
+        charge for what is actually billed, so thoughts are added to output."""
         meta = getattr(response, "usage_metadata", None)
+        visible_out = getattr(meta, "candidates_token_count", 0) or 0
+        thoughts = getattr(meta, "thoughts_token_count", 0) or 0
         return (
             getattr(meta, "prompt_token_count", 0) or 0,
-            getattr(meta, "candidates_token_count", 0) or 0,
+            visible_out + thoughts,
         )
 
     response = _with_retry(call, op="generate", model=GENERATE_MODEL, extract_tokens=usage)
