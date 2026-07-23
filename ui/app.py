@@ -56,10 +56,41 @@ st.set_page_config(
 )
 st.title("🌍 Climate-Risk Analyst Agent")
 st.caption(
-    "Live forecast (Open-Meteo) + ERA5 GEV return levels + IPCC AR6 citations "
-    "→ one structured, validated RiskReport. Measured: 87% retrieval R@3, "
-    "0 confabulated answers on a 105-question held-out test set."
+    "Ask about heat, extreme rainfall or wind risk anywhere on Earth. You get a "
+    "structured report built from a live forecast, 60+ years of ERA5 climate "
+    "statistics, and the IPCC AR6 assessment — with page-level citations, and an "
+    "honest refusal when the evidence is not there."
 )
+
+with st.expander("How to use this (start here)", icon=":material/help:"):
+    st.markdown(
+        """
+**Ask in plain language**, for example:
+
+- *How risky are heatwaves in Berlin over the next 7 days?*
+- *Is extreme rainfall a concern in Mumbai next week?*
+- *What is the wind risk in Chennai over the next 10 days?*
+
+**What it covers.** Three hazards only: **heat / heatwaves**, **extreme
+precipitation**, and **wind**. Anything else (drought, flooding, cyclones,
+wildfire, sea level) is deliberately **refused** rather than guessed at, and it
+will tell you so.
+
+**How to read the result.**
+
+| Part | What it means |
+| --- | --- |
+| Risk level | Where the forecast peak falls on *this location's own* ERA5 return-level curve, not a fixed threshold |
+| Return levels | The 1-in-10 / 50 / 100 year severity for this exact spot, with a 90% bootstrap confidence interval |
+| Warming-trend banner | Shown only when a statistical test finds a real trend; the levels are then "effective" at today's climate |
+| IPCC citations | Every citation is machine-checked against the pages actually retrieved. No citation means it declined to claim something it could not ground |
+| Confidence | Rises with better data representativeness and with IPCC grounding; capped, because a forecast is never certain |
+
+**Refusals are a feature.** An empty citation list or a refusal means the system
+would rather say nothing than invent a number. On a 105-question held-out
+benchmark it produced **zero fabricated answers**.
+        """
+    )
 
 # On a hosted deploy without the baked corpus (Streamlit Community Cloud, a
 # fresh clone, etc.) fetch the IPCC PDFs once. Skipped when PYTEST_CURRENT_TEST
@@ -92,9 +123,25 @@ if not _os.environ.get("PYTEST_CURRENT_TEST"):
             icon=":material/warning:",
         )
 
+# One-click examples: a first-time visitor should be able to see a real report
+# without inventing a question. Each writes the query into the input via
+# session_state, so the text stays editable afterwards.
+_EXAMPLES = {
+    "🌡️ Heat in Berlin": "How risky are heatwaves in Berlin over the next 7 days?",
+    "🌧️ Rainfall in Mumbai": "Is extreme rainfall a concern in Mumbai over the next 7 days?",
+    "💨 Wind in Chennai": "What is the wind risk in Chennai over the next 10 days?",
+    "🚫 Out of scope": "What is the wildfire risk in Sydney next week?",
+}
+st.caption("Try an example:")
+_cols = st.columns(len(_EXAMPLES))
+for _col, (_label, _query) in zip(_cols, _EXAMPLES.items()):
+    if _col.button(_label, width="stretch"):
+        st.session_state["nl_query"] = _query
+
 # Natural-language front door: any place on Earth, plain English.
 nl_query = st.text_input(
     "Ask in plain language",
+    key="nl_query",
     placeholder="How risky are heatwaves in Rourkela over the next 10 days?",
     help="Deterministic parsing → geocoding → AR6 region mapping → the agent. "
          "Unsupported hazards and unknown places refuse honestly.",

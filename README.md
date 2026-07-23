@@ -7,7 +7,7 @@
 ![RAG](https://img.shields.io/badge/retrieval-hybrid%20RAG-orange.svg)
 ![Climate risk](https://img.shields.io/badge/domain-climate%20risk-2ea44f.svg)
 
-**Live demo:** https://climate-risk-agent-714882950125.us-central1.run.app/ — a public [Google Cloud Run](https://cloud.google.com/run) deployment.
+**Live demo:** https://climate-risk-agent-714882950125.us-central1.run.app/ (a public [Google Cloud Run](https://cloud.google.com/run) deployment).
 
 This is an agent, not a chatbot. Ask a plain-language question, for example *"How risky are heatwaves in Tokyo over the next 5 days?"*, and it returns a typed, cited risk report built from real forecast data and IPCC climate science. When a question falls outside what it can actually check, it refuses instead of guessing.
 
@@ -59,17 +59,23 @@ flowchart LR
 - **Dev set:** 45 questions, used to steer development choices like chunking and retrieval configuration.
 - **Test set:** 105 new questions, written after the dev set existed, never used to tune anything, frozen by SHA-256 so neither set can quietly change.
 
-Held-out results, first exposure:
+Held-out results (second exposure, on the exact configuration deployed):
 
 - Retrieval: R@3 87%, R@5 91%, R@10 96% on answerable questions.
 - Zero false answers across the full held-out refusal matrix. No confabulation.
-- Citation validity: 94%.
+- Citation validity: 96%. Numeric provenance: 88%.
+- Measured cost about $0.003 per question, p50 latency 3.9 s.
+
+Every eval artifact records the model that produced it, because a model swap is
+invisible to a test suite. When the answering model was changed without
+re-running these evals, the benchmark caught a usefulness regression that 240
+passing tests did not: see [adr/0001-answering-model-selection.md](adr/0001-answering-model-selection.md).
 
 Refusals are scored on a 4-cell confusion matrix (correct answer, correct refusal, false refusal, false answer). One false answer on that matrix blocks release.
 
 ## Operations
 
-- Structured logging and per-request telemetry measured at the single SDK seam every model call passes through: latency, tokens, retries, and cost. A fully grounded report runs about $0.001.
+- Structured logging and per-request telemetry measured at the single SDK seam every model call passes through: latency, tokens, retries, and cost. Measured on the held-out run: about $0.003 per question, p50 3.9 s. Reasoning tokens are counted as billed output, and a model with no price entry reports its cost as unknown rather than as zero.
 - Async FastAPI service (`POST /report`) with per-request API-key access control and a `/metrics` endpoint.
 - Two MCP servers (weather, IPCC RAG) exposing the same tools over the Model Context Protocol.
 - Disk-backed answer cache for repeat queries.
@@ -93,7 +99,7 @@ The [live demo](https://climate-risk-agent-714882950125.us-central1.run.app/) ru
 
 ## Tech stack
 
-Python, LangGraph, Google Gemini 3.6 Flash (generation) + gemini-embedding-2 (dense) on Vertex AI (global endpoint), BM25 + dense hybrid retrieval (RRF fusion), Pydantic, FastAPI, Streamlit, MCP Python SDK, scipy, Docker, GitHub Actions.
+Python, LangGraph, Google Gemini 2.5 Flash (generation) + gemini-embedding-2 (dense) on Vertex AI (global endpoint), BM25 + dense hybrid retrieval (RRF fusion), Pydantic, FastAPI, Streamlit, MCP Python SDK, scipy, Docker, GitHub Actions.
 
 ## Limitations
 
