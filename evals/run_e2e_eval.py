@@ -134,9 +134,18 @@ def main() -> None:
     def _rate(flags: list[bool]) -> dict:
         return {"passed": sum(flags), "total": len(flags)}
 
+    # Model identity + measured cost/latency belong IN the artifact: a number
+    # without the model that produced it is not evidence (a silent model swap
+    # is invisible to tests and CI, and only the eval can catch the change).
+    from obs.telemetry import snapshot, summarize
+    from rag.gemini_client import EMBED_MODEL, GENERATE_MODEL
+
     artifact = {
         "run_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "eval_set": _EVAL_SET,
+        "generate_model": GENERATE_MODEL,
+        "embed_model": EMBED_MODEL,
+        "telemetry": summarize(snapshot()),
         "gold_set_sha256_file": (
             "evals/gold_set_v2.sha256" if _EVAL_SET == "test" else "evals/gold_set.sha256"
         ),
@@ -155,8 +164,11 @@ def main() -> None:
     }
     out_dir = Path("evals/results")
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Model goes in the FILENAME so a bake-off across models cannot overwrite
+    # its own evidence (same set + same day + different model = different file).
     suffix = "-test" if _EVAL_SET == "test" else ""
-    out_path = out_dir / f"e2e{suffix}-{datetime.now(timezone.utc):%Y-%m-%d}.json"
+    slug = GENERATE_MODEL.replace("/", "-")
+    out_path = out_dir / f"e2e{suffix}-{slug}-{datetime.now(timezone.utc):%Y-%m-%d}.json"
     out_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
     print(f"\nartifact written: {out_path} (commit it — release-gate evidence)")
 

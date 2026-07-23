@@ -1,0 +1,69 @@
+{
+  "run_utc": "2026-07-22T17:35:40+00:00",
+  "question": "How are heavy precipitation and extreme rainfall projected to change in intensity and frequency over Rourkela, India at higher global warming levels?",
+  "chunk_ids": [
+    "IPCC_AR6_WGI_Chapter11.pdf#p54#3",
+    "IPCC_AR6_WGI_Chapter11.pdf#p52#1",
+    "IPCC_AR6_WGI_Chapter11.pdf#p6#3",
+    "IPCC_AR6_WGI_Chapter11.pdf#p53#3",
+    "IPCC_AR6_WGI_Chapter11.pdf#p53#0",
+    "IPCC_AR6_WGI_Chapter11.pdf#p54#1",
+    "IPCC_AR6_WGI_Chapter11.pdf#p6#1",
+    "IPCC_AR6_WGI_Chapter12.pdf#p92#2"
+  ],
+  "models": {
+    "gemini-3.6-flash": {
+      "repeats": 3,
+      "distinct_outcomes": 3,
+      "deterministic": false,
+      "outcomes": [
+        {
+          "abstain": false,
+          "answer_sha": "68d7500706ad",
+          "citations": [
+            "IPCC_AR6_WGI_Chapter11.pdf#p53#3",
+            "IPCC_AR6_WGI_Chapter11.pdf#p54#3"
+          ]
+        },
+        {
+          "abstain": false,
+          "answer_sha": "ab771c45e514",
+          "citations": [
+            "IPCC_AR6_WGI_Chapter11.pdf#p53#3",
+            "IPCC_AR6_WGI_Chapter11.pdf#p54#3"
+          ]
+        },
+        {
+          "abstain": false,
+          "answer_sha": "fa6c14645b90",
+          "citations": [
+            "IPCC_AR6_WGI_Chapter11.pdf#p53#3",
+            "IPCC_AR6_WGI_Chapter11.pdf#p54#3",
+            "IPCC_AR6_WGI_Chapter11.pdf#p6#3"
+          ]
+        }
+      ],
+      "errors": []
+    },
+    "gemini-2.5-flash": {
+      "repeats": 3,
+      "distinct_outcomes": 1,
+      "deterministic": true,
+      "outcomes": [
+        {
+          "abstain": false,
+          "answer_sha": "7fd529a52ef4",
+          "citations": [
+            "IPCC_AR6_WGI_Chapter11.pdf#p52#1",
+            "IPCC_AR6_WGI_Chapter11.pdf#p53#3",
+            "IPCC_AR6_WGI_Chapter11.pdf#p54#3",
+            "IPCC_AR6_WGI_Chapter11.pdf#p6#1",
+            "IPCC_AR6_WGI_Chapter11.pdf#p6#3",
+            "IPCC_AR6_WGI_Chapter12.pdf#p92#2"
+          ]
+        }
+      ],
+      "errors": []
+    }
+  }
+}

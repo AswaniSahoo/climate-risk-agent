@@ -1,0 +1,87 @@
+{
+  "run_utc": "2026-07-22T19:49:15+00:00",
+  "eval_set": "dev",
+  "generate_model": "gemini-3.6-flash",
+  "embed_model": "gemini-embedding-2",
+  "telemetry": {
+    "generate": {
+      "calls": 40,
+      "cache_hits": 0,
+      "failures": 0,
+      "retries": 1,
+      "p50_ms": 5932.54,
+      "p95_ms": 14833.79,
+      "est_cost_usd": 0.051373
+    }
+  },
+  "gold_set_sha256_file": "evals/gold_set.sha256",
+  "top_k": 8,
+  "matrix": {
+    "correct_answer": [
+      "DR-01",
+      "DR-02",
+      "MP-01",
+      "MP-02",
+      "MP-03",
+      "MP-04",
+      "MP-06",
+      "MP-08",
+      "MP-09",
+      "MP-10",
+      "RT-01",
+      "RT-02",
+      "RT-03",
+      "RT-04",
+      "RT-05",
+      "RT-06",
+      "RT-08",
+      "RT-09",
+      "RT-10",
+      "SP-01",
+      "SP-02",
+      "SP-03",
+      "SP-04",
+      "SP-05",
+      "SP-06",
+      "SP-07",
+      "SP-08",
+      "SP-09",
+      "SP-10",
+      "SP-11",
+      "SP-12"
+    ],
+    "correct_refuse": [
+      "OOC-01",
+      "OOC-02",
+      "OOC-03",
+      "OSH-01",
+      "OSH-02",
+      "OSH-03",
+      "OSH-04",
+      "PI-01",
+      "PI-02",
+      "PI-03",
+      "PI-04"
+    ],
+    "false_refuse": [
+      "MP-05",
+      "MP-07",
+      "RT-07"
+    ]
+  },
+  "citation_validity": {
+    "passed": 29,
+    "total": 31
+  },
+  "numeric_provenance": {
+    "passed": 25,
+    "total": 31
+  },
+  "grounded_refusals": {
+    "passed": 3,
+    "total": 4
+  },
+  "claim_judge": null,
+  "scope_guard_refusals": 4,
+  "errors": []
+}

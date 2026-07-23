@@ -1,0 +1,88 @@
+{
+  "run_utc": "2026-07-22T18:03:58+00:00",
+  "eval_set": "dev",
+  "generate_model": "gemini-3.5-flash",
+  "embed_model": "gemini-embedding-2",
+  "telemetry": {
+    "generate": {
+      "calls": 40,
+      "cache_hits": 0,
+      "failures": 1,
+      "retries": 2,
+      "p50_ms": 8922.98,
+      "p95_ms": 111981.79,
+      "est_cost_usd": 0.0
+    }
+  },
+  "gold_set_sha256_file": "evals/gold_set.sha256",
+  "top_k": 8,
+  "matrix": {
+    "correct_answer": [
+      "DR-01",
+      "DR-02",
+      "MP-01",
+      "MP-02",
+      "MP-03",
+      "MP-04",
+      "MP-06",
+      "MP-08",
+      "MP-09",
+      "MP-10",
+      "RT-01",
+      "RT-02",
+      "RT-03",
+      "RT-04",
+      "RT-05",
+      "RT-06",
+      "RT-08",
+      "RT-09",
+      "RT-10",
+      "SP-01",
+      "SP-02",
+      "SP-03",
+      "SP-04",
+      "SP-05",
+      "SP-07",
+      "SP-08",
+      "SP-09",
+      "SP-10",
+      "SP-11",
+      "SP-12"
+    ],
+    "correct_refuse": [
+      "OOC-01",
+      "OOC-02",
+      "OOC-03",
+      "OSH-01",
+      "OSH-02",
+      "OSH-03",
+      "OSH-04",
+      "PI-01",
+      "PI-02",
+      "PI-03",
+      "PI-04"
+    ],
+    "false_refuse": [
+      "MP-05",
+      "MP-07",
+      "RT-07"
+    ]
+  },
+  "citation_validity": {
+    "passed": 28,
+    "total": 30
+  },
+  "numeric_provenance": {
+    "passed": 21,
+    "total": 30
+  },
+  "grounded_refusals": {
+    "passed": 3,
+    "total": 4
+  },
+  "claim_judge": null,
+  "scope_guard_refusals": 4,
+  "errors": [
+    "SP-06: Gemini call failed: 504 DEADLINE_EXCEEDED. {'error': {'code': 504, 'message': 'Deadline expired before operation could complete.', 'status': 'DEADLINE_EXCEEDED'}}"
+  ]
+}
