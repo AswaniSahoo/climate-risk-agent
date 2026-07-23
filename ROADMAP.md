@@ -19,10 +19,14 @@
 - [x] Eval v2: held-out 105-question test set (`evals/gold_set_v2.json`) split from the 45-question dev set, with an exposure-count protocol — test-set headline R@3 87% / @5 91% / @10 96%, zero false answers
 - [x] Structured logging + ruff/mypy in CI + committed eval-output artifacts (`evals/results/`)
 - [x] Live demo deployed on Google Cloud Run: https://climate-risk-agent-714882950125.us-central1.run.app/
+- [x] Model-selection ADR ([adr/0001](adr/0001-answering-model-selection.md)): dev-set bake-off across gemini-2.5/3.5/3.6-flash, prompt ablation, and a determinism probe; every eval artifact now records the model that produced it
 
-## Next
+## Next (ranked)
 
+- [ ] **Demo latency: 219 s → <15 s warm.** Bake pre-computed chunks into the image (saves ~2 min cold parse), fix the Dockerfile polygon re-download, cache the GEV fit, `--min-instances=1`. Full breakdown + order in `docs/DEBT.md`. **Do before showing any employer.**
 - [ ] Semantic/LLM scope guard behind the lexical v1 gate (close the paraphrase gap)
 - [ ] Automate claim-level entailment checking in the release gate (currently page-level)
 - [ ] Climatology-conditioned risk levels to replace the Day-1 fixed thresholds in `agent/graph.py`
 - [ ] Lift the weakest retrieval slices (regional-table 77%, premise-injection 59% on the test set)
+- [ ] Determinism: generation is not reproducible at temp 0 (measured). If reproducible evals matter, pin a seed where the API allows, or report metrics as a distribution over N runs rather than a point value
+- [ ] Revisit a 3.x model with `thinking_level=MINIMAL/LOW` (untested; could beat 2.5 on tail latency without the erratic abstention)

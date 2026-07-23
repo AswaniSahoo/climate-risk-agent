@@ -27,12 +27,21 @@ RUN uv sync --frozen --no-dev
 # data/ context copy that also carries the embedding cache).
 RUN uv run python -m scripts.download_ipcc
 
-# Bake the AR6 region polygons (~1 MB) so lat/lon->region works offline at runtime.
-RUN uv run python -c "from tools.ar6_regions import _land_regions; _land_regions()"
+# Pre-compute the chunk cache. Parsing 439 PDF pages into 2730 chunks costs
+# ~53 s and used to run on EVERY cold container, dominating the first response
+# (measured 219 s end-to-end). Baking it makes that step 0.05 s at runtime.
+RUN uv run python -c "from rag.corpus import build_chunk_cache; build_chunk_cache()"
 
 # Cloud Run (and HF Spaces Docker SDK) route traffic to this port; runs as non-root.
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
+
+# Bake the AR6 region polygons (~1 MB) AFTER the USER switch. pooch caches into
+# the CURRENT user's home, so baking as root put them in /root/.cache where
+# appuser cannot read them -- the container then silently re-downloaded the zip
+# from GitHub on the first request (observed in Cloud Run logs). Baking here
+# keeps lat/lon->region genuinely offline and off the request critical path.
+RUN uv run python -c "from tools.ar6_regions import _land_regions; _land_regions()"
 EXPOSE 7860
 
 CMD ["uv", "run", "streamlit", "run", "ui/app.py", \
