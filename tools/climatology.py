@@ -100,9 +100,14 @@ def annual_maxima(
 # (4 free parameters on a handful of points); we keep the stationary fit.
 _MIN_YEARS_FOR_TREND = 20
 
-# 200 bootstrap refits keeps the first (uncached) call ~7 s; the 90% band is
-# stable well below that.
-_TREND_N_BOOT = 200
+# Bootstrap refits per fit. MEASURED cost/precision tradeoff on a 63-year
+# series (2026-07-23): n=300 -> 27.7 s, 100yr CI 195-330; n=150 -> 12.9 s,
+# CI 193-319 (within a few percent); n=50 -> 5.3 s but CI 186-280, visibly
+# too narrow in the tail. So 150 is the floor that preserves the band.
+# Default stays at the higher value so published numbers keep full precision;
+# an interactive deploy opts into the cheaper one via CRG_BOOTSTRAP_N.
+_N_BOOT = int(os.environ.get("CRG_BOOTSTRAP_N", "300"))
+_TREND_N_BOOT = int(os.environ.get("CRG_BOOTSTRAP_N", "200"))
 
 
 def _reported_levels(
@@ -131,7 +136,7 @@ def _reported_levels(
             fit, at=years[-1], return_periods=return_periods, n_boot=_TREND_N_BOOT,
         )
     else:
-        levels = return_levels_with_ci(maxima, return_periods)
+        levels = return_levels_with_ci(maxima, return_periods, n_boot=_N_BOOT)
     return levels, trend
 
 
@@ -151,7 +156,7 @@ def build_hazard_stat(
         fit = fit_gev_trend(maxima, years)
         levels, trend = _reported_levels(fit, years, maxima, return_periods)
     else:
-        levels, trend = return_levels_with_ci(maxima, return_periods), None
+        levels, trend = return_levels_with_ci(maxima, return_periods, n_boot=_N_BOOT), None
     return HazardStat(
         variable=cfg.daily_var,
         statistic_definition=cfg.statistic_definition,
