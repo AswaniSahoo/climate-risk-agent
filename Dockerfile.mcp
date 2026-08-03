@@ -1,0 +1,18 @@
+# ipcc-rag MCP server image: the app image with a stdio MCP entrypoint.
+#
+# Derived from the application image rather than rebuilt, so the baked IPCC
+# corpus, chunk cache and AR6 polygons are reused instead of downloaded again.
+#
+# Build (app image first):
+#   docker build -t climate-risk-agent .
+#   docker build -f Dockerfile.mcp -t ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0 .
+ARG BASE=climate-risk-agent:latest
+FROM ${BASE}
+
+# Ownership marker the MCP registry verifies. MUST byte-match "name" in
+# server.json, or `mcp-publisher publish` rejects the image.
+LABEL io.modelcontextprotocol.server.name="io.github.aswanisahoo/climate-ipcc-rag"
+
+# stdio transport: stdout carries JSON-RPC, so logs must go to stderr (they do).
+# No EXPOSE and no port: this server is never reachable over the network.
+CMD ["uv", "run", "python", "-m", "tools.ipcc_mcp"]

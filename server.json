@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.aswanisahoo/climate-ipcc-rag",
+  "title": "IPCC AR6 Climate Retrieval",
+  "description": "Search IPCC AR6 WG1 and answer with page-level citations, or refuse when unsupported.",
+  "repository": {
+    "url": "https://github.com/AswaniSahoo/climate-risk-agent",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GEMINI_API_KEY",
+          "description": "AI Studio API key. Either this or the Vertex variables must be set: retrieval is hybrid, so the dense half embeds every query.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "GOOGLE_GENAI_USE_VERTEXAI",
+          "description": "Set to \"true\" to authenticate through Vertex AI with Application Default Credentials instead of an API key.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "GOOGLE_CLOUD_PROJECT",
+          "description": "Google Cloud project id. Required when GOOGLE_GENAI_USE_VERTEXAI is true.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
