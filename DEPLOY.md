@@ -94,6 +94,62 @@ clean) deploys directly:
    ⚠️ The 4.76 GB image may exceed the Space's storage ceiling — slim it with a
    multi-stage build first (see docs/DEBT.md) if the build is rejected.
 
+## Publish the MCP server to the official MCP registry
+
+The registry stores metadata only, so the image has to exist first. `server.json`
+in the repo root is written and validated against the published schema, and the
+ownership label lives in `Dockerfile.mcp`. Every step below needs your accounts,
+so all of it is manual.
+
+1. Build the app image, then the MCP image derived from it (the derived image
+   reuses the baked corpus, chunk cache and AR6 polygons):
+
+```bash
+docker build -t climate-risk-agent .
+docker build -f Dockerfile.mcp -t ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0 .
+```
+
+2. Push to GitHub Container Registry. Needs a token with `write:packages`, and
+   the package must then be made public, or the registry cannot read the label.
+
+```bash
+echo $GITHUB_TOKEN | docker login ghcr.io -u AswaniSahoo --password-stdin
+docker push ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0
+```
+
+3. Install `mcp-publisher` (Windows):
+
+```powershell
+$arch = if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq "Arm64") { "arm64" } else { "amd64" }
+Invoke-WebRequest -Uri "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_windows_$arch.tar.gz" -OutFile mcp-publisher.tar.gz
+tar xf mcp-publisher.tar.gz mcp-publisher.exe
+```
+
+4. Authenticate and publish. `login` is a device-code flow, so it has to be run
+   interactively by you:
+
+```bash
+mcp-publisher login github
+mcp-publisher publish
+```
+
+5. Verify:
+
+```bash
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.aswanisahoo/climate-ipcc-rag"
+```
+
+Notes:
+
+- The namespace must match your GitHub username. `server.json` uses
+  `io.github.aswanisahoo/...`; if publish rejects it, run `mcp-publisher init`
+  and copy the name it generates.
+- `LABEL io.modelcontextprotocol.server.name` in `Dockerfile.mcp` must
+  byte-match `name` in `server.json`, or publish fails verification.
+- Only the IPCC server is listed. weather-mcp is a thin Open-Meteo wrapper with
+  many equivalents already in the registry, and publishing it would ship the same
+  multi-GB image to serve two HTTP calls. The same pattern applies if you want it.
+
 ## Release gate (evals are NOT in CI — by decision)
 
 CI runs the unit/integration tests (corpus-dependent ones auto-skip).

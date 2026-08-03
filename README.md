@@ -79,7 +79,7 @@ Refusals are scored on a 4-cell confusion matrix (correct answer, correct refusa
 - Async FastAPI service (`POST /report`) with per-request API-key access control and a `/metrics` endpoint.
 - Two MCP servers (weather, IPCC RAG) exposing the same tools over the Model Context Protocol.
 - Disk-backed answer cache for repeat queries.
-- Docker image, plus CI running ruff, mypy, and pytest. 240 tests green.
+- Docker image, plus CI running ruff, mypy, and pytest. 246 tests green.
 
 ## Run it
 
@@ -96,6 +96,49 @@ docker run -p 7860:7860 -e GEMINI_API_KEY=... climate-risk-agent
 ```
 
 The [live demo](https://climate-risk-agent-714882950125.us-central1.run.app/) runs on Google Cloud Run. For deployment (Cloud Run, or local Docker and other hosts), see [DEPLOY.md](DEPLOY.md).
+
+## Use the MCP servers
+
+Both servers speak stdio. From the repo root, point any MCP client at them:
+
+```json
+{
+  "mcpServers": {
+    "climate-weather": {
+      "command": "uv",
+      "args": ["run", "--no-sync", "python", "-m", "tools.weather_mcp"]
+    },
+    "climate-ipcc-rag": {
+      "command": "uv",
+      "args": ["run", "--no-sync", "python", "-m", "tools.ipcc_mcp"]
+    }
+  }
+}
+```
+
+| Server | Tools |
+| --- | --- |
+| climate-weather | `forecast`, `hazard_climatology` |
+| climate-ipcc-rag | `search_ipcc`, `answer_ipcc` |
+
+Both servers target MCP protocol 2026-07-28 (`mcp` 2.0.0), the current revision.
+Every tool is annotated read-only with a human-readable title and an open- or
+closed-world hint, publishes an `outputSchema`, and is listed in a deterministic
+order. Two tests boot each server as a real subprocess and speak the protocol to
+it, rather than calling the tool functions in-process.
+
+Retrieval is hybrid, so both IPCC tools embed the query and need credentials in
+the server process: either `GOOGLE_GENAI_USE_VERTEXAI=true` with
+`GOOGLE_CLOUD_PROJECT`, or `GEMINI_API_KEY`.
+
+A client does not hand the server your shell. It passes a short allow-list of
+variables (`PATH`, `APPDATA`, `TEMP`, ...) so that a server cannot harvest your
+secrets, which means a client-launched server starts with no credentials. Supply
+them either in the client's own `env` block, or by copying `.env.example` to
+`.env` -- the IPCC server reads that at startup and never overrides a value the
+client did pass.
+
+To explore the tools by hand: `uv run mcp dev tools/ipcc_mcp.py`.
 
 ## Tech stack
 
