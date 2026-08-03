@@ -121,6 +121,8 @@ Both servers speak stdio. From the repo root, point any MCP client at them:
 | climate-weather | `forecast`, `hazard_climatology` |
 | climate-ipcc-rag | `search_ipcc`, `answer_ipcc` |
 
+![search_ipcc called from the MCP Inspector, returning IPCC AR6 excerpts with source file and page number](assets/mcp-inspector-search.png)
+
 Both servers target MCP protocol 2026-07-28 (`mcp` 2.0.0), the current revision.
 Every tool is annotated read-only with a human-readable title and an open- or
 closed-world hint, publishes an `outputSchema`, and is listed in a deterministic
