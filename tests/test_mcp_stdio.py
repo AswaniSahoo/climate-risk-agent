@@ -6,7 +6,7 @@ still passes them. These spawn the process and do a real stdio handshake.
 
 Deliberately stops at list_tools: calling a tool needs network + credentials.
 The credential path that once hung this server (google-auth shelling out to the
-`gcloud` CLI, whose child never returns once FastMCP owns stdio) is pinned by
+`gcloud` CLI, whose child never returns once the server owns stdio) is pinned by
 tests/test_gemini_client.py instead.
 """
 import asyncio
