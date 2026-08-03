@@ -87,3 +87,83 @@ def test_non_rate_limit_error_fails_fast_and_typed(monkeypatch):
 
     with pytest.raises(gc.GeminiError, match="invalid argument"):
         gc._with_retry(broken, op="test", model="m")
+
+
+def test_vertex_credentials_resolve_once_and_are_passed_to_every_client(monkeypatch):
+    """ADC must resolve ONCE per process, never inside a request.
+
+    google-auth discovers the project by shelling out to the `gcloud` CLI. Inside
+    an MCP stdio server that child process never returns, so resolving auth per
+    client -- and clients are per-thread -- hangs the server forever (measured:
+    search_ipcc hung >300s over stdio, stuck in _run_subprocess_ignore_stderr).
+    Resolving once and handing the credentials to every client keeps gcloud out
+    of the request path entirely.
+    """
+    import threading
+
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+    monkeypatch.setattr(gc, "_adc_file", lambda: None)  # force the default() branch
+
+    resolved = []
+    sentinel = object()
+
+    def fake_default(**kwargs):
+        resolved.append(kwargs)
+        return sentinel, "test-project"
+
+    captured = []
+
+    def fake_client(**kwargs):
+        captured.append(kwargs)
+        return object()
+
+    monkeypatch.setattr("google.auth.default", fake_default)
+    monkeypatch.setattr("google.genai.Client", fake_client)
+
+    barrier = threading.Barrier(3)
+
+    def build():
+        barrier.wait()
+        gc._new_client()
+
+    threads = [threading.Thread(target=build) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(resolved) == 1, f"ADC resolved {len(resolved)}x; must be once per process"
+    assert len(captured) == 3
+    assert all(kw.get("credentials") is sentinel for kw in captured), (
+        "every client must receive the pre-resolved credentials, else the SDK "
+        "calls load_auth() -> gcloud subprocess on that thread"
+    )
+
+
+def test_adc_file_is_read_directly_never_via_gcloud_subprocess(monkeypatch, tmp_path):
+    """When an ADC file exists, google.auth.default() must not be called.
+
+    default() is the function that shells out to `gcloud` for the project. The
+    file gives us the same credentials with no subprocess, and the project comes
+    from GOOGLE_CLOUD_PROJECT, so there is nothing left for default() to do.
+    """
+    adc = tmp_path / "application_default_credentials.json"
+    adc.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(adc))
+    sentinel = object()
+    loaded = []
+
+    def boom(**kwargs):
+        raise AssertionError("google.auth.default() called - that can shell out to gcloud")
+
+    def fake_load(filename, **kwargs):
+        loaded.append(filename)
+        return sentinel, None
+
+    monkeypatch.setattr("google.auth.default", boom)
+    monkeypatch.setattr("google.auth.load_credentials_from_file", fake_load)
+
+    assert gc._vertex_credentials() is sentinel
+    assert loaded == [str(adc)]

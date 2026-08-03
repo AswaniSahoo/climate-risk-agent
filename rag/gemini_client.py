@@ -29,6 +29,50 @@ _local = threading.local()  # one SDK client per thread (shared clients get clos
 # under concurrent use — measured: "Cannot send a request, as the client has been closed")
 
 
+_auth_lock = threading.Lock()
+_vertex_creds = None  # resolved ONCE per process, shared by every thread's client
+
+
+def _vertex_credentials():
+    """Resolve ADC once per process, WITHOUT letting google-auth shell out.
+
+    google.auth.default() discovers the project by running the `gcloud` CLI
+    whenever the ADC file carries no project of its own. That child process
+    never returns once an MCP stdio server owns stdio, so the tool call hangs
+    forever (measured: search_ipcc stuck >300s in _run_subprocess_ignore_stderr,
+    before any HTTP request, so the 120s client timeout never fires). Reading
+    the ADC file directly yields the same credentials with no subprocess at all;
+    the project comes from GOOGLE_CLOUD_PROJECT, which we hand to the client
+    anyway. Shared across threads so per-thread clients never re-resolve.
+    """
+    global _vertex_creds
+    with _auth_lock:
+        if _vertex_creds is None:
+            import google.auth
+
+            scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+            adc_file = _adc_file()
+            if adc_file:
+                _vertex_creds, _ = google.auth.load_credentials_from_file(adc_file, scopes=scopes)
+            else:
+                _vertex_creds, _ = google.auth.default(scopes=scopes)
+    return _vertex_creds
+
+
+def _adc_file() -> str | None:
+    """Path to the Application Default Credentials JSON, or None if unreadable."""
+    explicit = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    try:
+        from google.auth import _cloud_sdk
+
+        path = _cloud_sdk.get_application_default_credentials_path()
+    except Exception:  # private helper moved/renamed -> fall back to default()
+        return None
+    return path if os.path.isfile(path) else None
+
+
 class GeminiError(RuntimeError):
     """Raised when a Gemini call fails (auth, quota exhausted after retries, API)."""
 
@@ -49,6 +93,9 @@ def _new_client():
             vertexai=True,
             project=project,
             location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
+            # Explicit, or the SDK resolves ADC per client -> gcloud subprocess
+            # per thread -> hangs forever under an MCP stdio server.
+            credentials=_vertex_credentials(),
             http_options=http_options,
         )
     if os.environ.get("GEMINI_API_KEY"):
@@ -66,8 +113,11 @@ def _client():
 
 
 def _reset_clients() -> None:
-    """Drop this thread's cached client (tests; env changes)."""
+    """Drop this thread's cached client and the shared credentials (tests; env changes)."""
+    global _vertex_creds
     _local.__dict__.clear()
+    with _auth_lock:
+        _vertex_creds = None
 
 
 def _is_rate_limit(exc: Exception) -> bool:
