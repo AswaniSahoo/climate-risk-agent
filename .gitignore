@@ -11,6 +11,8 @@ dist/
 venv/
 .env
 .env.*
+# the template is meant to be public; real .env files stay ignored
+!.env.example
 
 # uv (keep uv.lock tracked)
 # (no uv cache to ignore here)

@@ -41,17 +41,14 @@ async def test_weather_server_exposes_both_tools():
 
 
 def _parsed(result) -> list[dict]:
-    """Normalize call_tool output to a list of dicts.
+    """Normalize a CallToolResult to a list of dicts.
 
-    FastMCP returns either list[TextContent] or (list[TextContent], structured)
-    depending on the tool's return shape — accept both.
+    SDK v2 hands back a fully constructed CallToolResult (no auto-wrapping):
+    one TextContent block per returned item, plus `structured_content` carrying
+    the same data typed.
     """
-    if isinstance(result, tuple):
-        result = result[0]
-    blocks = [json.loads(item.text) for item in result]
-    if len(blocks) == 1 and isinstance(blocks[0], list):
-        return blocks[0]
-    return blocks
+    assert result.is_error is False, result.content
+    return [json.loads(block.text) for block in result.content]
 
 
 async def test_ipcc_search_returns_page_cited_excerpts():
@@ -83,3 +80,43 @@ async def test_ipcc_answer_delegates_to_guarded_answerer(monkeypatch):
     assert payload["abstain"] is False
     assert payload["citations"] == ["doc.pdf#p5#0"]
     assert "allowed_ids" not in payload
+
+
+async def test_every_tool_is_annotated_as_read_only():
+    """Clients build their safety guardrails from annotations.
+
+    An unannotated tool has to be treated as potentially destructive, so a
+    client may gate it behind a confirmation prompt. All four of ours only read.
+    """
+    for server in (weather_mcp.mcp, ipcc_mcp.mcp):
+        for tool in await server.list_tools():
+            assert tool.annotations is not None, f"{tool.name} has no annotations"
+            assert tool.annotations.read_only_hint is True, f"{tool.name} not marked read-only"
+            assert tool.annotations.title, f"{tool.name} has no human-readable title"
+
+
+async def test_open_world_hint_matches_whether_the_tool_leaves_the_corpus():
+    """forecast and hazard_climatology call live external APIs (open world).
+    The IPCC tools answer from a fixed corpus shipped with the repo (closed)."""
+    weather = {t.name: t for t in await weather_mcp.mcp.list_tools()}
+    ipcc = {t.name: t for t in await ipcc_mcp.mcp.list_tools()}
+    assert weather["forecast"].annotations.open_world_hint is True
+    assert weather["hazard_climatology"].annotations.open_world_hint is True
+    assert ipcc["search_ipcc"].annotations.open_world_hint is False
+    assert ipcc["answer_ipcc"].annotations.open_world_hint is False
+
+
+async def test_answer_ipcc_publishes_an_output_schema():
+    """A bare dict return leaves clients with nothing to validate against."""
+    [tool] = [t for t in await ipcc_mcp.mcp.list_tools() if t.name == "answer_ipcc"]
+    assert tool.output_schema, "answer_ipcc must declare an output_schema"
+    assert "allowed_ids" not in (tool.output_schema.get("properties") or {})
+
+
+async def test_tools_are_listed_in_a_deterministic_order():
+    """MCP 2026-07-28 says servers SHOULD return tools/list in a deterministic
+    order, so clients can cache the list and LLM prompt caches stay warm."""
+    for server in (weather_mcp.mcp, ipcc_mcp.mcp):
+        first = [t.name for t in await server.list_tools()]
+        second = [t.name for t in await server.list_tools()]
+        assert first == second
