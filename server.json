@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.aswanisahoo/climate-ipcc-rag",
+  "name": "io.github.AswaniSahoo/climate-ipcc-rag",
   "title": "IPCC AR6 Climate Retrieval",
   "description": "Search IPCC AR6 WG1 and answer with page-level citations, or refuse when unsupported.",
   "repository": {
