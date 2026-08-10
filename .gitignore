@@ -39,3 +39,7 @@ evals/authoring/*.txt
 evals/authoring/PROGRESS_*.md
 evals/authoring/build_v2*.py
 evals/authoring/__pycache__/
+
+# MCP publisher tool (downloaded binary, not source)
+mcp-publisher.exe
+mcp-publisher.tar.gz
