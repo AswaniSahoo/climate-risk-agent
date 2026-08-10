@@ -142,6 +142,18 @@ client did pass.
 
 To explore the tools by hand: `uv run mcp dev tools/ipcc_mcp.py`.
 
+### Published on the official MCP registry
+
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.AswaniSahoo/climate--ipcc--rag-blue)](https://registry.modelcontextprotocol.io)
+
+The IPCC RAG server is published on the
+[official MCP registry](https://registry.modelcontextprotocol.io) as
+`io.github.AswaniSahoo/climate-ipcc-rag` (v0.1.0), backed by a public OCI image
+on GHCR (`ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0`). Any MCP client that
+supports Docker/OCI transport can install it directly from the registry.
+
+![IPCC RAG MCP server listed on the official MCP registry with status Active, showing title, description, and linked repository](assets/mcp-registry-listing.png)
+
 ## Tech stack
 
 Python, LangGraph, Google Gemini 2.5 Flash (generation) + gemini-embedding-2 (dense) on Vertex AI (global endpoint), BM25 + dense hybrid retrieval (RRF fusion), Pydantic, FastAPI, Streamlit, MCP Python SDK, scipy, Docker, GitHub Actions.
