@@ -136,13 +136,13 @@ mcp-publisher publish
 5. Verify:
 
 ```bash
-curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.aswanisahoo/climate-ipcc-rag"
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.AswaniSahoo/climate-ipcc-rag"
 ```
 
 Notes:
 
 - The namespace must match your GitHub username. `server.json` uses
-  `io.github.aswanisahoo/...`; if publish rejects it, run `mcp-publisher init`
+  `io.github.AswaniSahoo/...`; if publish rejects it, run `mcp-publisher init`
   and copy the name it generates.
 - `LABEL io.modelcontextprotocol.server.name` in `Dockerfile.mcp` must
   byte-match `name` in `server.json`, or publish fails verification.
