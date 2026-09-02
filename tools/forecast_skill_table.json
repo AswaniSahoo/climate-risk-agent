@@ -1,0 +1,350 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "api": "https://previous-runs-api.open-meteo.com/v1/forecast",
+    "api_docs": "https://open-meteo.com/en/docs/previous-runs-api",
+    "model": "gfs_global",
+    "model_note": "Pinned to a single model on purpose. The API default best_match, and any *_seamless blend, stitch different underlying models across lead offsets and produce lead-independent biases that are model differences, not forecast error (measured: Delhi wind_speed_10m best_match bias -5.26 km/h at day 1 vs -0.11 at day 7). The agent's own tools/forecast.py calls best_match, so this table is a GFS-global approximation of the skill the agent actually delivers.",
+    "truth_series": "day-0 model run (the bare variable name, equivalent to the live Forecast API). NOT station observations and NOT ERA5, so these are run-to-run consistency errors and a lower bound on true forecast error.",
+    "date_range": {
+      "start": "2024-01-01",
+      "end": "2025-12-31"
+    },
+    "timezone": "auto (local days, matching tools/forecast.py)",
+    "city_count": 13,
+    "cities": [
+      "Rourkela",
+      "Mumbai",
+      "Dhaka",
+      "Jakarta",
+      "Tokyo",
+      "Berlin",
+      "Paris",
+      "Athens",
+      "Lagos",
+      "Cape Town",
+      "Houston",
+      "Sao Paulo",
+      "Sydney"
+    ],
+    "city_selection": "every 2th entry of scripts/prewarm_cities.json (25 cities, ordered by region) -> 13 requested, 13 with usable data. Thinned because the full 25-city 2-year run costs ~4,200 weighted API calls against a 5,000/hour free-tier ceiling, leaving no room to retry.",
+    "requests_attempted": 312,
+    "requests_failed": 0,
+    "hourly_repeat_fraction_note": "Fraction of consecutive hours holding an identical value, measured per lead day. GFS emits hourly fields to forecast hour 120 and 3-hourly beyond it, so this jumps at lead day 5. The step in MAE/bias at day 5 is therefore partly output resolution, not atmospheric predictability. Precipitation is worst affected: daily sums at lead days 5-7 are systematically low because the coarser accumulation is spread back over hours. Read those rows as delivered-product error, not as a skill cliff.",
+    "extreme_percentile": 95.0,
+    "min_extreme_days": 5,
+    "generated_at": "2026-09-02T10:09:11+00:00",
+    "script": "scripts/measure_forecast_skill.py",
+    "script_sha256_12": "fec6989be9ab"
+  },
+  "hazards": {
+    "temperature_2m_max": {
+      "unit": "\u00b0C",
+      "api_variable": "temperature_2m",
+      "daily_aggregation": "max",
+      "lead_days": {
+        "1": {
+          "mae": 0.6959161624891962,
+          "bias": 0.05423509075194469,
+          "rmse": 0.9889274635128138,
+          "extreme_hit_rate": 0.8466666666666667,
+          "n_days": 9256,
+          "n_extreme_days": 450,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.05619435533287676
+        },
+        "2": {
+          "mae": 0.9549496916585525,
+          "bias": 0.06398355512279563,
+          "rmse": 1.320920801781318,
+          "extreme_hit_rate": 0.7544642857142857,
+          "n_days": 9243,
+          "n_extreme_days": 448,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.056647956973722206
+        },
+        "3": {
+          "mae": 1.1486240520043336,
+          "bias": 0.10145178764897077,
+          "rmse": 1.579826094081443,
+          "extreme_hit_rate": 0.7085201793721974,
+          "n_days": 9230,
+          "n_extreme_days": 446,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.05715253930959696
+        },
+        "4": {
+          "mae": 1.3393294998372574,
+          "bias": 0.12489964196593255,
+          "rmse": 1.8447530489025872,
+          "extreme_hit_rate": 0.6606741573033708,
+          "n_days": 9217,
+          "n_extreme_days": 445,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.05673550278722942
+        },
+        "5": {
+          "mae": 1.5378313776618862,
+          "bias": 0.04589308996088661,
+          "rmse": 2.1005374821786384,
+          "extreme_hit_rate": 0.5945945945945946,
+          "n_days": 9204,
+          "n_extreme_days": 444,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.054953420089172436
+        },
+        "6": {
+          "mae": 1.7603198781416605,
+          "bias": 0.09229681209879234,
+          "rmse": 2.407277120664799,
+          "extreme_hit_rate": 0.5271493212669683,
+          "n_days": 9191,
+          "n_extreme_days": 442,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.05453208944387977
+        },
+        "7": {
+          "mae": 1.9283286118980172,
+          "bias": 0.15332316408803662,
+          "rmse": 2.667575660429999,
+          "extreme_hit_rate": 0.47045454545454546,
+          "n_days": 9178,
+          "n_extreme_days": 440,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.05480479115925697
+        }
+      }
+    },
+    "precipitation_sum": {
+      "unit": "mm",
+      "api_variable": "precipitation",
+      "daily_aggregation": "sum",
+      "lead_days": {
+        "1": {
+          "mae": 2.0330920484010373,
+          "bias": -0.2278846153846154,
+          "rmse": 6.465967435324422,
+          "extreme_hit_rate": 0.5344827586206896,
+          "n_days": 9256,
+          "n_extreme_days": 464,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.8246539667663916
+        },
+        "2": {
+          "mae": 2.5246997728010387,
+          "bias": -0.28875906091095965,
+          "rmse": 7.942486653024605,
+          "extreme_hit_rate": 0.42116630669546434,
+          "n_days": 9243,
+          "n_extreme_days": 463,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.8252102584464337
+        },
+        "3": {
+          "mae": 2.8221560130010834,
+          "bias": -0.2985590465872156,
+          "rmse": 8.747190912653343,
+          "extreme_hit_rate": 0.3484848484848485,
+          "n_days": 9230,
+          "n_extreme_days": 462,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.820102114585216
+        },
+        "4": {
+          "mae": 3.0545947705327112,
+          "bias": -0.19542150374308342,
+          "rmse": 8.957864429739166,
+          "extreme_hit_rate": 0.3318872017353579,
+          "n_days": 9217,
+          "n_extreme_days": 461,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.8175360167957721
+        },
+        "5": {
+          "mae": 2.8776618861364622,
+          "bias": -1.9125380269448067,
+          "rmse": 8.632035327679393,
+          "extreme_hit_rate": 0.058695652173913045,
+          "n_days": 9204,
+          "n_extreme_days": 460,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.9061741037445173
+        },
+        "6": {
+          "mae": 2.986040691981286,
+          "bias": -2.2385268197149384,
+          "rmse": 8.86686186064685,
+          "extreme_hit_rate": 0.017467248908296942,
+          "n_days": 9191,
+          "n_extreme_days": 458,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.9159330985915493
+        },
+        "7": {
+          "mae": 3.0262257572455873,
+          "bias": -2.223959468293746,
+          "rmse": 8.897397341406123,
+          "extreme_hit_rate": 0.034934497816593885,
+          "n_days": 9178,
+          "n_extreme_days": 458,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.9139508888000291
+        }
+      }
+    },
+    "wind_speed_10m_max": {
+      "unit": "km/h",
+      "api_variable": "wind_speed_10m",
+      "daily_aggregation": "max",
+      "lead_days": {
+        "1": {
+          "mae": 2.160252808988764,
+          "bias": 0.41496326707000863,
+          "rmse": 3.3002826874023237,
+          "extreme_hit_rate": 0.7093275488069414,
+          "n_days": 9256,
+          "n_extreme_days": 461,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.031728724362902354
+        },
+        "2": {
+          "mae": 2.674835010278048,
+          "bias": 0.3654116628800173,
+          "rmse": 3.960690896686801,
+          "extreme_hit_rate": 0.5900216919739696,
+          "n_days": 9243,
+          "n_extreme_days": 461,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.03168315044758879
+        },
+        "3": {
+          "mae": 3.057139761646804,
+          "bias": 0.4427518959913326,
+          "rmse": 4.447482397376398,
+          "extreme_hit_rate": 0.5689277899343544,
+          "n_days": 9230,
+          "n_extreme_days": 457,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.031727814928610154
+        },
+        "4": {
+          "mae": 3.5456330693284146,
+          "bias": 0.6175002712379299,
+          "rmse": 5.152088661525329,
+          "extreme_hit_rate": 0.5220264317180616,
+          "n_days": 9217,
+          "n_extreme_days": 454,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.03141062766958662
+        },
+        "5": {
+          "mae": 3.9290199913081265,
+          "bias": 0.06430899608865707,
+          "rmse": 5.564343220141449,
+          "extreme_hit_rate": 0.39514348785871967,
+          "n_days": 9204,
+          "n_extreme_days": 453,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.04017290752890854
+        },
+        "6": {
+          "mae": 4.3313132412142314,
+          "bias": 0.1743988684582744,
+          "rmse": 6.043525531397736,
+          "extreme_hit_rate": 0.32666666666666666,
+          "n_days": 9191,
+          "n_extreme_days": 450,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.040542870625816754
+        },
+        "7": {
+          "mae": 4.682784920461974,
+          "bias": 0.49200261494879055,
+          "rmse": 6.628023636022845,
+          "extreme_hit_rate": 0.29398663697104677,
+          "n_days": 9178,
+          "n_extreme_days": 449,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.04051855756297939
+        }
+      }
+    },
+    "wind_gusts_10m_max": {
+      "unit": "km/h",
+      "api_variable": "wind_gusts_10m",
+      "daily_aggregation": "max",
+      "lead_days": {
+        "1": {
+          "mae": 3.4730445116681072,
+          "bias": 0.7472882454624027,
+          "rmse": 5.065872370888661,
+          "extreme_hit_rate": 0.6865342163355408,
+          "n_days": 9256,
+          "n_extreme_days": 453,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.07113506109649281
+        },
+        "2": {
+          "mae": 4.433928378232176,
+          "bias": 0.7394136102996863,
+          "rmse": 6.316982258094048,
+          "extreme_hit_rate": 0.6247240618101545,
+          "n_days": 9243,
+          "n_extreme_days": 453,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.07068925064972567
+        },
+        "3": {
+          "mae": 5.338656554712893,
+          "bias": 0.9336728060671724,
+          "rmse": 7.532090681378094,
+          "extreme_hit_rate": 0.5434298440979956,
+          "n_days": 9230,
+          "n_extreme_days": 449,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.06840321706126876
+        },
+        "4": {
+          "mae": 6.0957252902245855,
+          "bias": 1.346891613323207,
+          "rmse": 8.568335486335792,
+          "extreme_hit_rate": 0.5235955056179775,
+          "n_days": 9217,
+          "n_extreme_days": 445,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.06951332078476798
+        },
+        "5": {
+          "mae": 6.762755323772273,
+          "bias": 0.9276618861364625,
+          "rmse": 9.41009298918927,
+          "extreme_hit_rate": 0.42117117117117114,
+          "n_days": 9204,
+          "n_extreme_days": 444,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.08335447855874144
+        },
+        "6": {
+          "mae": 7.625949298226525,
+          "bias": 1.3535088673702536,
+          "rmse": 10.525235075142456,
+          "extreme_hit_rate": 0.35294117647058826,
+          "n_days": 9191,
+          "n_extreme_days": 442,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.08340895890808771
+        },
+        "7": {
+          "mae": 8.259304859446503,
+          "bias": 1.9579973850512093,
+          "rmse": 11.41260676434401,
+          "extreme_hit_rate": 0.3401360544217687,
+          "n_days": 9178,
+          "n_extreme_days": 441,
+          "n_cities": 13,
+          "hourly_repeat_fraction": 0.08273201497691665
+        }
+      }
+    }
+  }
+}

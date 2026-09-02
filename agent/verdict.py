@@ -1,30 +1,19 @@
-"""The risk verdict: severity from the return-level curve, confidence composed.
+"""Composed confidence: how much the report is allowed to trust itself.
 
-Why (evaluator gap #1): absolute thresholds ("50 mm = HIGH") are wrong twice —
-they ignore the location (46 °C is a normal summer day in Rourkela and a
-catastrophe in Berlin) and they ignore the 60+ years of ERA5 climatology this
-system fits. The defensible severity of a forecast peak is HOW RARE it is at
-that location, which is exactly what a GEV return-level curve encodes
-(insurance / cat-risk framing):
+Severity is not here. `agent/risk_bands.py` owns it, on the return period of the
+forecast peak at that location (2 / 10 / 50-year edges, interpolated between
+fitted levels and returned with an explanation sentence).
 
-    peak <  10-yr level  -> LOW       (within recent-decadal experience)
-    peak >= 10-yr level  -> MODERATE  (unusual)
-    peak >= 50-yr level  -> HIGH      (rare)
-    peak >= 100-yr level -> SEVERE    (record-class)
-
-Confidence is composed from what actually grounds the report instead of a
-constant: forecast-only reports stay at 0.3; climatology raises it by how
-representative the statistic is of the true local extreme; a cited IPCC answer
-adds a little. Hard ceiling 0.75 — nothing verifies forecast *skill* yet, so
-the system never claims near-certainty.
+Confidence composition is live. It is composed from what actually grounds the
+report instead of a constant: the forecast contributes 0.3 scaled by its
+MEASURED skill at that horizon; climatology raises it by how representative the
+statistic is of the true local extreme; a cited IPCC answer adds a little. Hard
+ceiling 0.75, because none of these three is a verification against what
+actually happened, so the system never claims near-certainty.
 """
 from __future__ import annotations
 
-from agent.contracts import RiskLevel
-from tools.hazard_stats import Representativeness, ReturnLevel
-
-_REQUIRED_PERIODS = (10, 50, 100)
-_PERIOD_TO_LEVEL = {100: RiskLevel.SEVERE, 50: RiskLevel.HIGH, 10: RiskLevel.MODERATE}
+from tools.hazard_stats import Representativeness
 
 # How much trust each representativeness grade adds over the 0.3 forecast base.
 _REPRESENTATIVENESS_BONUS = {
@@ -39,23 +28,42 @@ _IPCC_BONUS = 0.1
 _CEILING = 0.75
 
 
-def level_from_return_periods(peak: float, curve: list[ReturnLevel]) -> RiskLevel:
-    """Map a forecast peak to a RiskLevel by its position on the return-level curve."""
-    by_period = {r.return_period_years: r.level for r in curve}
-    missing = [t for t in _REQUIRED_PERIODS if t not in by_period]
-    if missing:
-        raise ValueError(f"curve lacks required return periods: {missing}")
-    for period in sorted(_PERIOD_TO_LEVEL, reverse=True):
-        if peak >= by_period[period]:
-            return _PERIOD_TO_LEVEL[period]
-    return RiskLevel.LOW
-
-
 def compose_confidence(
-    *, representativeness: Representativeness | None, ipcc_cited: bool
+    *,
+    representativeness: Representativeness | None,
+    ipcc_cited: bool,
+    forecast_skill_weight: float | None = None,
 ) -> float:
-    """Compose report confidence from its actual grounding (see module docstring)."""
-    confidence = _BASE_CONFIDENCE
+    """Compose report confidence from its actual grounding.
+
+    THE FORMULA, in full:
+
+        confidence = min(0.75, 0.3 * w + representativeness_bonus + 0.1 * [IPCC cited])
+        w = min(extreme_hit_rate[1..L]) / extreme_hit_rate[1]   (`forecast_skill_weight`)
+
+    where L is the forecast lead day the report is graded at (its horizon,
+    clamped to the measured day 7), and the bonuses are 0.35 station-calibrated
+    / 0.25 point-interpolated reanalysis / 0.15 regional grid signal / 0.0 not
+    representative.
+
+    WHY w AT ALL. The forecast used to contribute a flat 0.3 whether the peak
+    was predicted for tomorrow or for day 12. It is now scaled by how often the
+    model actually caught the local extreme at that lead time, measured against
+    real archived runs (tools/forecast_skill_table.json): temperature detection
+    falls from 85% at day 1 to 47% at day 7, so a day-7 heat report keeps 0.556
+    of the forecast evidence a day-1 one gets.
+
+    Two properties hold by construction, and both are tested. w <= 1 with
+    equality at day 1, so nothing scores higher than it did before this change.
+    And w is non-increasing in the horizon (see `_confidence_weight`), so for a
+    fixed hazard confidence can only fall as the horizon grows.
+
+    `forecast_skill_weight=None` means no measured row for this variable: the
+    forecast keeps its old flat 0.3 rather than being penalised for a gap in
+    our own measurement.
+    """
+    weight = 1.0 if forecast_skill_weight is None else forecast_skill_weight
+    confidence = _BASE_CONFIDENCE * weight
     if representativeness is not None:
         confidence += _REPRESENTATIVENESS_BONUS[representativeness]
     if ipcc_cited:
