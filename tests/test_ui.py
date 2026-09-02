@@ -9,6 +9,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import agent.graph as graph_mod
+import agent.location as location_mod
 import tools.climatology as climatology_mod
 from agent.contracts import (
     Citation,
@@ -55,7 +56,7 @@ def stubbed(monkeypatch):
 
 def _run_clicked(at: AppTest) -> AppTest:
     at.run()
-    at.sidebar.button[0].set_value(True)
+    at.sidebar.button(key="assess").set_value(True)  # by key: the sidebar has example buttons too
     return at.run()
 
 
@@ -67,6 +68,40 @@ def test_report_path_renders_risk_and_citations(stubbed):
     assert "HIGH" in rendered
     assert "IPCC_AR6_WGI_Chapter11.pdf" in rendered
     assert "p124" in rendered
+
+
+def test_manual_coordinates_reach_the_agent_unchanged(stubbed, monkeypatch):
+    """Any point on Earth: a southern + western pair must arrive with its signs."""
+    captured = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return _report(hazard=kwargs["hazard"], horizon_days=kwargs["horizon_days"])
+
+    monkeypatch.setattr(graph_mod, "run_agent", capture)
+    monkeypatch.setattr(location_mod, "region_for", lambda lat, lon: None)
+
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.session_state["lat_input"] = -33.90  # Sydney
+    at.session_state["lon_input"] = -70.67  # deliberately both negative
+    _run_clicked(at)  # the seeded name belongs to other coordinates -> dropped
+
+    assert captured["latitude"] == pytest.approx(-33.90)
+    assert captured["longitude"] == pytest.approx(-70.67)
+    assert "33.9000°S" in captured["location"] and "70.6700°W" in captured["location"]
+
+
+def test_point_with_no_ar6_region_shows_the_notice_and_still_runs(stubbed, monkeypatch):
+    monkeypatch.setattr(location_mod, "region_for", lambda lat, lon: None)
+
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.session_state["lat_input"] = 0.0  # mid-Pacific
+    at.session_state["lon_input"] = -140.0
+    _run_clicked(at)  # the seeded name belongs to other coordinates -> dropped
+
+    assert not at.exception
+    assert any("IPCC AR6 land region" in i.value for i in at.info)
+    assert at.subheader  # the report still rendered — no region is not a refusal
 
 
 def test_refusal_path_renders_as_refusal_not_risk(stubbed, monkeypatch):
