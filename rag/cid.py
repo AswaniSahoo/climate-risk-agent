@@ -123,8 +123,21 @@ _WHITESPACE = re.compile(r"\s+")
 # gave MED "medium confidence"), because English puts the phrase before the
 # claim in one construction and after it in the other. So the sentence is cut
 # into clauses and only the clause the region sits in is read.
+# " with " is split ONLY when what follows is not itself the calibrated phrase:
+# "projected to increase with medium confidence in Northern Australia" is one
+# assessment, while "... over West Africa (high confidence) with no assessment
+# available for South Asia (SAS)" is two, and reading the second off the first
+# is exactly the mis-attribution this module exists to prevent.
+# "(?<=\))\s*[,;]" cuts a parenthetical region list — "West Africa (WAF), South
+# Asia (SAS)" — into one clause per region. When that list shares a single
+# direction and phrase the split costs an attribution (the per-region clause no
+# longer carries the verb, so `_focus` returns None); silence is the intended
+# trade, per the module docstring.
 _CLAUSE_SPLIT = re.compile(
-    r",\s+and\s+|;\s+|,\s+except\s+|,\s+but\s+"
+    r",\s+and\s+|\s*;\s*|,\s+except\s+|,\s+but\s+"
+    r"|\s+with\s+(?!(?:very high|high|medium|low)\s+confidence\b)"
+    r"|\s+while\s+|\s+whereas\s+"
+    r"|(?<=\))\s*[,;]\s+"
     r"|\s+and\s+(?=(?:very high|high|medium|low)\s+confidence\b)",
     re.I,
 )
@@ -140,6 +153,16 @@ def _region_pattern(region: AR6Region) -> re.Pattern[str]:
     name = r"[\s\-/]+".join(words)
     acronym = rf"(?<![A-Za-z]){re.escape(region.acronym)}(?![A-Za-z])"
     return re.compile(rf"{acronym}|{name}", re.I)
+
+
+def _states_direction(text: str) -> bool:
+    """Does this text state a direction (or AR6's explicit "we cannot say")?"""
+    return bool(
+        _INCREASE.search(text)
+        or _DECREASE.search(text)
+        or _NO_CHANGE.search(text)
+        or _LOW_CONF_DIRECTION.search(text)
+    )
 
 
 def _direction(sentence: str) -> ChangeDirection:
@@ -158,19 +181,29 @@ def _direction(sentence: str) -> ChangeDirection:
     return ChangeDirection.UNKNOWN
 
 
-def _focus(sentence: str, region_pattern: re.Pattern[str]) -> str:
-    """The clause of `sentence` that speaks about this region.
+def _focus(sentence: str, region_pattern: re.Pattern[str]) -> str | None:
+    """The clause of `sentence` that speaks about this region, or None.
 
-    Falls back to the whole sentence unless exactly one clause names the region
-    and that clause carries a calibrated phrase — an ambiguous split must not
-    silently narrow the evidence.
+    A clause qualifies only if it carries ALL THREE signals ITSELF: the region,
+    a direction verb and a calibrated confidence phrase. The old rule fell back
+    to the whole sentence whenever the split was ambiguous, which let a second
+    region's assessment be read as this one's — measured on
+
+        "Heavy precipitation will increase over West Africa (high confidence)
+         with no assessment available for South Asia (SAS)."
+
+    which yielded SAS / INCREASE / "high confidence", none of it about SAS.
+    There is no safe fallback here, so an ambiguous sentence yields None and the
+    caller moves on to the next candidate (or reports no projection at all).
     """
     clauses = _CLAUSE_SPLIT.split(sentence)
-    if len(clauses) > 1:
-        naming = [c for c in clauses if region_pattern.search(c)]
-        if len(naming) == 1 and _CONFIDENCE.search(naming[0]):
-            return naming[0]
-    return sentence
+    naming = [c for c in clauses if region_pattern.search(c)]
+    if len(naming) != 1:
+        return None
+    clause = naming[0]
+    if not _CONFIDENCE.search(clause) or not _states_direction(clause):
+        return None
+    return clause
 
 
 def _confidence_phrase(focus: str) -> str | None:
@@ -211,8 +244,7 @@ def _qualifying_sentences(
             continue
         if not _CONFIDENCE.search(sentence):
             continue
-        if not (_INCREASE.search(sentence) or _DECREASE.search(sentence)
-                or _NO_CHANGE.search(sentence) or _LOW_CONF_DIRECTION.search(sentence)):
+        if not _states_direction(sentence):
             continue
         found.append(_WHITESPACE.sub(" ", sentence).strip())
     return found
@@ -244,21 +276,27 @@ def projected_change_for(
     # Retrieval order is the ranking; the only preference on top of it is for a
     # sentence the chunker did not cut in half (chunk windows can end mid-clause),
     # because a truncated quote reads as a claim the IPCC did not finish making.
+    # A candidate is a sentence whose REGION CLAUSE carries the region, the
+    # direction and the calibrated phrase together; `_focus` returning None
+    # means the sentence talks about more than this region and cannot be split
+    # safely, so it is not evidence for this region at all.
     candidates = [
-        sentence
+        (sentence, focus)
         for chunk in chunks
         for sentence in _qualifying_sentences(chunk, hazard, pattern)
+        if (focus := _focus(sentence, pattern)) is not None
     ]
-    statement = next(
-        (s for s in candidates if s.endswith(".")),
+    chosen = next(
+        (pair for pair in candidates if pair[0].endswith(".")),
         candidates[0] if candidates else None,
     )
-    if statement is None:
+    if chosen is None:
         _log.info(
             "no AR6 Ch.12 CID statement for %s/%s in the top-%d chunks",
             region.acronym, hazard.value, top_k,
         )
         return None
+    statement, focus = chosen
 
     # Cite every retrieved chunk that carries this exact sentence (overlapping
     # chunks repeat it), deduped to one citation per page.
@@ -277,8 +315,11 @@ def projected_change_for(
 
     # Direction, confidence and timing all come from the region's own clause;
     # `statement` stays the whole sentence so a reader can check the narrowing.
-    focus = _focus(statement, pattern)
-    return ProjectedChange(
+    # `from_retrieval` derives retrieved_chunk_ids from the retriever's output
+    # rather than letting this function state them, so the integrity check has
+    # two independently-sourced fields to compare.
+    return ProjectedChange.from_retrieval(
+        chunks,
         region_acronym=region.acronym,
         region_name=region.name,
         hazard=hazard,
@@ -287,5 +328,4 @@ def projected_change_for(
         confidence_language=_confidence_phrase(focus),
         warming_level_or_period=_warming_level_or_period(focus),
         citations=citations,
-        retrieved_chunk_ids=[c.chunk_id for c in chunks],
     )

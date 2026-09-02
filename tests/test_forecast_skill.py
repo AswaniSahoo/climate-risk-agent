@@ -450,3 +450,32 @@ def test_raw_per_city_output_is_gitignored():
     """data/skill/ holds the bulky per-city results and must not be committed."""
     gitignore = (Path(__file__).resolve().parent.parent / ".gitignore").read_text(encoding="utf-8")
     assert any(line.strip() in {"data/", "data"} for line in gitignore.splitlines())
+
+
+def test_table_path_is_resolved_at_call_time_not_at_import(tmp_path, monkeypatch):
+    """`path: Path = TABLE_PATH` bound the default at import, so monkeypatching
+    TABLE_PATH changed nothing and the committed table answered anyway — a test
+    or a script pointing the system at another table was silently ignored."""
+    import tools.forecast_skill as fs
+
+    table = {
+        "schema_version": 1,
+        "provenance": {"source": "synthetic"},
+        "hazards": {
+            "only_here": {
+                "unit": "mm",
+                "lead_days": {
+                    "1": {"mae": 1.0, "bias": 0.0, "rmse": 1.5, "n_days": 10,
+                          "n_extreme_days": 2, "n_cities": 1},
+                },
+            }
+        },
+    }
+    path = tmp_path / "table.json"
+    path.write_text(json.dumps(table), encoding="utf-8")
+    monkeypatch.setattr(fs, "TABLE_PATH", path)
+
+    assert fs.available_hazards() == ["only_here"]
+    assert fs.skill_for("only_here", 1).mae == 1.0
+    assert fs.load_skill_table().provenance == {"source": "synthetic"}
+

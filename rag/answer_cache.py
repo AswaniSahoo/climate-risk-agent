@@ -71,15 +71,12 @@ class AnswerCache:
         return hasher.hexdigest()
 
     def get(self, key: str) -> CitedAnswer | None:
-        answer = self._cache.get_model(key, CitedAnswer)
-        if answer is None:
-            return None
-        from obs.telemetry import record
-
-        # a hit is a generate call that cost nothing — visible in the data
-        record(op="generate", model=GENERATE_MODEL, latency_ms=0.0,
-               tokens_in=0, tokens_out=0, retries=0, ok=True, cached=True)
-        return answer
+        # ONE telemetry event per read, and the shared cache layer already emits
+        # it: `JsonCache.get_model` records op "cache:answers" with cached=True
+        # on a hit and the tier that served it. This used to add a second
+        # `generate`/cached=True event on top, which double-counted every hit in
+        # `Span.summary()["cache_hits"]` and in the UI's cache badge.
+        return self._cache.get_model(key, CitedAnswer)
 
     def put(self, key: str, answer: CitedAnswer) -> None:
         self._cache.set_model(key, answer, ttl_s=_ANSWER_TTL_S)

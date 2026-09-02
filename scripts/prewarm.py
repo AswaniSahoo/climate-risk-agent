@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -32,7 +33,7 @@ from pydantic import BaseModel, Field
 from tqdm import tqdm
 
 from agent.contracts import Hazard
-from tools.climatology import ClimatologyError, climatology_hazard_stat
+from tools.climatology import ClimatologyError, bootstrap_settings, climatology_hazard_stat
 
 _log = logging.getLogger("scripts.prewarm")
 
@@ -167,6 +168,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     cities = load_cities(args.cities)[: args.limit]
     hazards = parse_hazards(args.hazards)
     print(f"{len(cities)} cities x {len(hazards)} hazards = {len(cities) * len(hazards)} fits")
+    # CRG_BOOTSTRAP_N is read once at import in tools/climatology.py AND is part
+    # of the fit-cache key, so a run started with a different value warms a
+    # different set of entries. Print what this process actually resolved.
+    boot = bootstrap_settings()
+    override = os.environ.get("CRG_BOOTSTRAP_N")
+    print(
+        f"bootstrap: n_boot={boot['n_boot']} trend_n_boot={boot['trend_n_boot']} "
+        f"(CRG_BOOTSTRAP_N={override if override else 'unset, using defaults'})"
+    )
 
     if args.dry_run:
         for city in cities:

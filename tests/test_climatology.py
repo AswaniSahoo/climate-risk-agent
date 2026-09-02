@@ -195,3 +195,31 @@ def test_hazard_fit_cache_key_tracks_bootstrap_count_and_fitting_code(monkeypatc
     monkeypatch.undo()
     monkeypatch.setattr(clim, "_code_fingerprint", lambda: "0000deadbeef")
     assert clim._fit_cache_key(*args) != base  # edit the GEV code -> refit, no stale numbers
+
+
+# --- the fit-cache fingerprint: the code that PRODUCES the numbers ----------
+
+def test_the_code_fingerprint_covers_this_module_too(tmp_path, monkeypatch):
+    """The digest used to hash hazard_stats.py and gev_trend.py only, so editing
+    the assembly in THIS module (which ERA5 variable a hazard reads, the
+    trend-vs-stationary rule, the minimum years for a trend fit) left every
+    cached HazardStat in place while the numbers behind it had changed."""
+    import tools.climatology as clim
+
+    assert "climatology.py" in clim._FINGERPRINT_SOURCES
+
+    for name in clim._FINGERPRINT_SOURCES:  # a working copy we can edit
+        (tmp_path / name).write_bytes((clim._SOURCE_DIR / name).read_bytes())
+    monkeypatch.setattr(clim, "_SOURCE_DIR", tmp_path)
+
+    clim._code_fingerprint.cache_clear()
+    before = clim._code_fingerprint()
+
+    edited = tmp_path / "climatology.py"
+    edited.write_bytes(edited.read_bytes() + b"# a change to the fitting code")
+    clim._code_fingerprint.cache_clear()
+    after = clim._code_fingerprint()
+
+    assert before != after
+    clim._code_fingerprint.cache_clear()  # leave the real digest cached for others
+

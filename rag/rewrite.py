@@ -22,6 +22,8 @@ import json
 import logging
 
 from rag.gemini_client import GeminiError, generate_json
+from rag.prompt_safety import QUESTION_CHARS as _QUESTION_CHARS
+from rag.prompt_safety import fence_question
 
 _log = logging.getLogger(__name__)
 
@@ -50,13 +52,16 @@ _INSTRUCTIONS = (
     "5. Output a short keyword-style query, at most 25 words."
 )
 
-# Long enough for a hostile question, short enough that the whole prompt is one
-# cheap call; a question longer than this is truncated rather than refused.
-QUESTION_CHARS = 1000
+# Re-exported so the budget has one name in the codebase (see rag/prompt_safety.py).
+QUESTION_CHARS = _QUESTION_CHARS
 
 
 def _prompt(question: str) -> str:
-    return f"{_INSTRUCTIONS}\n\n<question>\n{question[:QUESTION_CHARS]}\n</question>"
+    # The fence is built by rag/prompt_safety.py, which strips any <question>
+    # tag out of the question first: without that, a question containing
+    # "</question>" closes the block early and its tail lands in the prompt as
+    # instructions.
+    return f"{_INSTRUCTIONS}\n\n{fence_question(question)}"
 
 
 def parse_query(raw: str | None, *, fallback: str) -> str:

@@ -52,9 +52,11 @@ https://upstash.com/docs/redis/features/restapi (quoted, not remembered):
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import logging
 import os
+import tempfile
 import time
 from collections.abc import Mapping
 from functools import lru_cache
@@ -166,10 +168,34 @@ class DiskCache:
         return value
 
     def set(self, key: str, value: str, ttl_s: int | None = None) -> None:
+        """Write one entry ATOMICALLY: temp file in the same directory, then
+        `os.replace`.
+
+        A plain `write_text` is not atomic. A crash, a full disk or a container
+        stopped mid-write leaves a truncated JSON file that `get` then reports
+        as a corrupt entry, and two processes writing the same key can
+        interleave into a file neither of them wrote. `os.replace` is atomic on
+        POSIX and on Windows (same filesystem, which a sibling temp file
+        guarantees), so a reader sees either the old entry or the new one and
+        never half of either.
+        """
         payload = {"value": value, "expires_at": None if ttl_s is None else _now() + ttl_s}
         try:
             self.root.mkdir(parents=True, exist_ok=True)
-            self._path(key).write_text(json.dumps(payload), encoding="utf-8")
+            path = self._path(key)
+            handle, tmp_name = tempfile.mkstemp(
+                dir=self.root, prefix=f"{path.stem}.", suffix=".tmp"
+            )
+            tmp = Path(tmp_name)
+            try:
+                with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                    stream.write(json.dumps(payload))
+                os.replace(tmp, path)
+            except BaseException:
+                # Never leave the half-written temp behind for the next reader
+                # (or for `*.json` globs) to trip over.
+                tmp.unlink(missing_ok=True)
+                raise
         except OSError as exc:
             _log.warning("cache write failed (%s) — continuing uncached", exc)
 
@@ -297,6 +323,24 @@ def cache_from_env() -> CacheBackend:
     return _backend_from_env(os.environ)
 
 
+# Disk sampling for cache-read telemetry. Every read used to append a line to
+# the daily JSONL: an open + write per cache GET, which on a warm request is the
+# bulk of the telemetry volume and none of its information. So MISSES always
+# land (they are what a cost or cold-start investigation is about) and hits land
+# 1-in-N. Every hit still reaches the IN-MEMORY ring, which is what the UI cache
+# badge (`Span.summary()["cache_hits"]`) and scripts/prewarm.py read, so nothing
+# user-visible changes.
+_HIT_SAMPLE_N = 20
+_hit_counter = itertools.count()
+
+
+def _persist_cache_event(hit: bool) -> bool:
+    """Should this cache read reach the durable JSONL sink? (see above)"""
+    if not hit:
+        return True
+    return next(_hit_counter) % _HIT_SAMPLE_N == 0
+
+
 def _record(namespace: str, backend_name: str, hit: bool, latency_ms: float) -> None:
     """Emit one cache event in obs/telemetry.py's existing record shape.
 
@@ -309,7 +353,8 @@ def _record(namespace: str, backend_name: str, hit: bool, latency_ms: float) -> 
         from obs.telemetry import record
 
         record(op=f"cache:{namespace}", model=backend_name, latency_ms=latency_ms,
-               tokens_in=0, tokens_out=0, retries=0, ok=True, cached=hit)
+               tokens_in=0, tokens_out=0, retries=0, ok=True, cached=hit,
+               persist=_persist_cache_event(hit))
     except Exception as exc:  # noqa: BLE001 — observability never breaks the observed
         _log.debug("cache telemetry unavailable (%s)", exc)
 

@@ -10,6 +10,7 @@ Everything here is offline: the REST calls are mocked with pytest-httpx, the
 disk tier uses tmp_path. The invariant under test throughout is that a cache
 FAILURE is never a request failure.
 """
+import itertools
 import json
 import logging
 
@@ -271,3 +272,121 @@ def test_json_cache_treats_an_unparseable_payload_as_a_miss(caplog):
     with caplog.at_level(logging.WARNING):
         assert cache.get_model("k", _Thing) is None
     assert "cache" in caplog.text.lower()
+
+
+# --- DiskCache.set is ATOMIC -----------------------------------------------
+
+def test_a_failed_disk_write_leaves_no_partial_file(tmp_path, monkeypatch, caplog):
+    """The old `write_text` could leave a truncated JSON file behind, which the
+    next reader logs as a corrupt entry. A temp file plus os.replace means a
+    failed write leaves the directory exactly as it was."""
+    import tools.cache_backend as backend_mod
+
+    cache = DiskCache(tmp_path)
+    real_replace = backend_mod.os.replace
+
+    def exploding_replace(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(backend_mod.os, "replace", exploding_replace)
+    with caplog.at_level(logging.WARNING):
+        cache.set("k", "v")  # never raises: a cache write is not a request
+    monkeypatch.setattr(backend_mod.os, "replace", real_replace)
+
+    assert list(tmp_path.iterdir()) == []  # no entry, and no leftover .tmp
+    assert cache.get("k") is None
+    assert "cache write failed" in caplog.text
+
+
+def test_concurrent_writes_from_two_threads_both_land(tmp_path):
+    import threading
+
+    cache = DiskCache(tmp_path)
+    barrier = threading.Barrier(2)
+
+    def write(key: str, value: str) -> None:
+        barrier.wait()
+        for _ in range(50):
+            cache.set(key, value)
+
+    threads = [
+        threading.Thread(target=write, args=("alpha", "a" * 2000)),
+        threading.Thread(target=write, args=("beta", "b" * 2000)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert cache.get("alpha") == "a" * 2000
+    assert cache.get("beta") == "b" * 2000
+    assert len(list(tmp_path.glob("*.json"))) == 2  # one file per key...
+    assert list(tmp_path.glob("*.tmp")) == []       # ...and nothing half-written
+
+
+def test_same_key_written_concurrently_is_never_torn(tmp_path):
+    """os.replace publishes a whole file at once, so the entry that survives two
+    threads racing on one key is one of the two values — never a splice of both,
+    which is what interleaved write_text calls produce."""
+    import threading
+
+    cache = DiskCache(tmp_path)
+    values = ["a" * 5000, "b" * 5000]
+    barrier = threading.Barrier(len(values))
+
+    def hammer(value: str) -> None:
+        barrier.wait()
+        for _ in range(50):
+            cache.set("shared", value)
+
+    threads = [threading.Thread(target=hammer, args=(v,)) for v in values]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    [entry] = list(tmp_path.glob("*.json"))
+    payload = json.loads(entry.read_text(encoding="utf-8"))  # parses => not spliced
+    assert payload["value"] in values
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+# --- cache-read telemetry: complete in memory, SAMPLED on disk --------------
+
+def test_cache_hits_are_sampled_on_disk_but_never_in_memory(tmp_path, monkeypatch):
+    """Every cache GET used to append a line to the daily JSONL. Misses still do
+    (a cost or cold-start investigation is about misses); hits go 1-in-N, and
+    all of them stay in the in-memory ring the UI badge reads."""
+    import tools.cache_backend as backend_mod
+    from obs.telemetry import _sink_path
+
+    monkeypatch.setattr(backend_mod, "_HIT_SAMPLE_N", 5)
+    monkeypatch.setattr(backend_mod, "_hit_counter", itertools.count())
+    cache = JsonCache("demo", backend=_StubBackend("disk"))
+    cache.set_model("k", _Thing(name="a", value=1), ttl_s=60)
+
+    for _ in range(10):
+        assert cache.get_model("k", _Thing) is not None
+
+    events = [e for e in snapshot() if e["op"] == "cache:demo"]
+    assert len(events) == 10 and all(e["cached"] for e in events)  # memory: complete
+
+    lines = _sink_path().read_text(encoding="utf-8").splitlines()
+    persisted = [json.loads(line) for line in lines if '"cache:demo"' in line]
+    assert len(persisted) == 2  # disk: 1-in-5
+
+
+def test_cache_misses_always_reach_the_disk_sink(tmp_path, monkeypatch):
+    import tools.cache_backend as backend_mod
+    from obs.telemetry import _sink_path
+
+    monkeypatch.setattr(backend_mod, "_HIT_SAMPLE_N", 1000)
+    cache = JsonCache("demo", backend=_StubBackend("disk"))
+
+    for _ in range(3):
+        assert cache.get_model("absent", _Thing) is None
+
+    lines = _sink_path().read_text(encoding="utf-8").splitlines()
+    persisted = [json.loads(line) for line in lines if '"cache:demo"' in line]
+    assert len(persisted) == 3 and not any(e["cached"] for e in persisted)
+

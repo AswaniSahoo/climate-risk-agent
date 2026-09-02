@@ -20,24 +20,36 @@ import logging
 import os
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
 _log = logging.getLogger(__name__)
 
 _LOCK = threading.RLock()
-_EVENTS: list[dict] = []
+
+# The in-memory ring is BOUNDED. It used to be an unbounded list, so a
+# long-lived server (Cloud Run keeps a replica warm for hours, and every cache
+# read records an event) grew it until the process died. 5,000 events is far
+# more than any single report or Span needs and costs a few MB at worst; the
+# JSONL sink remains the unbounded history for offline aggregation.
+MAX_EVENTS = 5000
+_EVENTS: deque[dict] = deque(maxlen=MAX_EVENTS)
+# Events ever recorded, including any the ring has since dropped: Span needs it
+# to know how far its own slice has scrolled off the front.
+_recorded = 0
 
 # USD per 1M tokens — ESTIMATES (verify against the current Google price sheet;
 # override without a code change via env). Cost output is always labeled "est".
 _PRICE_PER_MTOK = {
-    # Active generation model. Prices are ESTIMATES — verify against the current
-    # Google price sheet and override via PRICE_FLASH_IN / PRICE_FLASH_OUT.
+    # Also priced, for rows recorded under a different pin (same env knobs).
     "gemini-3.6-flash": (
         float(os.environ.get("PRICE_FLASH_IN", "0.30")),
         float(os.environ.get("PRICE_FLASH_OUT", "2.50")),
     ),
-    # Kept for back-compat / historical telemetry rows (same env knobs).
+    # The ACTIVE generation model: rag/gemini_client.py defaults CRG_GENERATE_MODEL
+    # to gemini-2.5-flash. Prices are ESTIMATES — verify against the current
+    # Google price sheet and override via PRICE_FLASH_IN / PRICE_FLASH_OUT.
     "gemini-2.5-flash": (
         float(os.environ.get("PRICE_FLASH_IN", "0.30")),
         float(os.environ.get("PRICE_FLASH_OUT", "2.50")),
@@ -65,9 +77,16 @@ def record(
     retries: int,
     ok: bool,
     cached: bool = False,
+    persist: bool = True,
 ) -> None:
     """Record one model call (or cache hit). Never raises — observability must
-    not be able to take down the observed system."""
+    not be able to take down the observed system.
+
+    `persist=False` keeps the event in memory only. Cache reads use it to
+    sample what reaches the JSONL sink (tools/cache_backend.py explains the
+    rate): a durable line per cache GET costs a file append for information the
+    in-memory rollup already carries.
+    """
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "op": op,
@@ -79,8 +98,12 @@ def record(
         "ok": ok,
         "cached": cached,
     }
+    global _recorded
     with _LOCK:
         _EVENTS.append(event)
+        _recorded += 1
+    if not persist:
+        return
     try:
         with _sink_path().open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event) + "\n")
@@ -100,8 +123,10 @@ def snapshot() -> list[dict]:
 
 def reset() -> None:
     """Clear in-memory events (tests; the JSONL sink is append-only history)."""
+    global _recorded
     with _LOCK:
         _EVENTS.clear()
+        _recorded = 0
 
 
 def _bills_tokens(event: dict) -> bool:
@@ -111,8 +136,14 @@ def _bills_tokens(event: dict) -> bool:
     model = the backend that served it) with both token counts at 0. Nothing
     was billed, so there is no price to be missing — without this the unpriced
     warning would fire on every cache read and mark every rollup incomplete.
+
+    The test is WHAT THE EVENT IS, not what it reports: keying on zero token
+    counts also swallowed a real generate call whose usage metadata came back
+    empty, which is precisely the call whose cost is unknown and must be said
+    to be unknown. A cache read is `cached=True` or an op under `cache:`;
+    everything else is a live call and bills, even at zero measured tokens.
     """
-    return not event.get("cached") and bool(event["tokens_in"] or event["tokens_out"])
+    return not event.get("cached") and not str(event["op"]).startswith("cache:")
 
 
 def unpriced_models(events: list[dict]) -> list[str]:
@@ -158,14 +189,18 @@ class Span:
 
     def __enter__(self) -> "Span":
         with _LOCK:
-            self._start_index = len(_EVENTS)
+            self._start_index = _recorded
         self._t0 = time.perf_counter()
         return self
 
     def __exit__(self, *exc_info) -> None:
         self.wall_ms = (time.perf_counter() - self._t0) * 1000.0
         with _LOCK:
-            self.events = list(_EVENTS[self._start_index :])
+            # Counted against events EVER recorded, not against ring positions:
+            # a bounded ring renumbers itself as it evicts, and a span longer
+            # than MAX_EVENTS would otherwise pick up strangers from the front.
+            dropped = _recorded - len(_EVENTS)
+            self.events = list(_EVENTS)[max(0, self._start_index - dropped) :]
 
     def summary(self) -> dict:
         live = [e for e in self.events if not e.get("cached")]

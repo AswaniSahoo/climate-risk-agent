@@ -113,8 +113,8 @@ class SkillTable(BaseModel):
 
 
 @lru_cache(maxsize=4)
-def load_skill_table(path: Path = TABLE_PATH) -> SkillTable:
-    """Load and validate the committed table. Cached: the file never changes at runtime."""
+def _load_skill_table(path: Path) -> SkillTable:
+    """Load and validate one table file. Cached per RESOLVED path (see below)."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -130,13 +130,25 @@ def load_skill_table(path: Path = TABLE_PATH) -> SkillTable:
         raise SkillTableError(f"skill table at {path} has an unexpected shape: {exc}") from exc
 
 
-def available_hazards(path: Path = TABLE_PATH) -> list[str]:
+def load_skill_table(path: Path | None = None) -> SkillTable:
+    """Load and validate the committed table, resolving `path` at CALL time.
+
+    The default used to be `path: Path = TABLE_PATH`, which binds at import: a
+    test (or a script) that monkeypatched `TABLE_PATH` still got the committed
+    file, silently. Resolving here also keeps the lru_cache keyed by the path
+    actually read, so a redirected TABLE_PATH is a cache miss rather than a hit
+    on the old table.
+    """
+    return _load_skill_table(TABLE_PATH if path is None else path)
+
+
+def available_hazards(path: Path | None = None) -> list[str]:
     """Hazard keys the table can answer for, in table order."""
     return list(load_skill_table(path).hazards)
 
 
 def skill_for(
-    hazard: str, horizon_days: int, path: Path = TABLE_PATH
+    hazard: str, horizon_days: int, path: Path | None = None
 ) -> SkillEntry:
     """Measured error for `hazard` at `horizon_days` out.
 
@@ -313,9 +325,8 @@ def forecast_skill(variable: str, horizon_days: int, path: Path | None = None) -
     variable: the caller then ships without a skill block and confidence falls
     back to its flat, lead-blind form.
     """
-    table_path = TABLE_PATH if path is None else path
-    entry = skill_for(variable, horizon_days, path=table_path)
-    table = load_skill_table(table_path)
+    entry = skill_for(variable, horizon_days, path=path)
+    table = load_skill_table(path)
     return ForecastSkill(
         variable=variable,
         unit=entry.unit,

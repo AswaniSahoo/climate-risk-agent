@@ -231,3 +231,68 @@ def test_cli_exits_one_on_a_mismatch(fake_repo, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         unpack_eval_cache.main()
     assert exc.value.code == 1
+
+
+def _without_chunk_cache(repo: dict, dst: Path) -> Path:
+    """The packed archive minus its chunk cache, with the manifest checksum fixed
+    so the payload check passes and the INSTALL step is the one under test."""
+    chunk_name = repo["chunk_cache"].name
+    payload = [(v, f"embeddings/{v.name}") for v in repo["embed_dir"].glob("*.npy")]
+    expected = pack_eval_cache.contents_sha256(payload)
+
+    with tarfile.open(repo["archive"], "r:gz") as old, tarfile.open(dst, "w:gz") as new:
+        for member in old.getmembers():
+            if member.name == chunk_name:
+                continue
+            handle = old.extractfile(member)
+            data = handle.read() if handle else b""
+            if member.name == MANIFEST_NAME:
+                manifest = json.loads(data.decode("utf-8"))
+                manifest["contents_sha256"] = expected
+                data = json.dumps(manifest).encode("utf-8")
+                member.size = len(data)
+            new.addfile(member, io.BytesIO(data))
+    return dst
+
+
+def test_an_archive_without_a_chunk_cache_fails_with_the_remediation(fake_repo, tmp_path):
+    """shutil.move raised a raw FileNotFoundError here, which escaped main() as a
+    traceback instead of the REMEDIATION message the script exists to print."""
+    pack(fake_repo["archive"])
+    reduced = _without_chunk_cache(fake_repo, tmp_path / "no-chunks.tar.gz")
+    _wipe_cache(fake_repo)
+
+    with pytest.raises(EvalCacheError) as exc:
+        unpack_eval_cache.unpack(reduced)
+
+    message = str(exc.value)
+    assert "chunk cache" in message
+    assert "scripts.pack_eval_cache" in message  # the remediation, not a traceback
+
+
+def test_a_half_installed_cache_is_never_left_behind(fake_repo, tmp_path):
+    """The refusal above must happen BEFORE any vector moves: new vectors beside
+    an old chunk cache is exactly the mismatched pair this script refuses."""
+    pack(fake_repo["archive"])
+    reduced = _without_chunk_cache(fake_repo, tmp_path / "no-chunks.tar.gz")
+    _wipe_cache(fake_repo)
+
+    with pytest.raises(EvalCacheError):
+        unpack_eval_cache.unpack(reduced)
+
+    assert list(fake_repo["embed_dir"].glob("*.npy")) == []
+
+
+def test_stale_vectors_are_cleared_before_the_new_ones_land(fake_repo):
+    """Vectors are named by content hash, so a leftover from an earlier corpus is
+    not overwritten by the move — it lingers in the cache and keeps answering."""
+    pack(fake_repo["archive"])
+    stale = fake_repo["embed_dir"] / ("f" * 64 + ".npy")
+    np.save(stale, np.zeros(768, dtype=np.float32))
+    assert stale.exists()
+
+    unpack_eval_cache.unpack(fake_repo["archive"])
+
+    assert not stale.exists()
+    assert len(list(fake_repo["embed_dir"].glob("*.npy"))) == 3  # only what was packed
+

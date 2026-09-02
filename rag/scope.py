@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections import OrderedDict
 from dataclasses import dataclass
 
 # A marine heatwave is an oceanic extreme-heat EVENT — a hazard, not background
@@ -112,11 +113,26 @@ def stage2_mode() -> str:
 # One stage-2 result per (question, mode) per process. The eval runner and
 # answer_with_guard both ask for the same verdict on the same question; without
 # this the LLM arm would pay twice for one decision.
-_stage2_cache: dict[tuple[str, str], "ScopeDecision"] = {}
+#
+# BOUNDED, and keyed by user input: an unbounded dict here is a slow memory leak
+# on any long-lived server (every distinct question ever asked, kept forever)
+# and an easy one to trigger on purpose. 512 entries is far more than one eval
+# run or one user session repeats, and the eviction cost of a wrong guess is one
+# extra stage-2 call, not a wrong answer.
+STAGE2_CACHE_MAXSIZE = 512
+_stage2_cache: "OrderedDict[tuple[str, str], ScopeDecision]" = OrderedDict()
 
 
 def clear_stage2_cache() -> None:
     _stage2_cache.clear()
+
+
+def _remember_stage2(key: tuple[str, str], decision: "ScopeDecision") -> None:
+    """Store one verdict, evicting the least recently used entry past the cap."""
+    _stage2_cache[key] = decision
+    _stage2_cache.move_to_end(key)
+    while len(_stage2_cache) > STAGE2_CACHE_MAXSIZE:
+        _stage2_cache.popitem(last=False)
 
 
 def scope_verdict(question: str) -> ScopeDecision:
@@ -142,8 +158,10 @@ def scope_verdict(question: str) -> ScopeDecision:
         return ScopeDecision(stage="lexical")
 
     key = (question, mode)
-    if key in _stage2_cache:
-        return _stage2_cache[key]
+    cached = _stage2_cache.get(key)
+    if cached is not None:
+        _stage2_cache.move_to_end(key)  # LRU: a repeat keeps it alive
+        return cached
 
     from rag import scope_semantic
 
@@ -158,5 +176,5 @@ def scope_verdict(question: str) -> ScopeDecision:
         stage=mode,
         detail=verdict.detail,
     )
-    _stage2_cache[key] = decision
+    _remember_stage2(key, decision)
     return decision

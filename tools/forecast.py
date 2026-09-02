@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from functools import lru_cache
 
 import httpx
@@ -86,10 +86,24 @@ def _forecast_cache() -> JsonCache:
     return JsonCache("forecast")
 
 
+def _utc_date() -> str:
+    """Today in UTC, as the cache-key day stamp (module-level so tests freeze it)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
 def _forecast_cache_key(latitude: float, longitude: float, horizon_days: int) -> str:
     # 2 dp ≈ 1.1 km — finer than any daily forecast product resolves, so two
     # clicks on the same city share one entry.
-    raw = f"{round(latitude, 2)}|{round(longitude, 2)}|{horizon_days}|{_DAILY_VARS}"
+    #
+    # The UTC DATE is in the key because a ForecastResult names its own days: an
+    # entry written at 23:50 local time covers a window starting yesterday, and
+    # the 1 h TTL would happily replay it for the first hour of the new day —
+    # a report about days that already began. Rolling the key at UTC midnight
+    # costs one extra fetch a day and removes the stale-window class entirely.
+    raw = (
+        f"{round(latitude, 2)}|{round(longitude, 2)}|{horizon_days}|"
+        f"{_DAILY_VARS}|{_utc_date()}"
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

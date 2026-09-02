@@ -151,3 +151,63 @@ def test_an_unpriced_model_that_burned_tokens_is_still_flagged(caplog):
         assert estimate_cost_usd(events) == 0.0
     assert "no price" in caplog.text  # $0 must stay distinguishable from unknown
     assert unpriced_models(events) == ["some-new-model"]
+
+
+def test_a_generate_call_with_empty_usage_metadata_is_still_unpriced(caplog):
+    """The old test was on TOKEN COUNTS, so a real generate call that came back
+    with no usage metadata (0 in, 0 out) was booked as "nothing was billed" —
+    hiding exactly the call whose cost is unknown. What makes an event free is
+    that it is a cache read, not that it measured no tokens."""
+    import logging
+
+    from obs.telemetry import unpriced_models
+
+    events = [dict(op="generate", model="some-new-model", latency_ms=900.0, tokens_in=0,
+                   tokens_out=0, retries=0, ok=True, cached=False, ts="t")]
+
+    with caplog.at_level(logging.WARNING):
+        assert estimate_cost_usd(events) == 0.0
+    assert "no price" in caplog.text
+    assert unpriced_models(events) == ["some-new-model"]
+
+
+def test_the_in_memory_ring_is_bounded():
+    """An unbounded list grows for the life of the process, and every cache read
+    appends to it. The ring keeps the newest MAX_EVENTS and drops the rest; the
+    JSONL sink stays the unbounded history."""
+    from obs.telemetry import MAX_EVENTS
+
+    for i in range(MAX_EVENTS + 25):
+        record(op="embed", model="m", latency_ms=i, tokens_in=0, tokens_out=0,
+               retries=0, ok=True, persist=False)
+
+    events = snapshot()
+    assert len(events) == MAX_EVENTS
+    assert events[-1]["latency_ms"] == MAX_EVENTS + 24  # newest kept
+    assert events[0]["latency_ms"] == 25                # oldest dropped
+
+
+def test_a_span_survives_the_ring_evicting_its_own_start():
+    """Span slices by events-ever-recorded, not by ring position: an eviction
+    shifts every index left, and a naive slice would then hand the span a batch
+    of strangers from before it opened."""
+    from obs.telemetry import MAX_EVENTS
+
+    record(op="before", model="m", latency_ms=1, tokens_in=0, tokens_out=0,
+           retries=0, ok=True, persist=False)
+    with Span("long") as span:
+        for _ in range(MAX_EVENTS + 10):
+            record(op="inside", model="m", latency_ms=1, tokens_in=0, tokens_out=0,
+                   retries=0, ok=True, persist=False)
+
+    assert len(span.events) == MAX_EVENTS
+    assert {e["op"] for e in span.events} == {"inside"}
+
+
+def test_persist_false_keeps_an_event_out_of_the_disk_sink(tmp_path):
+    record(op="cache:demo", model="disk", latency_ms=1, tokens_in=0, tokens_out=0,
+           retries=0, ok=True, cached=True, persist=False)
+
+    assert len(snapshot()) == 1  # the rollup and the UI badge still see it
+    assert list(tmp_path.glob("*.jsonl")) == []  # nothing written
+

@@ -150,6 +150,36 @@ def test_forecast_cache_key_separates_location_horizon_and_variables(monkeypatch
     assert fc._forecast_cache_key(22.26, 84.85, 3) != base  # asking for fewer variables
 
 
+def test_forecast_cache_key_rolls_over_at_utc_midnight(monkeypatch):
+    """A ForecastResult names its own days. Without the date in the key, an entry
+    written at 23:50 replays a window that starts YESTERDAY for the whole first
+    hour of the new day — the 1 h TTL cannot see the difference."""
+    import tools.forecast as fc
+
+    monkeypatch.setattr(fc, "_utc_date", lambda: "2026-09-02")
+    today = fc._forecast_cache_key(22.26, 84.85, 3)
+    monkeypatch.setattr(fc, "_utc_date", lambda: "2026-09-03")
+    tomorrow = fc._forecast_cache_key(22.26, 84.85, 3)
+
+    assert today != tomorrow
+
+
+def test_a_forecast_cached_yesterday_is_not_served_today(
+    httpx_mock, tmp_path, monkeypatch
+):
+    import tools.forecast as fc
+
+    monkeypatch.setattr(fc, "_forecast_cache", lambda: _forecast_cache_for(tmp_path))
+    monkeypatch.setattr(fc, "_utc_date", lambda: "2026-09-02")
+    httpx_mock.add_response(json=CANNED, is_reusable=True)
+
+    fc.get_forecast(latitude=22.26, longitude=84.85, horizon_days=3)
+    monkeypatch.setattr(fc, "_utc_date", lambda: "2026-09-03")  # UTC midnight passed
+    fc.get_forecast(latitude=22.26, longitude=84.85, horizon_days=3)
+
+    assert len(httpx_mock.get_requests()) == 2  # refetched, not replayed
+
+
 def test_forecast_errors_are_never_cached(httpx_mock, tmp_path, monkeypatch):
     import tools.forecast as fc
 

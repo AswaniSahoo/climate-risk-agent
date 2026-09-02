@@ -9,8 +9,10 @@ fill.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -83,15 +85,31 @@ class Citation(BaseModel):
     chunk_id: str | None = None
 
 
+class RetrievedChunk(Protocol):
+    """Structural view of one retrieval hit: all `from_retrieval` needs.
+
+    A Protocol, not an import of `rag.chunk`: agent/ must not depend on rag/
+    (rag/ already depends on this module), and duck-typing keeps the eval
+    harness free to pass its own chunk objects.
+    """
+
+    chunk_id: str
+
+
 class ProjectedChange(BaseModel):
     """One cited AR6 Ch.12 climatic impact-driver (CID) projection for a region.
 
     STRUCTURAL CITATION RULE (the same guarantee `CitedAnswer` gives in
     rag/answer.py): every citation must carry a `chunk_id` drawn from
     `retrieved_chunk_ids` — the chunks retrieval actually returned for this
-    region/hazard query. A citation to anything else is a schema violation, so
-    a fabricated reference cannot be constructed, only rejected. `statement` is
-    derived verbatim from those same chunks; nothing here is generated text.
+    region/hazard query. A citation to anything else is a schema violation.
+    `statement` is derived verbatim from those same chunks; nothing here is
+    generated text.
+
+    The validator compares two ordinary fields, so the guarantee is only as
+    good as where `retrieved_chunk_ids` came from: a caller that fabricates
+    BOTH lists passes. Build one through `from_retrieval`, which derives the
+    ids from the retriever's own output, and that hole closes.
     """
 
     region_acronym: str
@@ -103,6 +121,24 @@ class ProjectedChange(BaseModel):
     warming_level_or_period: str | None = None
     citations: list[Citation]
     retrieved_chunk_ids: list[str]  # the chunk_ids this projection is bound to
+
+    @classmethod
+    def from_retrieval(
+        cls, retrieved: Sequence[RetrievedChunk], **fields: Any
+    ) -> "ProjectedChange":
+        """Bind a projection to the chunks retrieval ACTUALLY returned.
+
+        `retrieved_chunk_ids` is read off `retrieved` here instead of being
+        passed in, so the two things the validator compares no longer come from
+        the same hand: a citation to a chunk the retriever never returned is
+        rejected, not merely discouraged.
+        """
+        if "retrieved_chunk_ids" in fields:
+            raise TypeError(
+                "retrieved_chunk_ids is derived from `retrieved`; passing it "
+                "would defeat the point of this constructor"
+            )
+        return cls(retrieved_chunk_ids=[c.chunk_id for c in retrieved], **fields)
 
     @model_validator(mode="after")
     def _check_citation_integrity(self) -> "ProjectedChange":

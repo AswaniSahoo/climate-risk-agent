@@ -60,7 +60,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 # --chown on the COPY, not a later `chown -R`: that would rewrite every file
 # in /app into a second layer, roughly doubling the image.
-RUN useradd -m appuser
+#
+# /app itself still needs chowning: WORKDIR created it as root before appuser
+# existed, and `COPY --chown` sets ownership on the entries it copies, not on
+# the destination directory. Without this the runtime user can read everything
+# under /app but cannot CREATE a new top-level entry there — which is what
+# writing data/cache or a Streamlit temp dir at the app root needs.
+RUN useradd -m appuser && mkdir -p /app && chown appuser:appuser /app
 COPY --from=builder --chown=appuser:appuser /app /app
 USER appuser
 

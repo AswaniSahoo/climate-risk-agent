@@ -209,3 +209,21 @@ def test_fallback_reports_the_caller_supplied_reason():
 
     assert "(the fitted variable is not the forecast quantity)" in explanation
     assert "sustained 10 m wind 70 km/h" in explanation
+
+
+def test_an_unbracketable_curve_raises_valueerror_not_stopiteration():
+    """A NaN level (a GEV fit that did not converge) makes every comparison
+    False: both edge guards fall through and no bracket matches. `next()` with
+    no default raised a bare StopIteration there — no message, and silently
+    swallowed as an early stop if the call ever sits inside a generator."""
+    broken = _stat({2: 10.0, 10: math.nan, 50: 30.0, 100: 40.0})
+
+    with pytest.raises(ValueError, match="does not bracket"):
+        band_from_return_period(20.0, broken)
+
+    # A merely non-monotone (but finite) curve is still bracketed everywhere in
+    # [first, last), so it bands rather than raising — pinned so the guard above
+    # is not mistaken for a monotonicity check.
+    level, _ = band_from_return_period(20.0, _stat({2: 10.0, 10: 5.0, 50: 30.0, 100: 40.0}))
+    assert level in set(RiskLevel)
+

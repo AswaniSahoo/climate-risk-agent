@@ -92,3 +92,34 @@ def test_no_api_key_committed_to_repo():
         if key_pattern.search(text):
             offenders.append(path)
     assert not offenders, f"Google API key pattern found in: {offenders}"
+
+
+# --- supply chain: the two workflows pin the same action majors -------------
+
+def test_both_workflows_pin_the_same_action_majors():
+    """A GitHub Action major IS the supply-chain pin. ci.yml and evals.yml sat on
+    different majors of the same actions (checkout v4/v7, setup-uv v5/v10), so a
+    breaking change would land in one pipeline and not the other, and only one of
+    them would get debugged.
+
+    Majors verified against the GitHub releases API on 2026-09-02:
+    actions/checkout v7.0.1, astral-sh/setup-uv v10.0.1,
+    actions/upload-artifact v7.0.1.
+    """
+    from pathlib import Path
+
+    workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+    pins: dict[str, set[str]] = {}
+    for path in sorted(workflows.glob("*.yml")):
+        for action, major in re.findall(
+            r"uses:\s*([\w.-]+/[\w.-]+)@v(\d+)", path.read_text(encoding="utf-8")
+        ):
+            pins.setdefault(action, set()).add(major)
+
+    assert pins, "no pinned actions found — did the workflows move?"
+    split = {a: v for a, v in pins.items() if len(v) > 1}
+    assert not split, f"the same action pinned at two majors: {split}"
+    assert pins["actions/checkout"] == {"7"}
+    assert pins["astral-sh/setup-uv"] == {"10"}
+    assert pins["actions/upload-artifact"] == {"7"}
+

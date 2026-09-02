@@ -107,8 +107,18 @@ _MIN_YEARS_FOR_TREND = 20
 # too narrow in the tail. So 150 is the floor that preserves the band.
 # Default stays at the higher value so published numbers keep full precision;
 # an interactive deploy opts into the cheaper one via CRG_BOOTSTRAP_N.
+#
+# CRG_BOOTSTRAP_N (env, read ONCE at import) overrides both counts at the same
+# time. It is part of the fit-cache key, so lowering it does not read back
+# entries fitted at the default — it refits them. Documented in .env.example,
+# README.md and DEPLOY.md; scripts/prewarm.py prints the resolved values.
 _N_BOOT = int(os.environ.get("CRG_BOOTSTRAP_N", "300"))
 _TREND_N_BOOT = int(os.environ.get("CRG_BOOTSTRAP_N", "200"))
+
+
+def bootstrap_settings() -> dict[str, int]:
+    """The bootstrap sizes this process resolved, so a run can print them."""
+    return {"n_boot": _N_BOOT, "trend_n_boot": _TREND_N_BOOT}
 
 
 def _reported_levels(
@@ -199,17 +209,29 @@ _log = logging.getLogger(__name__)
 _FIT_TTL_S = 365 * 24 * 3600  # the record is static; the TTL is hygiene, not staleness
 
 
+# Every file whose CONTENT decides the numbers in a cached HazardStat. This
+# module is in the list because it owns the pieces the other two do not: which
+# ERA5 variable each hazard reads, the trend-vs-stationary rule in
+# `_reported_levels`, the minimum years for a trend fit, and the assembly in
+# `build_hazard_stat`. Editing any of those changes the statistic while
+# hazard_stats.py and gev_trend.py sit byte-identical, which is exactly the
+# stale entry this fingerprint exists to retire.
+_FINGERPRINT_SOURCES = ("hazard_stats.py", "gev_trend.py", "climatology.py")
+_SOURCE_DIR = Path(__file__).resolve().parent  # module attr so tests can redirect it
+
+
 @lru_cache(maxsize=1)
 def _code_fingerprint() -> str:
     """Identity of the code that PRODUCES the numbers, hashed from its source.
 
-    Same trick as rag/corpus.py's chunk-cache fingerprint: edit the GEV fit or
-    the trend test and every cached statistic invalidates itself, so nobody can
-    forget to bump a version constant and ship stale return levels.
+    Same trick as rag/corpus.py's chunk-cache fingerprint: edit the GEV fit, the
+    trend test or the assembly here and every cached statistic invalidates
+    itself, so nobody can forget to bump a version constant and ship stale
+    return levels.
     """
     digest = hashlib.sha256()
-    for name in ("hazard_stats.py", "gev_trend.py"):
-        digest.update((Path(__file__).parent / name).read_bytes())
+    for name in _FINGERPRINT_SOURCES:
+        digest.update((_SOURCE_DIR / name).read_bytes())
     return digest.hexdigest()[:16]
 
 

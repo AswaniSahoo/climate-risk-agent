@@ -146,11 +146,13 @@ def test_direction_and_confidence_parse_from_real_rows(
 
 def test_ambiguous_confidence_is_reported_as_none_not_guessed():
     # Two calibrated phrases, no clause boundary that separates them -> the
-    # module says nothing rather than picking one.
+    # module says nothing rather than picking one. (Both "with <level>
+    # confidence" forms are deliberately NOT clause boundaries: that phrasing
+    # attaches the phrase to the claim it follows.)
     text = (
         "Mean wind speed and wind power potential are projected to decrease in Western "
-        "North America (medium confidence) with differences between global and regional "
-        "models lending low confidence elsewhere."
+        "North America with medium confidence for 2 degrees and with low confidence "
+        "for 4 degrees."
     )
     change = projected_change_for(
         WNA, Hazard.WIND, retriever=_StubRetriever([_chunk(text, page=67)])
@@ -311,3 +313,127 @@ def test_ocean_point_skips_the_projection_without_breaking_the_report(httpx_mock
     assert report.projected_change is None
     assert "outside the AR6 land reference regions" in report.summary
     assert report.risk_level is not None
+
+
+# --- multi-region sentences: the clause the REGION sits in, or nothing -------
+#
+# Regression for the mis-attribution measured on 2026-09-02: `_focus` fell back
+# to the whole sentence whenever the clause split was ambiguous, so a second
+# region's direction verb and calibrated phrase were reported as the queried
+# region's own assessment.
+
+WAF = AR6Region(acronym="WAF", name="West Africa")
+SAS = AR6Region(acronym="SAS", name="South Asia")
+CAU = AR6Region(acronym="CAU", name="Central Australia")
+
+# Each: (label, sentence, hazard, region asked about, expected result)
+# `None` means "this sentence is not evidence about that region".
+MULTI_REGION = [
+    (
+        "with",  # the verified failing input
+        "Heavy precipitation will increase over West Africa (high confidence) with "
+        "no assessment available for South Asia (SAS).",
+        Hazard.EXTREME_PRECIP, SAS, None,
+    ),
+    (
+        "while",
+        "Heavy precipitation is projected to increase over West Africa (high confidence) "
+        "while no assessment is available for South Asia.",
+        Hazard.EXTREME_PRECIP, SAS, None,
+    ),
+    (
+        "whereas",
+        "Mean wind speeds are projected to decrease in Northern Europe (medium "
+        "confidence), whereas the Mediterranean is not assessed.",
+        Hazard.WIND, MED, None,
+    ),
+    (
+        "semicolon-without-space",
+        "Heavy precipitation increases in Northern Australia (medium confidence);"
+        "no assessment is available for South Asia.",
+        Hazard.EXTREME_PRECIP, SAS, None,
+    ),
+    (
+        "parenthetical-region-list",  # shared assessment: silence, not a guess
+        "Heavy precipitation is projected to increase in Northern Australia (NAU), "
+        "Central Australia (CAU) (medium confidence).",
+        Hazard.EXTREME_PRECIP, CAU, None,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "label, text, hazard, region, expected",
+    MULTI_REGION,
+    ids=[case[0] for case in MULTI_REGION],
+)
+def test_another_regions_assessment_is_never_attributed_here(
+    label, text, hazard, region, expected
+):
+    change = projected_change_for(
+        region, hazard, retriever=_StubRetriever([_chunk(text, page=40)])
+    )
+    assert change is expected
+
+
+def test_the_assessed_region_in_the_same_sentence_still_parses():
+    """The fix must narrow, not silence: WAF keeps its own clause's verdict."""
+    text = MULTI_REGION[0][1]
+    change = projected_change_for(
+        WAF, Hazard.EXTREME_PRECIP, retriever=_StubRetriever([_chunk(text, page=40)])
+    )
+
+    assert change is not None
+    assert change.direction is ChangeDirection.INCREASE
+    assert change.confidence_language == "high confidence"
+    assert change.statement == text  # the whole sentence is still quoted
+
+
+def test_focus_requires_region_direction_and_confidence_in_one_clause():
+    from rag.cid import _focus
+
+    sentence = MULTI_REGION[0][1]
+    assert _focus(sentence, _region_pattern(SAS)) is None  # clause has neither
+    focus = _focus(sentence, _region_pattern(WAF))
+    assert focus is not None and "South Asia" not in focus
+
+
+# --- from_retrieval: the ids are read off the retriever, not off the caller --
+
+
+def test_from_retrieval_binds_the_ids_and_rejects_a_foreign_chunk_id():
+    chunks = [_chunk(WIND_EUROPE, page=58, index=6)]
+    fields = dict(
+        region_acronym="MED",
+        region_name="Mediterranean",
+        hazard=Hazard.WIND,
+        statement=WIND_EUROPE,
+        direction=ChangeDirection.DECREASE,
+        confidence_language="high confidence",
+    )
+
+    bound = ProjectedChange.from_retrieval(
+        chunks,
+        citations=[Citation(source=CH12_SOURCE, locator="p58", chunk_id=chunks[0].chunk_id)],
+        **fields,
+    )
+    assert bound.retrieved_chunk_ids == [chunks[0].chunk_id]
+
+    # A citation to a chunk the retriever never returned cannot be made to pass
+    # by also stating it in retrieved_chunk_ids: that field is not the caller's.
+    with pytest.raises(ValidationError, match="not among the retrieved chunks"):
+        ProjectedChange.from_retrieval(
+            chunks,
+            citations=[Citation(source=CH12_SOURCE, locator="p999",
+                                chunk_id=f"{CH12_SOURCE}#p999#0")],
+            **fields,
+        )
+    with pytest.raises(TypeError, match="derived from"):
+        ProjectedChange.from_retrieval(
+            chunks,
+            citations=[Citation(source=CH12_SOURCE, locator="p999",
+                                chunk_id=f"{CH12_SOURCE}#p999#0")],
+            retrieved_chunk_ids=[f"{CH12_SOURCE}#p999#0"],
+            **fields,
+        )
+

@@ -85,3 +85,24 @@ def test_cache_accepts_a_shared_backend_and_sets_a_bounded_ttl():
     assert cache.get(key) == _ANSWER
     assert backend.ttls == [_ANSWER_TTL_S] and _ANSWER_TTL_S == 30 * 24 * 3600
     assert list(backend.store)[0].startswith("crg:v1:answers:")  # namespaced, not bare
+
+
+def test_a_hit_records_exactly_one_telemetry_event(tmp_path):
+    """A hit used to book TWO events: "cache:answers" from the shared cache
+    layer plus a bespoke "generate"/cached=True on top. Both carry cached=True,
+    so every cached answer counted twice in Span.summary()["cache_hits"] and in
+    the UI's cache badge."""
+    from obs.telemetry import Span, snapshot
+
+    cache = AnswerCache(tmp_path)
+    key = cache.key("how much?", _CHUNKS)
+    cache.put(key, _ANSWER)
+
+    with Span("report") as span:
+        assert cache.get(key) == _ANSWER
+
+    events = [e for e in snapshot() if e.get("cached")]
+    assert len(events) == 1
+    assert events[0]["op"] == "cache:answers"  # the tier is named; the badge works
+    assert span.summary()["cache_hits"] == 1
+

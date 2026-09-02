@@ -147,13 +147,35 @@ def unpack(archive_path: Path) -> dict:
                 )
             print(f"payload sha256 verified ({actual[:16]}...)")
 
+            # Everything the install needs must be present BEFORE anything is
+            # moved: half an install (new vectors, old chunk cache) is the
+            # mismatched pair this whole script exists to refuse. A missing
+            # member used to surface as a raw FileNotFoundError out of
+            # shutil.move, escaping main() as a traceback with no remediation.
+            staged_chunk_cache = staging / CHUNK_CACHE.name
+            if not staged_chunk_cache.exists():
+                _fail(
+                    f"archive has no {CHUNK_CACHE.name}: the chunk cache is missing, so the "
+                    "vectors cannot be matched to chunks"
+                )
+
             EMBED_CACHE_DIR.mkdir(parents=True, exist_ok=True)
             CHUNK_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            # Clear the old vectors first (the manifest and the payload checksum
+            # have both passed by now, so the replacement is known good). Vectors
+            # are named by content hash, so leftovers from an earlier corpus are
+            # not overwritten by the move — they linger and keep answering.
+            for stale in EMBED_CACHE_DIR.glob("*.npy"):
+                stale.unlink()
+
             moved = 0
-            for source in (staging / "embeddings").glob("*.npy"):
-                shutil.move(str(source), str(EMBED_CACHE_DIR / source.name))
-                moved += 1
-            shutil.move(str(staging / CHUNK_CACHE.name), str(CHUNK_CACHE))
+            try:
+                for source in (staging / "embeddings").glob("*.npy"):
+                    shutil.move(str(source), str(EMBED_CACHE_DIR / source.name))
+                    moved += 1
+                shutil.move(str(staged_chunk_cache), str(CHUNK_CACHE))
+            except OSError as exc:
+                _fail(f"could not install the cache into {CACHE_ROOT}: {exc}")
 
     print(f"installed {moved} vectors -> {EMBED_CACHE_DIR}")
     print(f"installed chunk cache ({manifest['n_chunks']} chunks) -> {CHUNK_CACHE}")

@@ -144,11 +144,25 @@ def band_from_return_period(
             f"for this location{basis}, a record-class event."
         )
 
-    # A bracket always exists here: the value is inside [lowest, highest), so the
-    # first fitted level above it has a predecessor at or below it.
-    low, high = next(
-        (a, b) for a, b in zip(curve, curve[1:]) if a.level <= value < b.level
+    # For FINITE levels a bracket always exists here: value >= curve[0].level
+    # forces the next level down the chain to be <= value until one exceeds it,
+    # and value < curve[-1].level guarantees one does — monotone or not. A
+    # NON-FINITE level (a GEV fit that failed to converge and produced NaN)
+    # breaks that argument, because every comparison against NaN is False: the
+    # two guards above both fall through and no pair matches. `next()` with no
+    # default would then raise a bare StopIteration — no message, and silently
+    # swallowed into an early stop if this ever runs inside a generator. Name
+    # the broken curve instead.
+    bracket = next(
+        ((a, b) for a, b in zip(curve, curve[1:]) if a.level <= value < b.level), None
     )
+    if bracket is None:
+        raise ValueError(
+            f"return-level curve does not bracket {value:g} {unit}: levels must be "
+            f"finite and rise with return period, got "
+            f"{[(r.return_period_years, r.level) for r in curve]}"
+        )
+    low, high = bracket
     period = _interpolated_period(value, low, high)
     return _band_for_period(period), (
         f"Forecast peak {value:g} {unit} sits between the "

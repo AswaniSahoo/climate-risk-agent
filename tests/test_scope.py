@@ -42,3 +42,33 @@ def test_compound_question_with_supported_hazard_passes():
 
 def test_non_hazard_science_question_passes():
     assert out_of_scope_hazard("What were CO2 concentrations in 2019?") is None
+
+
+def test_the_stage2_cache_is_bounded_and_evicts_the_least_recent(monkeypatch):
+    """The stage-2 memo is keyed by the raw user question, so an unbounded dict
+    keeps every question ever asked for the life of the process — a slow leak on
+    a long-lived server, and a trivial one to trigger on purpose."""
+    from rag import scope, scope_semantic
+
+    monkeypatch.setenv("CRG_SCOPE_STAGE2", "embed")
+    monkeypatch.setattr(
+        scope_semantic, "semantic_scope",
+        lambda q: scope_semantic.SemanticVerdict(detail=q),
+    )
+    monkeypatch.setattr(scope, "STAGE2_CACHE_MAXSIZE", 4)
+    scope.clear_stage2_cache()
+
+    first = "silent question 0"
+    scope.scope_verdict(first)
+    for i in range(1, 4):
+        scope.scope_verdict(f"silent question {i}")
+    scope.scope_verdict(first)  # a repeat keeps the oldest entry alive (LRU)
+    scope.scope_verdict("silent question 4")  # evicts "silent question 1"
+
+    keys = [q for q, _ in scope._stage2_cache]
+    assert len(scope._stage2_cache) == 4
+    assert first in keys and "silent question 1" not in keys
+
+    scope.clear_stage2_cache()
+    assert len(scope._stage2_cache) == 0
+
