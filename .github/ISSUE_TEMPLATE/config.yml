@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/AswaniSahoo/climate-risk-agent/blob/main/SECURITY.md
+    about: Read SECURITY.md first. Do not post a working exploit in a public issue.
+  - name: Contributing guide
+    url: https://github.com/AswaniSahoo/climate-risk-agent/blob/main/CONTRIBUTING.md
+    about: Setup, the exact CI commands, the eval release gate, and PR expectations.
