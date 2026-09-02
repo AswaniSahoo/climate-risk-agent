@@ -39,11 +39,11 @@ possible, so a downstream consumer can check it programmatically.
   because that slice is the hardest in the set. Per-slice numbers, including the
   ones we are not proud of (test-set premise-injection R@3 = 59% and test-set
   regional-table 77%; dev-set `cid-table` at hybrid R@3 67% / @5 80% / @10 93%,
-  n=15, MRR 0.57), are in the eval output — rerun with
+  n=15, MRR 0.57), are in the eval output. Rerun it with
   `uv run python -m evals.run_retrieval_eval`.
 - **Dev and test sets are split (eval v2).** The dev set
-  (`evals/gold_set.json`, 45 questions plus 15 `cid-table` ones added with the
-  Chapter 12 projection layer) steered retrieval and context-size choices
+  (`evals/gold_set.json`, 60 questions: the original 45 plus 15 `cid-table` ones
+  added with the Chapter 12 projection layer) steered retrieval and context-size choices
   (chunking, top_k), so its numbers carry optimistic bias and it is kept for
   diagnosis only. A second hash-pinned set of 105 questions (`evals/gold_set_v2.json`),
   authored after the dev set and never used to tune anything, is the held-out
@@ -52,9 +52,10 @@ possible, so a downstream consumer can check it programmatically.
   iterating against the test set.
 - **The scope guard is lexical by default; a semantic second stage exists but
   ships OFF.** Stage 1 (`rag/scope.py`) matches hazard vocabulary, runs before
-  any model call, and cannot be prompt-injected — so a paraphrase that avoids
+  any model call, and cannot be prompt-injected, so a paraphrase that avoids
   all known terms still slips past it to the LLM layer, whose prompt-level rules
-  are best-effort. On the dev set that blind spot is 13 of 45 questions.
+  are best-effort. In the arm comparison below that blind spot is 13 of the 45
+  questions it ran on.
   Stage 2 (`rag/scope_semantic.py`, flag `CRG_SCOPE_STAGE2=off|embed|llm`)
   reads *only* that blind spot: it scores the question against 41 labelled
   anchors (`rag/scope_anchors.json`) in embedding space and refuses only when
@@ -71,14 +72,14 @@ possible, so a downstream consumer can check it programmatically.
   questions landed and is still at n=45: `off` 34/11/0/0 · `embed` 33/11/1/0 ·
   `llm` 34/11/0/0. Zero false answers in every arm. The embed arm's single
   false refusal (RT-07) carries lexical hazard
-  vocabulary and therefore never reached stage 2 — it is known run-to-run LLM
+  vocabulary and therefore never reached stage 2: it is known run-to-run LLM
   variance on that item, not a guard regression. `embed` added 24 ms and **zero**
   API calls per question, because the question vector is already in the
   retriever's cache; it recovered a supported hazard from two questions the
   regex misses ("hot-extreme (TXx/TNn)") and refused two out-of-corpus policy
   questions before the LLM. `llm` matched the baseline matrix but cost 2.8 s and
   $0.00025 per question, failed 1 call in 13, and refused the AMOC
-  premise-injection item as a scope violation — right cell, wrong reason —
+  premise-injection item as a scope violation (right cell, wrong reason),
   dropping grounded refusals from 3/4 to 2/3. **The default stays `off`:** the
   dev set shows no gain from either arm, and the only evidence stage 2 closes the
   paraphrase hole is an authored probe set (7/7 out-of-scope paraphrases refused,
@@ -97,15 +98,15 @@ possible, so a downstream consumer can check it programmatically.
   sentence from AR6 WG1 Chapter 12's regional climatic impact-driver
   assessment (Sections 12.4.x) and reports the direction, the calibrated
   confidence phrase, and any warming level or period stated *in that sentence*,
-  parsed by regex — no model writes any of it. It cannot read the Ch.12 CID
+  parsed by regex, with no model writing any of it. It cannot read the Ch.12 CID
   summary tables (12.3–12.10) themselves: those encode each region/driver cell
   as a coloured glyph, so the PDF text layer yields only the region label and
   footnote markers (measured: 61 Ch.12 table-row chunks carry a `Table 12.N`
   caption, none carries a direction or a confidence for its own row, and the
   confidence wording on those pages belongs to the shared legend). Granularity
   is therefore the AR6 reference region containing the point, never the city,
-  and the section is absent — with the report saying regional projections were
-  not found in the corpus — whenever no qualifying sentence is retrieved, which
+  and the section is absent, with the report saying regional projections were
+  not found in the corpus, whenever no qualifying sentence is retrieved, which
   is the case for roughly a quarter of region/hazard pairs and for every ocean
   point. Where one sentence carries two calibrated phrases and no clause
   boundary separates them, `confidence_language` is reported as null rather
@@ -122,7 +123,7 @@ possible, so a downstream consumer can check it programmatically.
   a gap between regions) maps to no region: the report still runs, and says the
   regional IPCC context is unavailable rather than borrowing a neighbour's.
   The polygons are the IPCC WGI Atlas reference regions v4, bundled in
-  `tools/ar6/` under CC BY 4.0 — Iturbide, M., Fernández, J., Gutiérrez, J.M.
+  `tools/ar6/` under CC BY 4.0. Required citation: Iturbide, M., Fernández, J., Gutiérrez, J.M.
   et al. Implementation of FAIR principles in the IPCC: the WGI AR6 Atlas
   repository. *Scientific Data* 9, 629 (2022).
   <https://doi.org/10.1038/s41597-022-01739-y>. They are v4 and frozen, so a

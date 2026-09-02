@@ -44,6 +44,9 @@ and tagging is gated on the eval rule in [DEPLOY.md](DEPLOY.md).
 - Contributor files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, this changelog,
   issue templates and a pull request template.
 - `scripts/measure_coldstart.py` and `scripts/measure_forecast_skill.py`.
+- Live progress panel in the UI: `agent/progress.py` names each of the seven
+  steps, times it and badges the cache tier that served it, with one plain
+  sentence per error class and a "how to read this report" explainer.
 
 ### Changed
 
@@ -63,11 +66,16 @@ and tagging is gated on the eval rule in [DEPLOY.md](DEPLOY.md).
   end-to-end matrix of 48 correct answers, 11 correct refusals, 1 false refusal
   and 0 false answers. The previous 91% headline described the first 45
   questions only.
-
 - `scripts/eval_gate.py` picks its regression baseline from runs of the same
   arm. The rerank, rewrite and scope-stage-2 runners write artifacts into the
   same directory, and the gate was grading the shipped default against a
   reranked experiment.
+- Telemetry keeps a bounded in-memory ring of 5,000 events, cache reads are
+  sampled out of the JSONL sink, and the answer cache no longer emits a second
+  event per hit that double-counted cache hits.
+- `actions/checkout` and `astral-sh/setup-uv` pinned to the same majors in
+  `ci.yml` and `evals.yml` (v7 and v10, checked against the releases API on
+  2026-09-02), so the two workflows cannot fail in different ways.
 
 ### Removed
 
@@ -75,6 +83,29 @@ and tagging is gated on the eval rule in [DEPLOY.md](DEPLOY.md).
   pulled in.
 - `agent/verdict.level_from_return_periods` and its tests. `agent/risk_bands.py`
   is the single source of truth for severity.
+
+### Fixed
+
+- Chapter 12 clause attribution: a clause now qualifies only when it carries the
+  region, a direction and a calibrated confidence phrase itself, so a second
+  region's assessment can no longer be read as this one's.
+- The forecast cache key carries the UTC date, so an entry written late in the
+  day cannot replay a window whose first day has already begun.
+- Disk cache entries are written to a sibling temp file and moved with
+  `os.replace`, so a crash or a concurrent write cannot leave a truncated entry.
+- Question text is fenced by `rag/prompt_safety.py` before it reaches the
+  rewrite and stage-2 prompts: the `<question>` tag is stripped and the text is
+  capped, so a question cannot close the block and address the model directly.
+- The stage-2 scope memo is a 512-entry LRU rather than an unbounded dict keyed
+  by user input.
+- `scripts/unpack_eval_cache.py` checks the archive is complete before moving
+  anything, clears stale vectors, and reports an install failure with the
+  commands that fix it instead of a traceback.
+- The runtime image chowns `/app` to `appuser`, so the container can create
+  `data/cache` and Streamlit's temp directory at the app root.
+- `ProjectedChange.from_retrieval` reads `retrieved_chunk_ids` off the
+  retriever's own output, so the validator no longer compares two lists supplied
+  by the same caller.
 
 ## Phase 4: deployment, Vertex AI, and the MCP registry (2026-07-22 to 2026-08-11)
 

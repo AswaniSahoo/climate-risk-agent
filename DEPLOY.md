@@ -1,4 +1,4 @@
-# Deploy — Docker + Google Cloud Run
+# Deploy: Docker + Google Cloud Run
 
 ## Local Docker
 
@@ -10,7 +10,7 @@ docker run -p 7860:7860 -e GEMINI_API_KEY=... climate-risk-agent    # hybrid + c
 
 Open http://localhost:7860.
 
-- The build bakes the IPCC corpus (~50 MB, downloaded from ipcc.ch — idempotent).
+- The build bakes the IPCC corpus (~50 MB, downloaded from ipcc.ch, idempotent).
 - If `data/cache/embeddings/` exists locally it is COPYed into the image
   (`.dockerignore` deliberately does not exclude `data/`), so the container
   starts on hybrid retrieval without re-embedding.
@@ -30,7 +30,7 @@ hybrid retrieval instead of re-embedding the corpus (and hitting 429s) on every
 cold start.
 
 Auth and models run on **Vertex AI via the `global` endpoint** (ADC through the
-Cloud Run service account — no API key to manage):
+Cloud Run service account, so there is no API key to manage):
 
 ```bash
 # Deploy from source; Cloud Build runs the docker build, then Cloud Run hosts it.
@@ -39,8 +39,8 @@ gcloud run deploy climate-risk-agent \
   --region us-central1 \
   --port 7860 \
   --allow-unauthenticated \
-  --min-instances 2 \
-  --memory 4Gi --cpu 2 \
+  --min-instances 1 \
+  --memory 2Gi --cpu 1 --concurrency 8 \
   --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=climate-risk-agent,GOOGLE_CLOUD_LOCATION=global,CRG_GENERATE_MODEL=gemini-2.5-flash,CRG_EMBED_MODEL=gemini-embedding-2
 ```
 
@@ -49,9 +49,10 @@ gcloud run deploy climate-risk-agent \
   endpoint 404s the embedding call and the app silently drops to BM25-only.
   `gemini-2.5-flash` is also served on `global`.
 - `--region us-central1` is where the *Cloud Run service* (the container host)
-  runs — independent of the Vertex model endpoint (`global`).
-- **`--min-instances 2`** keeps two warm instances, so demo clicks never pay a
-  cold start.
+  runs, independent of the Vertex model endpoint (`global`).
+- **`--min-instances 1`** keeps one warm instance, so demo clicks never pay a
+  cold start. It is the largest line on the bill (see Cost below); drop it to 0
+  once the measured cold start is acceptable.
 - Cold start itself is now attacked at the image, not the instance count: the
   Dockerfile is two-stage (no uv or package cache in the runtime layer) and the
   UI boots without scipy, langgraph or google-genai, which are imported only
@@ -60,7 +61,13 @@ gcloud run deploy climate-risk-agent \
 - The Cloud Run service account needs the **Vertex AI User** role
   (`roles/aiplatform.user`).
 - The startup self-test logs `DENSE DEGRADED` (and the UI shows a banner) if the
-  embedding endpoint is unreachable — a misconfig is loud, never silent.
+  embedding endpoint is unreachable: a misconfig is loud, never silent.
+- `CRG_BOOTSTRAP_N` (optional) sets the GEV bootstrap refits per fit for both the
+  stationary (default 300) and trend-adjusted (default 200) paths. It is read
+  once at import and is part of the hazard-fit cache key. A higher value buys
+  tighter confidence intervals with fit time; the measured floor is 150, below
+  which the tail band collapses. `scripts/prewarm.py` prints the value it
+  resolved.
 - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are **optional**. Set
   both to share one cache across replicas; with neither set every instance
   keeps its own disk cache and `tools/cache_backend.py` logs which backend it
@@ -79,8 +86,9 @@ GiB-second, so an always-on instance costs:
 | 1 vCPU + 2 GiB | about $19 |
 | `--min-instances 0` | about $0 |
 
-The command above requests `--min-instances 2`, so the monthly floor is that
-row multiplied by the instance count.
+The service deployed on 2026-07-23 runs one min instance at the first row's
+shape, so its monthly floor is about $39 before a single request is served. The
+command above already asks for the second row.
 
 Measured over 30 days: 2,640 requests, memory p99 at 13% of the 4 GiB
 allocation, CPU p99 at 1%. The shape is provisioned for a load that is not
@@ -113,14 +121,14 @@ a good no-cost alternative to the Cloud Run demo above.
    the degradation honestly.
 
 Note: the free tier is memory-limited. If the app OOMs on boot, run it
-BM25-only (no key) — that path avoids loading the embedding stack — or trim
-optional deps.
+BM25-only (no key), which avoids loading the embedding stack, or trim optional
+deps.
 
-## Hugging Face Space — Docker SDK (requires HF PRO)
+## Hugging Face Space: Docker SDK (requires HF PRO)
 
 If you have HF PRO ($9/mo), the image deploys directly. Measured on the
-two-stage Dockerfile with `docker image inspect --format '{{.Size}}'`: **313
-MB**, down from 1.17 GB for the previous single-stage build (no uv or package
+two-stage Dockerfile with `docker image inspect --format '{{.Size}}'`: **0.31
+GB**, down from 1.17 GB for the previous single-stage build (no uv or package
 cache in the runtime layer, and regionmask's geopandas/rasterio/pyogrio/pyproj/
 xarray stack replaced by one bundled GeoJSON read with shapely).
 
@@ -204,7 +212,7 @@ Locally the same two runners are still the pre-tag check:
 
 ```bash
 uv run python -m evals.run_retrieval_eval   # recall@k per slice vs frozen set
-uv run python -m evals.run_e2e_eval         # refusal matrix — false_answer MUST be 0
+uv run python -m evals.run_e2e_eval         # refusal matrix, false_answer MUST be 0
 uv run python -m scripts.eval_gate --eval-set dev   # the pass/fail decision, as an exit code
 ```
 
@@ -253,15 +261,15 @@ the two commands above in the failure. A stale cache that scored today's chunker
 against yesterday's vectors would be worse than no cache: it would publish a
 plausible, wrong number.
 
-## Held-out test set — exposure protocol (dev/test split, 2026-07-17)
+## Held-out test set: exposure protocol (dev/test split, 2026-07-17)
 
 Two frozen sets exist:
 
-- `evals/gold_set.json` (60 q) — the **dev set**. It steered development
+- `evals/gold_set.json` (60 q), the **dev set**. It steered development
   (top_k, chunking, scope guard), so it can never claim "held-out". Run it
   freely; diagnose against it.
-- `evals/gold_set_v2.json` (105 q) — the **held-out test set**. Runs at
+- `evals/gold_set_v2.json` (105 q), the **held-out test set**. Runs at
   **release gates only** (`EVAL_SET=test`, artifact gets a `-test` suffix).
-  Failures found there are diagnosed on the DEV set — never by iterating
+  Failures found there are diagnosed on the DEV set, never by iterating
   against the test set. Every published test-set number carries its exposure
   count ("held-out, Nth exposure"). Peeking between gates burns the split.

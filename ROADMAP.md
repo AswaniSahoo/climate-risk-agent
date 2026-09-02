@@ -1,6 +1,6 @@
 # Roadmap
 
-## Shipped (each with a number attached — see README + eval outputs)
+## Shipped (each with a number attached, see README + eval outputs)
 
 - [x] IPCC AR6 RAG with page-level citations
 - [x] ERA5 hazard statistics (GEV return periods) with full provenance
@@ -15,18 +15,27 @@
 - [x] Observability: seam-level telemetry, cost-per-report, latency percentiles, `/metrics`
 - [x] Async FastAPI service with access control
 - [x] NL front door: free-text query → geocoding → hazard classification → lat/lon→AR6-region mapping (`agent/nl.py`, deterministic + prompt-injection-proof)
-- [x] Non-stationary GEV (warming covariate) with a likelihood-ratio significance test — effective return levels at the latest year when the trend is real
-- [x] Eval v2: held-out 105-question test set (`evals/gold_set_v2.json`) split from the 45-question dev set, with an exposure-count protocol — test-set headline R@3 87% / @5 91% / @10 96%, zero false answers
+- [x] Non-stationary GEV (warming covariate) with a likelihood-ratio significance test, effective return levels at the latest year when the trend is real
+- [x] Eval v2: held-out 105-question test set (`evals/gold_set_v2.json`) split from the 45-question dev set, with an exposure-count protocol, test-set headline R@3 87% / @5 91% / @10 96%, zero false answers
 - [x] Structured logging + ruff/mypy in CI + committed eval-output artifacts (`evals/results/`)
 - [x] Live demo deployed on Google Cloud Run: https://climate-risk-agent-714882950125.us-central1.run.app/
 - [x] Model-selection ADR ([adr/0001](adr/0001-answering-model-selection.md)): dev-set bake-off across gemini-2.5/3.5/3.6-flash, prompt ablation, and a determinism probe; every eval artifact now records the model that produced it
+- [x] Climatology-conditioned risk bands: the forecast peak's return period on the location's own curve, at 2 / 10 / 50-year brackets, replacing the fixed Day-1 cutoffs
+- [x] Chapter 12 projected change quoted verbatim, with 15 `cid-table` questions added to the dev set (45 rows to 60); that slice measures hybrid R@3 67%
+- [x] Forecast skill measured by lead day: 13 cities, 2024-2025, day-7 temperature extremes caught 47% of the time against 85% at day 1, and confidence weighted by it
+- [x] Any location: place name or coordinates, with the AR6 region read from the bundled v4 polygons (46 land-touching regions)
+- [x] Shared cache backend, Upstash Redis over REST or disk: a first fit takes 1 to 2 minutes, repeat visits return in under a second
+- [x] Rerank, query rewrite and semantic scope stage 2 measured and kept off: no arm beat the hybrid baseline (R@3 88% on the 45-question dev set) and the cheapest one cost 4.0 s per question
+- [x] Slim runtime image: 0.31 GB, down from 1.17 GB
+- [x] Evals as a release-gated workflow on `v*` tags, with a packed embedding cache and a pass/fail gate that is an exit code
+- [x] Dev-set numbers re-measured on all 60 questions: hybrid R@3 82% / @5 90% / @10 94%, e2e 48/11/1/0, $0.0034 per question, p50 5.5 s
+- [x] Contributor files: CONTRIBUTING, code of conduct, changelog, three issue templates and a PR template
+- [x] Live progress panel in the UI: seven named steps, each with its seconds and a cache-tier badge
 
 ## Next (ranked)
 
-- [ ] **Demo latency: 219 s → <15 s warm.** Bake pre-computed chunks into the image (saves ~2 min cold parse), fix the Dockerfile polygon re-download, cache the GEV fit, `--min-instances=1`. Full breakdown + order in `docs/DEBT.md`. **Do before showing any employer.**
-- [ ] Semantic/LLM scope guard behind the lexical v1 gate (close the paraphrase gap)
-- [ ] Automate claim-level entailment checking in the release gate (currently page-level)
-- [ ] Climatology-conditioned risk levels to replace the Day-1 fixed thresholds in `agent/graph.py`
-- [ ] Lift the weakest retrieval slices (regional-table 77%, premise-injection 59% on the test set)
-- [ ] Determinism: generation is not reproducible at temp 0 (measured). If reproducible evals matter, pin a seed where the API allows, or report metrics as a distribution over N runs rather than a point value
-- [ ] Revisit a 3.x model with `thinking_level=MINIMAL/LOW` (untested; could beat 2.5 on tail latency without the erratic abstention)
+- [ ] Refresh the two UI screenshots and record a demo video against the current UI
+- [ ] Promote the semantic scope guard's `embed` arm, once a held-out run confirms the refusal matrix holds
+- [ ] Gemini-vision read of the Ch.12 glyph tables, validated against the chapter prose before any of it is published
+- [ ] Measure Docker cold start on Cloud Run, then move to `--min-instances 0` if it comes in under 30 s
+- [ ] Cross-post the build-in-public series to dev.to

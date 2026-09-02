@@ -67,14 +67,16 @@ the build, so a lint or type error fails CI the same way a failing test does.
 
 ## Evals are the release gate
 
-The retrieval and end-to-end evals are deliberately not in CI: they need the
-corpus, the embedding cache, and model credentials. They are a manual gate, run
-before a release, and the rule from [DEPLOY.md](DEPLOY.md) is:
+The retrieval and end-to-end evals are kept out of `ci.yml`: they need the
+corpus, the embedding cache, and model credentials, and no pull request should
+pay for them. They run in `evals.yml` instead, on a `v*` tag push or on demand,
+against a pre-built embedding cache downloaded as a release asset. The rule from
+[DEPLOY.md](DEPLOY.md) is:
 
-> Rule: run both, publish the numbers in README/STATE, THEN tag/deploy.
-> A `false_answer > 0` is a release blocker, full stop.
+> Rule, unchanged: run both, publish the numbers in README/STATE, THEN tag/deploy.
 
-The two gate commands:
+A `false_answer > 0` blocks the release, full stop. Run the same two commands
+locally before you tag:
 
 ```bash
 uv run python -m evals.run_retrieval_eval   # recall@k per slice against the frozen set
