@@ -1,7 +1,8 @@
 # ipcc-rag MCP server image: the app image with a stdio MCP entrypoint.
 #
 # Derived from the application image rather than rebuilt, so the baked IPCC
-# corpus, chunk cache and AR6 polygons are reused instead of downloaded again.
+# corpus and chunk cache are reused instead of downloaded again. (The AR6
+# region polygons are a committed GeoJSON, so they need no bake at all.)
 #
 # Build (app image first):
 #   docker build -t climate-risk-agent .
@@ -15,4 +16,5 @@ LABEL io.modelcontextprotocol.server.name="io.github.AswaniSahoo/climate-ipcc-ra
 
 # stdio transport: stdout carries JSON-RPC, so logs must go to stderr (they do).
 # No EXPOSE and no port: this server is never reachable over the network.
-CMD ["uv", "run", "python", "-m", "tools.ipcc_mcp"]
+# The venv's interpreter directly — the base image no longer ships uv.
+CMD ["/app/.venv/bin/python", "-m", "tools.ipcc_mcp"]

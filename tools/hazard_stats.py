@@ -15,11 +15,16 @@ from enum import Enum
 
 import numpy as np
 from pydantic import BaseModel
-from scipy.stats import genextreme
+
+# scipy.stats is imported inside the functions below, not here: it costs ~12 s
+# on a cold interpreter and the Streamlit UI process only needs it once a
+# report is actually requested. Import is cached, so the cost lands once.
 
 
 def _fit(annual_maxima: "Sequence[float] | np.ndarray") -> tuple[float, float, float]:
     """Fit a GEV to the annual maxima; returns (shape c, loc, scale)."""
+    from scipy.stats import genextreme
+
     c, loc, scale = genextreme.fit(np.asarray(annual_maxima, dtype=float))
     return float(c), float(loc), float(scale)
 
@@ -29,6 +34,8 @@ def return_level(annual_maxima: Sequence[float], return_period_years: float) -> 
 
     e.g. return_level(maxima, 100) is the "100-year" event magnitude.
     """
+    from scipy.stats import genextreme
+
     c, loc, scale = _fit(annual_maxima)
     quantile = 1.0 - 1.0 / return_period_years
     return float(genextreme.ppf(quantile, c, loc, scale))
@@ -36,6 +43,8 @@ def return_level(annual_maxima: Sequence[float], return_period_years: float) -> 
 
 def return_period(annual_maxima: Sequence[float], value: float) -> float:
     """Average number of years between events at least as extreme as `value`."""
+    from scipy.stats import genextreme
+
     c, loc, scale = _fit(annual_maxima)
     exceedance_prob = 1.0 - float(genextreme.cdf(value, c, loc, scale))
     if exceedance_prob <= 0.0:
@@ -142,6 +151,8 @@ def return_levels_with_ci(
     fit would move on a different 60-ish years), not model error; stationarity
     is still assumed and stated in LIMITATIONS.
     """
+    from scipy.stats import genextreme
+
     data = np.asarray(annual_maxima, dtype=float)
     c, loc, scale = _fit(data)
     quantiles = {int(t): 1.0 - 1.0 / t for t in return_periods}

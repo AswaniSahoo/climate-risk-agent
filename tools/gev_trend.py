@@ -17,10 +17,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.optimize import minimize
-from scipy.stats import chi2, genextreme
 
 from tools.hazard_stats import ReturnLevel, _fit
+
+# scipy is imported inside the functions below, not here: ~12 s on a cold
+# interpreter, and nothing in the UI's boot path fits a GEV.
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,8 @@ def _mle(
     Nelder-Mead: derivative-free, robust for the GEV's bounded-support
     likelihood, and 4 parameters is tiny. log_sigma keeps scale positive.
     """
+    from scipy.optimize import minimize
+    from scipy.stats import genextreme
 
     def nll(params: np.ndarray) -> float:
         c, mu0, slope, log_sigma = params
@@ -85,6 +88,8 @@ def fit_gev_trend(
     model's parameter space at slope = 0, so the optimizer starts on the
     likelihood ridge instead of in the void.
     """
+    from scipy.stats import chi2, genextreme
+
     y = np.asarray(annual_maxima, dtype=float)
     x = np.asarray(covariate, dtype=float)
     if y.size != x.size:
@@ -123,6 +128,8 @@ def trend_return_levels(
     magnitude is NOW, given the fitted drift. n_boot > 0 adds a (1 - alpha)
     parametric-bootstrap band; 0 keeps the fast point estimate.
     """
+    from scipy.stats import genextreme
+
     loc = fit.loc_at(at)
     quantiles = {int(t): 1.0 - 1.0 / t for t in return_periods}
     point = {

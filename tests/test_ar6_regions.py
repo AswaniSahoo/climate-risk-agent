@@ -1,22 +1,32 @@
 """Tests for lat/lon -> AR6 region mapping (official Iturbide polygons).
 
-Needs the regionmask data file (downloads ~1 MB once, then cached); tests skip
-if it cannot load, so an offline CI run stays green without faking geometry.
+The polygons ship with the repo (tools/ar6/*.geojson), so these tests are fully
+offline: nothing downloads, and a missing data file is a hard failure rather
+than a skip — the file being absent from the image is exactly the bug worth
+catching.
 """
+import json
+
 import pytest
 
-from tools.ar6_regions import AR6Region, region_for
+from tools.ar6_regions import _GEOJSON, AR6Region, _land_regions, region_for
 
 
 @pytest.fixture(autouse=True)
-def _needs_region_data():
+def _clear_cache():
     region_for.cache_clear()
-    try:
-        from tools.ar6_regions import _land_regions
 
-        _land_regions()
-    except Exception as exc:  # offline / download blocked
-        pytest.skip(f"AR6 region data unavailable: {exc}")
+
+def test_geojson_is_bundled_parses_and_has_the_expected_land_set():
+    assert _GEOJSON.is_file(), f"AR6 polygon file missing at {_GEOJSON}"
+    collection = json.loads(_GEOJSON.read_text(encoding="utf-8"))
+    # The Atlas v4 file: 58 reference regions, 43 Land + 3 Land-Ocean + 12 Ocean.
+    assert len(collection["features"]) == 58
+    # 46 land-touching regions — the same count regionmask's ar6.land exposed.
+    regions = _land_regions()
+    assert len(regions) == 46
+    assert all(acronym and name and poly is not None for acronym, name, poly in regions)
+    assert len({acronym for acronym, _, _ in regions}) == 46  # no duplicates
 
 
 @pytest.mark.parametrize(
