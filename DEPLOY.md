@@ -15,7 +15,7 @@ Open http://localhost:7860.
   (`.dockerignore` deliberately does not exclude `data/`), so the container
   starts on hybrid retrieval without re-embedding.
 - Without Gemini auth the retrieval layer falls back to BM25-only **loudly**
-  (measured: 82% vs 91% headline R@3) and `answer_ipcc`-style LLM answers are
+  (measured on the 60-question dev set: 76% vs 82% headline R@3) and `answer_ipcc`-style LLM answers are
   unavailable; the UI reports both degradations honestly.
 
 ## Google Cloud Run (live demo)
@@ -41,22 +41,56 @@ gcloud run deploy climate-risk-agent \
   --allow-unauthenticated \
   --min-instances 2 \
   --memory 4Gi --cpu 2 \
-  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=climate-risk-agent,GOOGLE_CLOUD_LOCATION=global,CRG_GENERATE_MODEL=gemini-3.6-flash,CRG_EMBED_MODEL=gemini-embedding-2
+  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=climate-risk-agent,GOOGLE_CLOUD_LOCATION=global,CRG_GENERATE_MODEL=gemini-2.5-flash,CRG_EMBED_MODEL=gemini-embedding-2
 ```
 
 - **`GOOGLE_CLOUD_LOCATION=global` is required.** `gemini-embedding-2` is served
   on `global` / `us` / `eu`, **not** the single region `us-central1`; a regional
   endpoint 404s the embedding call and the app silently drops to BM25-only.
-  `gemini-3.6-flash` is also served on `global`.
+  `gemini-2.5-flash` is also served on `global`.
 - `--region us-central1` is where the *Cloud Run service* (the container host)
   runs — independent of the Vertex model endpoint (`global`).
 - **`--min-instances 2`** keeps two warm instances, so demo clicks never pay a
   cold start.
+- Cold start itself is now attacked at the image, not the instance count: the
+  Dockerfile is two-stage (no uv or package cache in the runtime layer) and the
+  UI boots without scipy, langgraph or google-genai, which are imported only
+  when a report is actually requested.
 - `--port 7860` matches the container's `EXPOSE` / Streamlit port.
 - The Cloud Run service account needs the **Vertex AI User** role
   (`roles/aiplatform.user`).
 - The startup self-test logs `DENSE DEGRADED` (and the UI shows a banner) if the
   embedding endpoint is unreachable — a misconfig is loud, never silent.
+- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are **optional**. Set
+  both to share one cache across replicas; with neither set every instance
+  keeps its own disk cache and `tools/cache_backend.py` logs which backend it
+  chose.
+
+## Cost
+
+Cloud Run request-based billing charges a minimum instance at the **idle rate**
+for every second of the month, whether or not it serves a request. In
+`us-central1` that rate is $0.0000025 per vCPU-second and $0.0000025 per
+GiB-second, so an always-on instance costs:
+
+| min-instance shape | idle cost per instance per month |
+| --- | --- |
+| 2 vCPU + 4 GiB (the shape deployed today) | about $39 |
+| 1 vCPU + 2 GiB | about $19 |
+| `--min-instances 0` | about $0 |
+
+The command above requests `--min-instances 2`, so the monthly floor is that
+row multiplied by the instance count.
+
+Measured over 30 days: 2,640 requests, memory p99 at 13% of the 4 GiB
+allocation, CPU p99 at 1%. The shape is provisioned for a load that is not
+there.
+
+Two steps, in order. Resize now, to the 1 vCPU + 2 GiB row, which the p99
+figures already cover. Then set `--min-instances 0` once the two-stage image's
+cold start is measured under 30 s (`scripts/measure_coldstart.py` times it
+against a 1 vCPU / 2 GiB container), because below that a scale-to-zero demo
+still opens fast enough not to read as broken.
 
 ## Streamlit Community Cloud (free alternative)
 
@@ -71,11 +105,11 @@ a good no-cost alternative to the Cloud Run demo above.
    `ui/app.py`**. Deploy.
 4. It installs `requirements.txt`, then the app self-provisions: on first boot
    it sees no corpus and downloads the IPCC PDFs once (~50 MB, shown with a
-   spinner). The geospatial wheels (rasterio/shapely/pyproj) are self-contained,
-   so no `packages.txt` is needed.
+   spinner). The only geospatial wheel left is shapely, which is
+   self-contained, so no `packages.txt` is needed.
 5. Optional **Advanced settings → Secrets** → add `GEMINI_API_KEY` (an
    AI-Studio key) for hybrid retrieval + cited LLM answers. Without it the app
-   runs BM25-only, **loudly** (measured 82% vs 91% headline R@3); the UI reports
+   runs BM25-only, **loudly** (measured on the 60-question dev set: 76% vs 82% headline R@3); the UI reports
    the degradation honestly.
 
 Note: the free tier is memory-limited. If the app OOMs on boot, run it
@@ -84,15 +118,18 @@ optional deps.
 
 ## Hugging Face Space — Docker SDK (requires HF PRO)
 
-If you have HF PRO ($9/mo), the verified 4.76 GB image (`docker build`, boots
-clean) deploys directly:
+If you have HF PRO ($9/mo), the image deploys directly. Measured on the
+two-stage Dockerfile with `docker image inspect --format '{{.Size}}'`: **313
+MB**, down from 1.17 GB for the previous single-stage build (no uv or package
+cache in the runtime layer, and regionmask's geopandas/rasterio/pyogrio/pyproj/
+xarray stack replaced by one bundled GeoJSON read with shapely).
 
 1. Create a Space → SDK = **Docker**. Frontmatter `sdk: docker`, `app_port: 7860`.
-2. Push the repo; the Dockerfile bakes the corpus + AR6 polygons at build.
+2. Push the repo; the Dockerfile bakes the corpus and chunk cache at build. The
+   AR6 region polygons are a committed GeoJSON (`tools/ar6/`), so nothing
+   downloads at runtime.
 3. Add the `GEMINI_API_KEY` secret (or run BM25-only). Vertex ADC does not exist
    on Spaces.
-   ⚠️ The 4.76 GB image may exceed the Space's storage ceiling — slim it with a
-   multi-stage build first (see docs/DEBT.md) if the build is rejected.
 
 ## Publish the MCP server to the official MCP registry
 
@@ -102,7 +139,7 @@ ownership label lives in `Dockerfile.mcp`. Every step below needs your accounts,
 so all of it is manual.
 
 1. Build the app image, then the MCP image derived from it (the derived image
-   reuses the baked corpus, chunk cache and AR6 polygons):
+   reuses the baked corpus and chunk cache):
 
 ```bash
 docker build -t climate-risk-agent .
@@ -148,27 +185,79 @@ Notes:
   byte-match `name` in `server.json`, or publish fails verification.
 - Only the IPCC server is listed. weather-mcp is a thin Open-Meteo wrapper with
   many equivalents already in the registry, and publishing it would ship the same
-  multi-GB image to serve two HTTP calls. The same pattern applies if you want it.
+  full app image (corpus and all) to serve two HTTP calls. The same pattern
+  applies if you want it.
 
-## Release gate (evals are NOT in CI — by decision)
+## Release gate (evals run on tag pushes, not on every commit)
 
-CI runs the unit/integration tests (corpus-dependent ones auto-skip).
-The retrieval + e2e evals need the corpus, the embedding cache, and Gemini
-auth, so they are a **manual pre-release gate**:
+`ci.yml` still runs only the unit/integration tests on every push and PR
+(corpus-dependent ones auto-skip). The retrieval + e2e evals are expensive and
+credential-bound, so they live in a **separate workflow** that fires exactly
+when a release is being cut:
+
+| workflow | trigger | what it runs |
+| --- | --- | --- |
+| `ci.yml` | every push to `main`, every PR | ruff, mypy, pytest |
+| `evals.yml` | push of a `v*` tag, or manual `workflow_dispatch` | retrieval eval + e2e eval + gate |
+
+Locally the same two runners are still the pre-tag check:
 
 ```bash
 uv run python -m evals.run_retrieval_eval   # recall@k per slice vs frozen set
 uv run python -m evals.run_e2e_eval         # refusal matrix — false_answer MUST be 0
+uv run python -m scripts.eval_gate --eval-set dev   # the pass/fail decision, as an exit code
 ```
 
-Rule: run both, publish the numbers in README/STATE, THEN tag/deploy.
-A `false_answer > 0` is a release blocker, full stop.
+The gate (`scripts/eval_gate.py`, unit-tested in `tests/test_eval_gate.py`) fails on:
+
+1. **`false_answer > 0`** in the e2e artifact. Confabulation blocks a release, full stop.
+2. **headline R@3 more than 3 points below** the last committed run of the same
+   eval set, same retriever (`evals/results/`).
+3. **no `hybrid` column** in the retrieval artifact. That means the dense path was
+   skipped, i.e. the embedding cache was missing and the run silently measured
+   BM25-only, so its numbers are not a release.
+
+Rule, unchanged: run both, publish the numbers in README/STATE, THEN tag/deploy.
+
+### Repository setup (manual, once)
+
+- **Secret `GEMINI_API_KEY`**: Settings → Secrets and variables → Actions → New
+  repository secret. The e2e eval cannot run without it. `GITHUB_TOKEN` is
+  supplied automatically and only needs `contents: read` to fetch the asset below.
+
+### The eval cache release asset (manual, once, and again after any re-chunk)
+
+The workflow must never call the embedding API for the corpus: 2,730 chunks do
+not fit in a free-tier job. Instead it downloads a pre-built cache. `data/` is
+git-ignored, so the cache ships as a **GitHub Release asset**:
+
+```bash
+uv run python -m scripts.pack_eval_cache        # -> eval-cache-v1.tar.gz (~13 MB)
+gh release create eval-cache-v1 eval-cache-v1.tar.gz \
+  --title "Eval cache v1" \
+  --notes "Embedding + chunk cache for the eval workflow."
+```
+
+To replace it later (after re-chunking, a corpus refresh, or an embedding-model change):
+
+```bash
+uv run python -m scripts.pack_eval_cache
+gh release upload eval-cache-v1 eval-cache-v1.tar.gz --clobber
+```
+
+The archive carries a `manifest.json` pinning the embedding model + dims, the
+chunker fingerprint (a hash of the PDF sizes and `rag/chunk.py`), the PDF sizes,
+and a SHA-256 of the payload bytes. `scripts/unpack_eval_cache.py` re-checks all
+of it against the live repo and **refuses to install a mismatched cache**, naming
+the two commands above in the failure. A stale cache that scored today's chunker
+against yesterday's vectors would be worse than no cache: it would publish a
+plausible, wrong number.
 
 ## Held-out test set — exposure protocol (dev/test split, 2026-07-17)
 
 Two frozen sets exist:
 
-- `evals/gold_set.json` (45 q) — the **dev set**. It steered development
+- `evals/gold_set.json` (60 q) — the **dev set**. It steered development
   (top_k, chunking, scope guard), so it can never claim "held-out". Run it
   freely; diagnose against it.
 - `evals/gold_set_v2.json` (105 q) — the **held-out test set**. Runs at

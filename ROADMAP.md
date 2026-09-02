@@ -6,7 +6,7 @@
 - [x] ERA5 hazard statistics (GEV return periods) with full provenance
 - [x] Frozen eval harness: recall@k per slice + e2e refusal confusion matrix (dev + held-out test sets)
 - [x] MCP servers (weather-mcp + ipcc-rag-mcp), demoed in the MCP Inspector
-- [x] Hybrid dense+RRF ablation published (bm25 82% / dense 71% / hybrid 91% dev-set R@3)
+- [x] Hybrid dense+RRF ablation published (bm25 76% / dense 61% / hybrid 82% dev-set R@3, 60 questions)
 - [x] RAG citations wired into the `RiskReport` agent path (`research` graph node)
 - [x] Streamlit UI, Docker image, CI; evals as a documented release gate
 - [x] Risk verdict from GEV return-level position; composed confidence; bootstrap CIs
