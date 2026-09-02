@@ -60,6 +60,20 @@ def _run_clicked(at: AppTest) -> AppTest:
     return at.run()
 
 
+# AppTest classifies EVERY expandable block that carries an icon as a `Status`
+# (element_tree.py: `if block.expandable.icon`), so the app's icon'd expanders
+# land in `at.status` alongside the real one. The run's own panel is the block
+# wearing an icon that only st.status sets.
+_STATUS_ICONS = {"spinner", ":material/check:", ":material/error:"}
+
+
+def _panel(at: AppTest):
+    """The st.status container the run rendered its steps into."""
+    panels = [s for s in at.status if s.icon in _STATUS_ICONS]
+    assert panels, "the run rendered no status panel"
+    return panels[0]
+
+
 def test_report_path_renders_risk_and_citations(stubbed):
     at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
 
@@ -102,6 +116,73 @@ def test_point_with_no_ar6_region_shows_the_notice_and_still_runs(stubbed, monke
     assert not at.exception
     assert any("IPCC AR6 land region" in i.value for i in at.info)
     assert at.subheader  # the report still rendered — no region is not a refusal
+
+
+def test_progress_panel_shows_step_labels_timings_and_cache_badges(stubbed, monkeypatch):
+    """What the agent emits is what the reader sees, including a warm-cache hit."""
+    from agent.progress import StepEvent, StepStatus, step_label
+
+    def emitting_run_agent(**kwargs):
+        on_step = kwargs["on_step"]
+        label = step_label("call", horizon_days=kwargs["horizon_days"])
+        on_step(StepEvent(node="call", label=label, status=StepStatus.STARTED))
+        on_step(StepEvent(node="call", label=label, status=StepStatus.FINISHED,
+                          seconds=1.44, detail="cached (redis)"))
+        return _report(hazard=kwargs["hazard"], horizon_days=kwargs["horizon_days"])
+
+    monkeypatch.setattr(graph_mod, "run_agent", emitting_run_agent)
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception
+    panel = _panel(at)
+    assert panel.state == "complete"
+    assert panel.label.startswith("Report ready in")  # title becomes the total
+
+    rendered = " ".join(m.value for m in at.markdown)
+    assert "Fetching the 7-day forecast (Open-Meteo)" in rendered
+    assert "1.4 s" in rendered
+    assert "cached (redis)" in rendered
+    assert "Resolving location" in rendered  # the UI's own step, same panel
+
+
+def test_the_first_visit_wait_is_stated_next_to_the_assess_button(stubbed):
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.run()
+
+    hints = " ".join(c.value for c in at.sidebar.caption)
+    assert "1 to 2 minutes" in hints
+    assert "cached" in hints
+
+
+def test_results_carry_a_collapsed_how_to_read_this_report_explainer(stubbed):
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert "How to read this report" in [e.label for e in at.status]
+    rendered = " ".join(m.value for m in at.markdown)
+    assert "return-level curve" in rendered  # what the risk band means
+    assert "LIMITATIONS.md" in rendered  # where the limits live
+
+
+def test_a_failed_run_renders_one_sentence_and_keeps_the_traceback_off_the_page(
+    stubbed, monkeypatch
+):
+    from tools.forecast import ForecastError
+
+    def boom(**kwargs):
+        raise ForecastError("Open-Meteo request failed: 503 Server Error")
+
+    monkeypatch.setattr(graph_mod, "run_agent", boom)
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception  # a crash must never reach the page
+    panel = _panel(at)
+    assert panel.state == "error"
+
+    messages = " ".join(e.value for e in at.error) + panel.label
+    assert "Open-Meteo" in messages
+    assert "try again" in messages.lower()
+    assert "Traceback" not in messages and "503" not in messages
+    assert not at.subheader  # nothing pretends a report was produced
 
 
 def test_refusal_path_renders_as_refusal_not_risk(stubbed, monkeypatch):

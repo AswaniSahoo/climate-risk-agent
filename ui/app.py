@@ -9,7 +9,9 @@ Run:  uv run streamlit run ui/app.py
 """
 from __future__ import annotations
 
+import logging
 import sys
+import time
 from pathlib import Path
 
 # `streamlit run ui/app.py` puts ui/ (not the repo root) on sys.path — same
@@ -22,6 +24,8 @@ from obs.log import configure
 
 configure()  # the UI process owns logging config (library layers just log)
 
+_log = logging.getLogger(__name__)  # tracebacks go HERE, never onto the page
+
 # imports below the sys.path shim + logging config on purpose (script entrypoint)
 # agent.graph is NOT imported here: it pulls langgraph (~17 s cold) and nothing
 # on the boot path needs it. It is imported where a report is actually run.
@@ -32,9 +36,22 @@ from agent.location import (  # noqa: E402
     resolve_coordinates,
     resolve_place,
 )
+
+# Pydantic + stdlib only (no langgraph), so this stays off the expensive path:
+# it is the shared vocabulary between the agent's step events and this renderer.
+from agent.progress import (  # noqa: E402
+    CLIMATOLOGY,
+    LOCATE,
+    StepEvent,
+    StepStatus,
+    emit_step,
+    error_sentence,
+    format_elapsed,
+    step_meaning,
+    track,
+)
 from tools import climatology  # noqa: E402
 from tools.climatology import ClimatologyError  # noqa: E402
-from tools.forecast import ForecastError  # noqa: E402
 from tools.geocode import GeocodeError  # noqa: E402
 
 # Shortcut buttons, not the menu: any place on Earth works via the Place box or
@@ -244,6 +261,10 @@ with st.sidebar:
         "Assess risk", key="assess", type="primary",
         icon=":material/troubleshoot:", width="stretch",
     )
+    st.caption(
+        "First report for a new place takes about 1 to 2 minutes: 60+ years of ERA5 "
+        "extremes are fetched and fitted once, then cached. Repeat visits are instant."
+    )
 
 # Where the assessment will run. Display-only by design: Streamlit's map
 # selection reports which OBJECTS a click picked (per-layer `indices` /
@@ -272,47 +293,114 @@ if selected is not None:
                 st.info(selected.notice, icon=":material/public_off:")
 
 report = None
-# The live forecast is the agent's core input; if Open-Meteo is down (503s
-# happen) even after the tool's retries, show a clean message instead of a raw
-# traceback — the same graceful posture the climatology/RAG layers already take.
-_FORECAST_DOWN = (
-    "The forecast service (Open-Meteo) is temporarily unavailable. "
-    "This is an upstream outage, not a problem with your request — please try again in a moment."
-)
+
+
+class _StepPanel:
+    """Renders the agent's StepEvents into an open st.status container.
+
+    One `st.empty()` slot per step, so a step's line is REPLACED when it
+    finishes rather than a second line appearing beneath it: the panel stays a
+    checklist a person can read, not a scrolling log.
+    """
+
+    def __init__(self, status) -> None:
+        self._status = status
+        self._slots: dict[str, object] = {}
+
+    def _slot(self, node: str):
+        if node not in self._slots:
+            self._slots[node] = self._status.empty()
+        return self._slots[node]
+
+    def __call__(self, event: StepEvent) -> None:
+        if event.status is StepStatus.STARTED:
+            # The collapsed title says what is happening right now, so the panel
+            # is useful even when the reader has it shut.
+            self._status.update(label=f"{event.label}…")
+            head = f":blue-badge[running] **{event.label}**"
+        elif event.status is StepStatus.FINISHED:
+            badge = f" :violet-badge[{event.detail}]" if event.detail else ""
+            head = f":green-badge[{format_elapsed(event.seconds)}] **{event.label}**{badge}"
+        elif event.status is StepStatus.SKIPPED:
+            badge = f" :gray-badge[{event.detail}]" if event.detail else ""
+            head = f":gray-badge[skipped] **{event.label}**{badge}"
+        else:  # FAILED: the sentence for the reader goes on the panel's title
+            head = f":red-badge[failed] **{event.label}**"
+        self._slot(event.node).markdown(f"{head}  \n:small[{step_meaning(event.node)}]")
+
+
+def _run_with_panel(work):
+    """Run `work(on_step)` under a live status panel. Returns (report, message).
+
+    The panel's own title carries the outcome: total time when it worked, one
+    plain sentence when it did not. The traceback goes to the log, never onto
+    the page, which is the whole point of `error_sentence`.
+    """
+    started = time.perf_counter()
+    with st.status("Building your report…", expanded=True) as status:
+        try:
+            result = work(_StepPanel(status))
+        except Exception as exc:
+            _log.exception("report run failed")
+            sentence = error_sentence(exc)
+            status.update(label=sentence, state="error", expanded=True)
+            return None, sentence
+        if getattr(result, "refusal", None):
+            title = "Refused: the question is outside what this agent can ground"
+        else:
+            title = f"Report ready in {format_elapsed(time.perf_counter() - started)}"
+        status.update(label=title, state="complete", expanded=False)
+        return result, None
+
+
 if ask and nl_query.strip():
     from agent.nl import run_agent_nl  # noqa: E402
-    from obs.telemetry import Span
+    from obs.telemetry import Span  # noqa: E402
 
-    with st.spinner("Parsing → geocoding → AR6 region → agent…"):
-        with Span("report") as span:
-            try:
-                report = run_agent_nl(nl_query)
-            except ForecastError:
-                st.error(_FORECAST_DOWN, icon=":material/cloud_off:")
+    with Span("report") as span:
+        report, failure = _run_with_panel(
+            lambda on_step: run_agent_nl(nl_query, on_step=on_step)
+        )
+    if failure is not None:
+        st.error(failure, icon=":material/error:")
 elif run and selected is not None:
-    hazard_stat = None
-    if use_climatology:
-        try:
-            with st.spinner("Fitting ERA5 GEV climatology…"):
-                hazard_stat = climatology.climatology_hazard_stat(
-                    selected.latitude, selected.longitude, hazard
-                )
-        except ClimatologyError as exc:
-            st.warning(f"Climatology unavailable ({exc}) — continuing without it.")
+    from agent import graph as agent_graph  # noqa: E402
+    from obs.telemetry import Span  # noqa: E402
 
-    from agent import graph as agent_graph
-    from obs.telemetry import Span
+    # Collected rather than written inline: a warning drawn inside the status
+    # container would vanish when the panel collapses on success.
+    notices: list[str] = []
 
-    with st.spinner("Running agent (forecast → IPCC research → synthesis)…"):
-        with Span("report") as span:
+    def _assess(on_step):
+        # The point was already resolved, synchronously, by the sidebar widgets.
+        # Reporting it anyway keeps both entry points showing the same steps.
+        emit_step(on_step, LOCATE, StepStatus.FINISHED, detail="resolved in the sidebar")
+        hazard_stat = None
+        if use_climatology:
             try:
-                report = agent_graph.run_agent(
-                    location=selected.label,
-                    latitude=selected.latitude, longitude=selected.longitude,
-                    hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
-                )
-            except ForecastError:
-                st.error(_FORECAST_DOWN, icon=":material/cloud_off:")
+                with track(on_step, CLIMATOLOGY):
+                    hazard_stat = climatology.climatology_hazard_stat(
+                        selected.latitude, selected.longitude, hazard
+                    )
+            except ClimatologyError as exc:
+                # Loud but non-fatal, exactly as before: the band falls back to
+                # absolute cutoffs and the report states which basis it used.
+                notices.append(f"Climatology unavailable ({exc}). Continuing without it.")
+        else:
+            emit_step(on_step, CLIMATOLOGY, StepStatus.SKIPPED, detail="ERA5 grounding off")
+        return agent_graph.run_agent(
+            location=selected.label,
+            latitude=selected.latitude, longitude=selected.longitude,
+            hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
+            on_step=on_step,
+        )
+
+    with Span("report") as span:
+        report, failure = _run_with_panel(_assess)
+    for notice in notices:
+        st.warning(notice, icon=":material/warning:")
+    if failure is not None:
+        st.error(failure, icon=":material/error:")
 
 if report is not None:
     if report.refusal is not None:
@@ -320,6 +408,33 @@ if report is not None:
         st.caption("Out-of-scope is an explicit, valid output — not a fabricated risk.")
     else:
         color, icon = _LEVEL_STYLE[report.risk_level]
+
+        # Collapsed by default: it answers "what am I looking at?" for a first
+        # reader without pushing the actual report down the page for a repeat one.
+        with st.expander("How to read this report", icon=":material/menu_book:"):
+            st.markdown(
+                """
+- **Risk band**: where the forecast peak lands on *this location's own* ERA5
+  return-level curve (the 2 / 10 / 50-year edges), not a fixed threshold. With no
+  fitted curve it falls back to absolute cutoffs, and the `severity_basis` driver
+  says which of the two you are reading.
+- **Confidence**: composed from what the report actually has, namely how
+  representative the ERA5 series is, the **measured** forecast skill at this lead
+  day (a peak 10 days out is worth less than one tomorrow), and whether an IPCC
+  citation was produced. Capped, because a forecast is never certain.
+- **Citations**: page-level (`file · p123`) and structurally validated against
+  the pages actually retrieved. An empty list means the answerer declined to
+  claim something it could not ground.
+- **Projected change**: a *verbatim* AR6 Chapter 12 sentence for the reference
+  region containing this point. Nothing is paraphrased, and an absence is stated
+  in words rather than quietly filled in.
+- **Limits**: what this cannot do, and where the numbers stop being valid, in
+  [LIMITATIONS.md](https://github.com/AswaniSahoo/climate-risk-agent/blob/main/LIMITATIONS.md).
+- **Cost & latency**: wall time, live model calls (cache hits excluded), token
+  counts and an **estimated** dollar figure. Tokens are measured at the SDK seam;
+  the dollars come from a price table, so they are an estimate, not a bill.
+                """
+            )
 
         with st.container(border=True):
             with st.container(horizontal=True, vertical_alignment="center"):

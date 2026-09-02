@@ -29,6 +29,7 @@ MASTER-PLAN's 4 parallel agents by *adding nodes*, not rewiring.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Optional, TypedDict
@@ -43,8 +44,16 @@ from agent.contracts import (
     RiskDriver,
     RiskReport,
 )
+from agent.progress import (
+    GRAPH_NODES,
+    OnStep,
+    StepStatus,
+    emit_step,
+    finished_detail,
+)
 from agent.risk_bands import band_from_fixed_thresholds, band_from_return_period
 from agent.verdict import compose_confidence
+from obs import telemetry
 from rag.answer import AnswerError, CitedAnswer, answer_with_guard
 from rag.chunk import Chunk
 from rag.cid import projected_change_for
@@ -309,7 +318,16 @@ def synthesize(state: AgentState) -> dict:
     # curve. The absolute cutoffs only survive as the fallback, and the
     # explanation that ships with the band always says which of the two it is.
     if stat is not None and stat.variable == _FORECAST_VARIABLE[hazard]:
-        level, severity_basis = band_from_return_period(metric, stat)
+        try:
+            level, severity_basis = band_from_return_period(metric, stat)
+        except ValueError as exc:
+            # A curve that does not pin every band edge (a caller-supplied stat
+            # fitted at other return periods, say) is a banding problem, not a
+            # report-killing one: fall through to the absolute cutoffs and let
+            # the explanation carry the reason the reader needs.
+            level, severity_basis = band_from_fixed_thresholds(
+                absolute_metric, hazard, reason=str(exc)
+            )
     elif stat is not None:
         # A caller-injected statistic for a different quantity: real climatology,
         # but not comparable, so say that rather than "no climatology".
@@ -402,6 +420,79 @@ def _build_graph():
 _GRAPH = _build_graph()
 
 
+def _run_with_events(state: AgentState, on_step: OnStep, horizon_days: int) -> dict:
+    """Invoke the graph, reporting each node as it starts and finishes.
+
+    LangGraph's `tasks` stream mode is what makes this possible without touching
+    a single node: "Emit events when tasks start and finish, including their
+    results and errors" (Pregel.stream docstring, langgraph 1.2.6). Measured on
+    this graph, the start chunk is yielded BEFORE the node body runs, so the
+    panel can show a step as running rather than only after the fact.
+
+    `values` rides along on the same stream because `Pregel.invoke` is
+    documented as returning "the latest output" of a `values` stream, so keeping
+    the last `values` chunk is therefore the same final state `invoke` returns,
+    which is what preserves run_agent's exact return value.
+
+    Cache hits are read off telemetry rather than guessed: every JsonCache read
+    records `cache:<namespace>` with the tier that served it, so the events
+    recorded between a node's start and finish say whether it paid or not.
+    """
+    final: dict = dict(state)
+    started_at: dict[str, float] = {}
+    telemetry_mark: dict[str, int] = {}
+    finished: set[str] = set()
+    reported_failure: set[str] = set()
+    running: Optional[str] = None
+
+    def emit(node: str, status: StepStatus, seconds: float = 0.0, detail: str = "") -> None:
+        emit_step(
+            on_step, node, status, seconds=seconds, detail=detail, horizon_days=horizon_days
+        )
+
+    try:
+        for mode, chunk in _GRAPH.stream(state, stream_mode=["tasks", "values"]):
+            if mode == "values":
+                final = chunk
+                continue
+            node = chunk["name"]
+            if "result" not in chunk and "error" not in chunk:  # task START chunk
+                running = node
+                started_at[node] = time.perf_counter()
+                telemetry_mark[node] = len(telemetry.snapshot())
+                emit(node, StepStatus.STARTED)
+                continue
+            seconds = time.perf_counter() - started_at.get(node, time.perf_counter())
+            records = telemetry.snapshot()[telemetry_mark.get(node, 0) :]
+            running = None
+            error = chunk.get("error")
+            if error is not None:
+                reported_failure.add(node)
+                emit(node, StepStatus.FAILED, seconds, type(error).__name__)
+                continue  # the stream itself raises next; do not swallow it here
+            finished.add(node)
+            emit(node, StepStatus.FINISHED, seconds, finished_detail(node, chunk.get("result"), records))
+    except BaseException as exc:
+        # A node that raised outright gets no finish chunk at all, so the panel
+        # would otherwise leave it spinning forever. The exception still
+        # propagates: the caller decides what the reader is told.
+        if running is not None and running not in reported_failure:
+            emit(
+                running,
+                StepStatus.FAILED,
+                time.perf_counter() - started_at.get(running, time.perf_counter()),
+                type(exc).__name__,
+            )
+        raise
+
+    # A refusal short-circuits plan -> END, so the remaining nodes never ran.
+    # Saying "skipped" is the honest rendering; silence would read as a hang.
+    for node in GRAPH_NODES:
+        if node not in finished and node not in reported_failure:
+            emit(node, StepStatus.SKIPPED)
+    return final
+
+
 def run_agent(
     location: str,
     latitude: float,
@@ -409,11 +500,21 @@ def run_agent(
     hazard: Hazard,
     horizon_days: int = 7,
     hazard_stat: Optional[HazardStat] = None,
+    on_step: OnStep = None,
 ) -> RiskReport:
     """Run the agent end-to-end and return the RiskReport.
 
     Pass `hazard_stat` (from tools.climatology.climatology_hazard_stat) to ground
     the report in ERA5 GEV climatology and raise its confidence.
+
+    Pass `on_step` to be told what the agent is doing while it does it: it is
+    called with one `agent.progress.StepEvent` per node start / finish / skip /
+    failure. It is a callback rather than a second generator entry point because
+    a callback threads through `run_agent_nl` in one line and leaves this
+    function's return value untouched by construction; a generator would need a
+    parallel entry point for the NL path and a StopIteration dance to hand the
+    report back. Omitting it takes the untouched `invoke` path, so the API, MCP
+    and eval callers are byte-for-byte unaffected.
     """
     state: AgentState = {
         "location": location,
@@ -424,5 +525,8 @@ def run_agent(
     }
     if hazard_stat is not None:
         state["hazard_stat"] = hazard_stat
-    final = _GRAPH.invoke(state)
+    if on_step is None:
+        final = _GRAPH.invoke(state)
+    else:
+        final = _run_with_events(state, on_step, horizon_days)
     return final["report"]

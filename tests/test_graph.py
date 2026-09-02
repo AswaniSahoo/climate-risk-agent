@@ -13,6 +13,7 @@ import agent.graph as graph_mod
 import tools.forecast_skill as skill_mod
 from agent.contracts import Citation, Hazard, RiskLevel, RiskReport
 from agent.graph import run_agent
+from agent.progress import StepEvent, StepStatus
 from rag.answer import CitedAnswer
 from rag.chunk import Chunk
 from rag.corpus import CorpusError
@@ -195,6 +196,36 @@ def test_gev_verdict_overrides_absolute_thresholds(httpx_mock):
     basis = _severity_basis(report)
     assert "below the 2-year level (85.0 mm)" in basis
     assert "ordinary year" in basis
+
+
+def test_a_curve_missing_a_band_edge_falls_back_to_the_absolute_cutoffs(httpx_mock):
+    """A stat fitted at return periods (10, 50, 100) has no 2-year level, so the
+    band edges are not all pinned and `band_from_return_period` raises
+    ValueError. That is a banding problem, not a report-killing one: the run
+    must fall through to the absolute cutoffs and SAY why, rather than
+    propagating the exception.
+
+    Built directly rather than through `build_hazard_stat` because a real fit
+    here costs 300 bootstrap refits (~90 s) to produce the one property under
+    test: which return periods the curve carries.
+    """
+    httpx_mock.add_response(json=CANNED)
+    stat = _precip_stat(60.0, 100.0, 140.0, 160.0).model_copy(update={
+        "return_levels": [
+            ReturnLevel(return_period_years=t, level=v)
+            for t, v in ((10, 100.0), (50, 140.0), (100, 160.0))
+        ],
+    })
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.EXTREME_PRECIP, horizon_days=3, hazard_stat=stat,
+    )
+
+    assert report.risk_level is RiskLevel.HIGH  # 80 mm on the absolute scale
+    basis = _severity_basis(report)
+    assert "lacks required return periods: [2]" in basis  # the reason, verbatim
+    assert "fixed absolute cutoffs" in basis
 
 
 def test_band_between_two_fitted_levels_reports_the_bracket_and_period(httpx_mock):
@@ -484,4 +515,121 @@ def test_confidence_keeps_the_flat_term_when_the_table_lacks_the_variable(
     assert report.confidence == 0.3  # exactly the old, lead-blind number
     assert all(d.factor != "forecast_skill" for d in report.drivers)
     assert "no measured forecast skill" in caplog.text  # loud, never silent
+
+
+# --- step events ------------------------------------------------------------
+# run_agent(..., on_step=...) reports what the agent is doing WITHOUT changing
+# what it produces. These pin both halves: the order and the timings a reader
+# sees, and the fact that the report is identical whether or not anyone watches.
+
+
+def _events(**kwargs) -> tuple[RiskReport, list[StepEvent]]:
+    seen: list[StepEvent] = []
+    report = run_agent(on_step=seen.append, **kwargs)
+    return report, seen
+
+
+def test_on_step_reports_every_node_in_the_order_it_runs(httpx_mock):
+    httpx_mock.add_response(json=CANNED)
+
+    report, seen = _events(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.HEATWAVE, horizon_days=3,
+    )
+
+    started = [e.node for e in seen if e.status is StepStatus.STARTED]
+    finished = [e.node for e in seen if e.status is StepStatus.FINISHED]
+    assert started == ["plan", "call", "research", "project", "synthesize"]
+    assert finished == started  # every step that began also ended
+    assert report.risk_level is RiskLevel.SEVERE  # and the report is unaffected
+
+
+def test_finished_steps_carry_measured_time_and_a_readable_label(httpx_mock):
+    httpx_mock.add_response(json=CANNED)
+
+    _, seen = _events(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.HEATWAVE, horizon_days=3,
+    )
+
+    finished = [e for e in seen if e.status is StepStatus.FINISHED]
+    assert all(e.seconds > 0 for e in finished), [(e.node, e.seconds) for e in finished]
+    labels = {e.node: e.label for e in finished}
+    assert labels["call"] == "Fetching the 3-day forecast (Open-Meteo)"
+    assert labels["research"] == "Searching IPCC AR6 (hybrid BM25 + dense)"
+
+
+def test_a_second_run_badges_the_forecast_step_as_a_cache_hit(httpx_mock):
+    """One HTTP mock is enough, because run two is served from the cache."""
+    httpx_mock.add_response(json=CANNED)
+    query = dict(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.HEATWAVE, horizon_days=3,
+    )
+
+    _, first = _events(**query)
+    _, second = _events(**query)
+
+    def forecast_detail(events):
+        return next(
+            e.detail for e in events
+            if e.node == "call" and e.status is StepStatus.FINISHED
+        )
+
+    assert forecast_detail(first) == ""  # cold: nothing to badge
+    assert forecast_detail(second).startswith("cached (")
+
+
+def test_a_refusal_marks_the_downstream_steps_skipped_not_silent(monkeypatch):
+    """No forecast mock on purpose: a step reported skipped must not have run."""
+    monkeypatch.setattr("agent.graph._ANSWERABLE", {Hazard.HEATWAVE})
+
+    report, seen = _events(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.WIND, horizon_days=3,
+    )
+
+    assert report.refusal is not None
+    skipped = [e.node for e in seen if e.status is StepStatus.SKIPPED]
+    assert skipped == ["call", "research", "project", "synthesize"]
+    plan_done = next(e for e in seen if e.node == "plan" and e.status is StepStatus.FINISHED)
+    assert "refused" in plan_done.detail
+
+
+def test_a_node_that_raises_is_reported_failed_and_the_error_still_propagates(
+    httpx_mock, monkeypatch
+):
+    def boom(state):
+        raise RuntimeError("synthesis exploded")
+
+    monkeypatch.setattr(graph_mod, "synthesize", boom)
+    monkeypatch.setattr(graph_mod, "_GRAPH", graph_mod._build_graph())
+    httpx_mock.add_response(json=CANNED)
+    seen: list[StepEvent] = []
+
+    with pytest.raises(RuntimeError, match="synthesis exploded"):
+        run_agent(
+            location="Rourkela", latitude=22.26, longitude=84.85,
+            hazard=Hazard.HEATWAVE, horizon_days=3, on_step=seen.append,
+        )
+
+    failed = [e for e in seen if e.status is StepStatus.FAILED]
+    assert [e.node for e in failed] == ["synthesize"]
+    assert failed[0].detail == "RuntimeError"
+
+
+def test_watching_the_run_does_not_change_the_report(httpx_mock):
+    httpx_mock.add_response(json=CANNED, is_reusable=True)
+    query = dict(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.EXTREME_PRECIP, horizon_days=3,
+    )
+
+    silent = run_agent(**query)
+    watched = run_agent(on_step=lambda event: None, **query)
+
+    assert watched.risk_level is silent.risk_level
+    assert watched.summary == silent.summary
+    assert watched.confidence == silent.confidence
+    assert [d.detail for d in watched.drivers] == [d.detail for d in silent.drivers]
 

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from agent.contracts import Hazard, RiskReport
 from agent.graph import run_agent
+from agent.progress import CLIMATOLOGY, LOCATE, OnStep, StepStatus, emit_step, track
 from rag.scope import scope_verdict
 from tools.ar6_regions import region_for
 from tools.climatology import ClimatologyError, climatology_hazard_stat
@@ -131,12 +132,19 @@ def _nl_refusal(query: str, reason: str, *, horizon_days: int = 7) -> RiskReport
     )
 
 
-def run_agent_nl(query: str, *, use_climatology: bool = True) -> "RiskReport":
+def run_agent_nl(
+    query: str, *, use_climatology: bool = True, on_step: OnStep = None
+) -> "RiskReport":
     """Free text -> RiskReport: parse -> geocode -> AR6 region -> the agent.
 
     Every unresolvable step returns a typed REFUSAL report (the contract's
     explicit out-of-scope output) — the front door never guesses a hazard,
     a place, or coordinates.
+
+    `on_step` (optional) is told what is happening while it happens. The two
+    steps this function owns (resolving the place and fitting the climatology)
+    run BEFORE the graph is invoked, so they are reported here; the graph's own
+    nodes are reported by `run_agent`, into the same callback.
     """
     parsed = parse_query(query)
     if parsed.out_of_scope:
@@ -160,12 +168,13 @@ def run_agent_nl(query: str, *, use_climatology: bool = True) -> "RiskReport":
         )
 
     try:
-        located = geocode(parsed.place)
+        with track(on_step, LOCATE):
+            located = geocode(parsed.place)
+            region = region_for(located.latitude, located.longitude)
     except GeocodeError as exc:
         return _nl_refusal(query, f"could not resolve the location: {exc}",
                            horizon_days=parsed.horizon_days)
 
-    region = region_for(located.latitude, located.longitude)
     if region is not None:
         # the corpus's own region vocabulary -> deterministic table-row retrieval
         location_label = f"{located.name}, {region.label}"
@@ -175,11 +184,14 @@ def run_agent_nl(query: str, *, use_climatology: bool = True) -> "RiskReport":
     hazard_stat = None
     if use_climatology:
         try:
-            hazard_stat = climatology_hazard_stat(
-                located.latitude, located.longitude, parsed.hazard
-            )
+            with track(on_step, CLIMATOLOGY):
+                hazard_stat = climatology_hazard_stat(
+                    located.latitude, located.longitude, parsed.hazard
+                )
         except ClimatologyError as exc:
             _log.warning("climatology unavailable (%s) — proceeding without it", exc)
+    else:
+        emit_step(on_step, CLIMATOLOGY, StepStatus.SKIPPED, detail="ERA5 grounding off")
 
     return run_agent(
         location=location_label,
@@ -188,4 +200,5 @@ def run_agent_nl(query: str, *, use_climatology: bool = True) -> "RiskReport":
         hazard=parsed.hazard,
         horizon_days=parsed.horizon_days,
         hazard_stat=hazard_stat,
+        on_step=on_step,
     )
