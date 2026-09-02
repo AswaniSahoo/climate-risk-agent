@@ -1,0 +1,148 @@
+# The release gate: retrieval + e2e evals, run only when a release is being cut.
+#
+# WHY a second workflow. ci.yml must stay fast and credential-free, so it runs
+# ruff/mypy/pytest on every push. The evals cannot: they need the 50 MB IPCC
+# corpus, a pre-built embedding cache, and Gemini auth. Putting them on the tag
+# push gives the numbers exactly when they matter and never costs a PR anything.
+#
+# COST GUARD. This job must NEVER embed the corpus. 2,730 chunks at free-tier
+# pacing take ~50 minutes of paced batches, which does not fit in a job and does
+# not fit in the quota. The vectors arrive pre-built as the `eval-cache-v1`
+# release asset; scripts/unpack_eval_cache.py verifies the embedding model, the
+# dims, the corpus PDF sizes and the chunker fingerprint against this checkout
+# and FAILS, naming the pack/upload commands, rather than letting the eval fall
+# back to re-embedding or to BM25-only. scripts/eval_gate.py backstops it: a
+# retrieval artifact with no `hybrid` column fails the build.
+#
+# COST PER RUN, from the measured README figure of ~$0.003 per question
+# (evals/results/*.json record the telemetry those come from):
+#   dev set       60 questions  ~= $0.18 per run
+#   dev + test   165 questions  ~= $0.50 per run
+# Only the e2e eval calls the answering model; the retrieval eval embeds queries
+# only (60 or 105 short strings), which the cached corpus vectors do not cover
+# but which cost fractions of a cent.
+#
+# WALL CLOCK, at the runners' default free-tier pacing (EVAL_LLM_PAUSE_S=13):
+#   dev  ~25 min (setup 3, corpus 1, two PDF parses 2.5, e2e 18 at 60 questions)
+#   test  105 questions would add ~30 min and blow the 45 min timeout, so the
+#         held-out steps drop the pause to 0.5 s and need a PAID / Vertex key.
+#
+# The held-out v2 set is opt-in (workflow_dispatch input `sets: dev+test`), never
+# automatic: every exposure has to be recorded, and a tag push must not burn one.
+# See DEPLOY.md, "Held-out test set - exposure protocol".
+name: evals
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      sets:
+        description: "Which frozen eval sets to run"
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - dev+test
+
+# Read-only is enough: GITHUB_TOKEN needs `contents: read` to fetch a release
+# asset, and this job writes nothing back to the repository.
+permissions:
+  contents: read
+
+# One eval run at a time, repo-wide. Two tag pushes in quick succession must
+# queue, not race: they share the Gemini rate limit and the same results dir.
+concurrency:
+  group: evals
+  cancel-in-progress: false
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv and Python 3.11
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.11"
+          # enable-cache defaults to "auto", which DISABLES caching on tag
+          # pushes. This workflow is a tag push, so ask for it explicitly.
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Require the GEMINI_API_KEY secret
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "The GEMINI_API_KEY repository secret is not set."
+            echo "The e2e eval cannot run without it: every answer is a model call."
+            echo "Add it at Settings > Secrets and variables > Actions > New repository secret."
+            exit 1
+          fi
+          echo "GEMINI_API_KEY is present."
+
+      - name: Download the IPCC corpus
+        run: uv run python -m scripts.download_ipcc
+
+      - name: Download the eval cache release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release download eval-cache-v1 --pattern 'eval-cache-v1.tar.gz' --clobber; then
+            echo "Could not download the eval-cache-v1 asset."
+            echo "Build and publish it once, locally:"
+            echo "  uv run python -m scripts.pack_eval_cache"
+            echo "  gh release create eval-cache-v1 eval-cache-v1.tar.gz \\"
+            echo "    --title 'Eval cache v1' --notes 'Embedding + chunk cache for the eval workflow.'"
+            echo "To replace an existing asset: gh release upload eval-cache-v1 eval-cache-v1.tar.gz --clobber"
+            exit 1
+          fi
+
+      - name: Unpack and verify the eval cache (cost guard)
+        run: uv run python -m scripts.unpack_eval_cache
+
+      # ---- dev set: always, on both triggers -------------------------------
+      - name: Retrieval eval (dev)
+        run: uv run python -m evals.run_retrieval_eval
+
+      - name: End-to-end eval (dev)
+        run: uv run python -m evals.run_e2e_eval
+
+      - name: Gate (dev)
+        run: uv run python -m scripts.eval_gate --eval-set dev --summary "$GITHUB_STEP_SUMMARY"
+
+      # ---- held-out test set: manual dispatch only -------------------------
+      - name: Retrieval eval (held-out test set)
+        if: inputs.sets == 'dev+test'
+        env:
+          EVAL_SET: test
+        run: uv run python -m evals.run_retrieval_eval
+
+      - name: End-to-end eval (held-out test set)
+        if: inputs.sets == 'dev+test'
+        env:
+          EVAL_SET: test
+          # 105 questions at the free-tier 13 s pause would exceed the timeout.
+          EVAL_LLM_PAUSE_S: "0.5"
+        run: uv run python -m evals.run_e2e_eval
+
+      - name: Gate (held-out test set)
+        if: inputs.sets == 'dev+test'
+        run: uv run python -m scripts.eval_gate --eval-set test --summary "$GITHUB_STEP_SUMMARY"
+
+      # ---- evidence, whatever the verdict ----------------------------------
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: evals/results/
+          if-no-files-found: error
