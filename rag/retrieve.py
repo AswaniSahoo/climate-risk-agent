@@ -11,6 +11,7 @@ still works, and nobody mistakes degraded mode for the measured hybrid.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -20,28 +21,47 @@ from rag.chunk import Chunk
 from rag.dense import DenseIndex
 from rag.embed import DiskVectorCache, EmbeddingError, cached_embed_texts
 from rag.hybrid import rrf_fuse
+from rag.rerank import Reranker
 
 _log = logging.getLogger(__name__)
 
 DEFAULT_CACHE_DIR = Path("data/cache/embeddings")
 _CANDIDATES = 50  # per-retriever candidate depth before fusion
+# Reranker pool: first-stage retrieval is recall-oriented, so a reranker is
+# handed a WIDER slice than the caller asked for and narrows it back down.
+# 30 is the largest pool one listwise Gemini call reads cheaply (~4.5k tokens)
+# and well inside the depth where hybrid recall has already saturated.
+_RERANK_POOL = 30
 
 
 class HybridRetriever:
+    """BM25 + dense + RRF, with two optional stages that default to OFF.
+
+    `reranker` reorders a wide fused pool; `rewriter` neutralises the query
+    before searching (retrieval only — the caller still hands the ORIGINAL
+    question to the answerer). With both None this is byte-identical to the
+    measured hybrid path, so the published numbers keep describing the default.
+    """
+
     def __init__(self, chunks: list[Chunk], *, doc_matrix: np.ndarray | None,
-                 cache: DiskVectorCache | None = None):
+                 cache: DiskVectorCache | None = None,
+                 reranker: Reranker | None = None,
+                 rewriter: Callable[[str], str] | None = None):
         self.chunks = list(chunks)
         self._bm25 = BM25Index(self.chunks)
         self._dense = DenseIndex(self.chunks, doc_matrix) if doc_matrix is not None else None
         self._cache = cache
+        self._reranker = reranker
+        self._rewriter = rewriter
 
     @property
     def dense_enabled(self) -> bool:
         return self._dense is not None
 
     @classmethod
-    def build(cls, chunks: list[Chunk], *, cache_dir: Path | str = DEFAULT_CACHE_DIR
-              ) -> "HybridRetriever":
+    def build(cls, chunks: list[Chunk], *, cache_dir: Path | str = DEFAULT_CACHE_DIR,
+              reranker: Reranker | None = None,
+              rewriter: Callable[[str], str] | None = None) -> "HybridRetriever":
         """Embed the corpus through the disk cache; degrade to BM25-only loudly."""
         cache = DiskVectorCache(cache_dir)
         try:
@@ -54,8 +74,10 @@ class HybridRetriever:
                 "dense unavailable (%s) — running BM25-only "
                 "(measured hybrid quality requires embeddings)", exc,
             )
-            return cls(chunks, doc_matrix=None, cache=cache)
-        return cls(chunks, doc_matrix=matrix, cache=cache)
+            return cls(chunks, doc_matrix=None, cache=cache,
+                       reranker=reranker, rewriter=rewriter)
+        return cls(chunks, doc_matrix=matrix, cache=cache,
+                   reranker=reranker, rewriter=rewriter)
 
     def _embed_query(self, question: str) -> list[float]:
         cache = self._cache or DiskVectorCache(DEFAULT_CACHE_DIR)
@@ -63,16 +85,34 @@ class HybridRetriever:
         return vector
 
     def retrieve(self, question: str, top_k: int = 5) -> list[Chunk]:
-        """Ranked chunks for a question: RRF(bm25, dense), or BM25 on fallback."""
-        lexical = [c for c, _ in self._bm25.query(question, top_k=_CANDIDATES)]
+        """Ranked chunks for a question: RRF(bm25, dense), or BM25 on fallback.
+
+        With a reranker attached the pipeline becomes fuse-wide-then-narrow:
+        RRF to `_RERANK_POOL`, rerank, keep `top_k`. Without one the fusion cuts
+        straight to `top_k`, exactly as before.
+        """
+        query = self._rewriter(question) if self._rewriter else question
+        pool = _RERANK_POOL if self._reranker else top_k
+        lexical = [c for c, _ in self._bm25.query(query, top_k=_CANDIDATES)]
         if self._dense is None:
-            return lexical[:top_k]
+            return self._narrow(query, lexical[:pool], top_k)
         try:
-            query_vector = self._embed_query(question)
+            query_vector = self._embed_query(query)
         except EmbeddingError as exc:
             _log.warning(
                 "query embedding failed (%s) — falling back to BM25 for this question", exc
             )
-            return lexical[:top_k]
+            return self._narrow(query, lexical[:pool], top_k)
         semantic = [c for c, _ in self._dense.query(query_vector, top_k=_CANDIDATES)]
-        return rrf_fuse([lexical, semantic], top_k=top_k)
+        return self._narrow(query, rrf_fuse([lexical, semantic], top_k=pool), top_k)
+
+    def _narrow(self, query: str, pool: list[Chunk], top_k: int) -> list[Chunk]:
+        """Rerank the pool if a reranker is attached, else just cut to top_k.
+
+        The reranker sees the REWRITTEN query, not the original: it is part of
+        retrieval, and a false premise misleads a cross-encoder exactly as it
+        misleads BM25.
+        """
+        if self._reranker is None:
+            return pool[:top_k]
+        return self._reranker.rerank(query, pool, top_k)

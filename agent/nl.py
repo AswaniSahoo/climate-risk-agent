@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from agent.contracts import Hazard, RiskReport
 from agent.graph import run_agent
-from rag.scope import out_of_scope_hazard
+from rag.scope import scope_verdict
 from tools.ar6_regions import region_for
 from tools.climatology import ClimatologyError, climatology_hazard_stat
 from tools.geocode import GeocodeError, geocode
@@ -33,6 +33,14 @@ _HAZARD_PATTERNS: dict[Hazard, re.Pattern[str]] = {
         re.IGNORECASE,
     ),
     Hazard.WIND: re.compile(r"\bwinds?\b|\bgusts?\b", re.IGNORECASE),
+}
+
+# Scope stage 2 reports a hazard by its policy NAME; the front door needs the
+# enum. Only used when the lexical patterns above found nothing at all.
+_HINT_TO_HAZARD: dict[str, Hazard] = {
+    "heatwave": Hazard.HEATWAVE,
+    "extreme precipitation": Hazard.EXTREME_PRECIP,
+    "wind": Hazard.WIND,
 }
 
 _MAX_HORIZON = 16  # Open-Meteo forecast limit; tools/validation re-enforces
@@ -59,10 +67,20 @@ class ParsedQuery(BaseModel):
 
 
 def _extract_hazard(text: str) -> tuple[Hazard | None, str | None]:
+    """(hazard, out_of_scope_name) — the lexical patterns first, then the guard.
+
+    When stage 2 is on and recovers a hazard from a paraphrase the patterns miss
+    ("storms getting stronger" -> wind), that hint becomes the parsed hazard
+    instead of a "could not identify a supported hazard" refusal. With stage 2
+    off there is no hint, so this is the same two-line function as before.
+    """
     for hazard, pattern in _HAZARD_PATTERNS.items():
         if pattern.search(text):
             return hazard, None
-    return None, out_of_scope_hazard(text)
+    decision = scope_verdict(text)
+    if decision.out_of_scope:
+        return None, decision.out_of_scope
+    return _HINT_TO_HAZARD.get(decision.hazard_hint or ""), None
 
 
 def _extract_horizon(text: str) -> int:

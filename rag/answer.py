@@ -127,7 +127,10 @@ def answer_with_guard(question: str, chunks: list[Chunk], *, cache=None) -> Cite
     """The full answer path: deterministic scope guard FIRST, then the LLM.
 
     An out-of-scope hazard refuses before any model call — the guard is code,
-    so it cannot be prompt-injected and costs zero tokens.
+    so it cannot be prompt-injected and costs zero tokens. (With
+    CRG_SCOPE_STAGE2 set, the semantic second stage may also refuse here, but
+    only for questions the lexical stage found no hazard signal in at all;
+    stage 1's verdict is never overridden.)
 
     `cache` (a rag.answer_cache.AnswerCache) is opt-in: frozen corpus +
     temperature 0 make the answer deterministic in (question, chunk texts,
@@ -135,9 +138,9 @@ def answer_with_guard(question: str, chunks: list[Chunk], *, cache=None) -> Cite
     EVAL must not — it measures live behavior, and a cache would mask
     model-version regressions.
     """
-    from rag.scope import out_of_scope_hazard
+    from rag.scope import scope_verdict
 
-    hazard = out_of_scope_hazard(question)
+    hazard = scope_verdict(question).out_of_scope
     if hazard:
         return CitedAnswer(
             answer="",

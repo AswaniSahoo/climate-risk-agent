@@ -9,10 +9,18 @@ Policy rule (not tuned to the eval set): a question is out of scope when it
 mentions an unsupported hazard AND no supported hazard — compound questions
 that involve a supported hazard (e.g. concurrent heatwaves and droughts) stay
 in scope. v1 limitation, stated honestly: matching is lexical.
+
+v2 (2026-09) adds a SECOND stage behind the CRG_SCOPE_STAGE2 flag for the one
+bucket this lexical stage is blind to: questions that name no hazard vocabulary
+at all. `scope_verdict()` is the combined entry point; stage 1 still runs first
+and its verdict is final, so the deterministic, injection-proof guarantee above
+is unchanged. See rag/scope_semantic.py.
 """
 from __future__ import annotations
 
+import os
 import re
+from dataclasses import dataclass
 
 # A marine heatwave is an oceanic extreme-heat EVENT — a hazard, not background
 # earth-system science — but the phrase contains "heatwave" (a supported term),
@@ -56,3 +64,99 @@ def out_of_scope_hazard(question: str) -> str | None:
         if re.search(pattern, question, re.IGNORECASE):
             return name
     return None
+
+
+def has_supported_signal(question: str) -> bool:
+    """Did the lexical stage SEE a supported hazard? (Not the same as "in scope".)
+
+    Split out because it is the routing question for stage 2: a question with no
+    supported signal and no unsupported signal is the bucket stage 1 is blind to.
+    """
+    return bool(_SUPPORTED.search(question))
+
+
+# --- combined verdict (stage 1 + optional stage 2) --------------------------
+
+STAGE2_MODES = ("off", "embed", "llm")
+
+
+@dataclass(frozen=True)
+class ScopeDecision:
+    """What the guard concluded, and which stage concluded it.
+
+    `out_of_scope` is the lexical stage's contract, unchanged: the named
+    unsupported hazard, or None. `hazard_hint` is new and additive — a supported
+    hazard recovered from a paraphrase the regex misses, which callers may use
+    to route instead of refusing.
+    """
+
+    out_of_scope: str | None = None
+    hazard_hint: str | None = None
+    stage: str = "lexical"
+    detail: str = ""
+
+
+def stage2_mode() -> str:
+    """Resolve CRG_SCOPE_STAGE2 (off | embed | llm). Unknown value -> off, loudly."""
+    mode = os.environ.get("CRG_SCOPE_STAGE2", "off").strip().lower() or "off"
+    if mode not in STAGE2_MODES:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "CRG_SCOPE_STAGE2=%r is not one of %s — stage 2 stays OFF", mode, STAGE2_MODES
+        )
+        return "off"
+    return mode
+
+
+# One stage-2 result per (question, mode) per process. The eval runner and
+# answer_with_guard both ask for the same verdict on the same question; without
+# this the LLM arm would pay twice for one decision.
+_stage2_cache: dict[tuple[str, str], "ScopeDecision"] = {}
+
+
+def clear_stage2_cache() -> None:
+    _stage2_cache.clear()
+
+
+def scope_verdict(question: str) -> ScopeDecision:
+    """Stage 1, then stage 2 only where stage 1 is blind.
+
+    Order is the safety argument, not an implementation detail:
+    1. a lexical out-of-scope verdict STANDS — deterministic and unforgeable;
+    2. a lexical supported-hazard signal means in scope — no model call needed;
+    3. only the silent bucket (neither signal) reaches stage 2, and stage 2 may
+       return no verdict, in which case behaviour is exactly what it is today.
+
+    With CRG_SCOPE_STAGE2=off (the default) this is `out_of_scope_hazard` plus a
+    wrapper — no extra call, no behaviour change.
+    """
+    lexical = out_of_scope_hazard(question)
+    if lexical is not None:
+        return ScopeDecision(out_of_scope=lexical, stage="lexical")
+    if has_supported_signal(question):
+        return ScopeDecision(stage="lexical")
+
+    mode = stage2_mode()
+    if mode == "off":
+        return ScopeDecision(stage="lexical")
+
+    key = (question, mode)
+    if key in _stage2_cache:
+        return _stage2_cache[key]
+
+    from rag import scope_semantic
+
+    verdict = (
+        scope_semantic.semantic_scope(question)
+        if mode == "embed"
+        else scope_semantic.llm_scope(question)
+    )
+    decision = ScopeDecision(
+        out_of_scope=verdict.out_of_scope,
+        hazard_hint=verdict.hazard_hint,
+        stage=mode,
+        detail=verdict.detail,
+    )
+    _stage2_cache[key] = decision
+    return decision
