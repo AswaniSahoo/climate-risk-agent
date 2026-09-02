@@ -5,15 +5,19 @@ into one call that returns a RiskReport. HTTP is mocked (pytest-httpx) and the
 IPCC retriever is stubbed offline by default, so these are deterministic. The
 wind case proves the refusal path short-circuits BEFORE any forecast call.
 """
+import json
+
 import pytest
 
 import agent.graph as graph_mod
+import tools.forecast_skill as skill_mod
 from agent.contracts import Citation, Hazard, RiskLevel, RiskReport
 from agent.graph import run_agent
 from rag.answer import CitedAnswer
 from rag.chunk import Chunk
 from rag.corpus import CorpusError
 from tools.climatology import build_hazard_stat
+from tools.forecast_skill import forecast_skill, skill_for
 from tools.hazard_stats import HazardStat, Representativeness, ReturnLevel, TrendInfo
 
 
@@ -24,6 +28,22 @@ def _offline_ipcc(monkeypatch):
         raise CorpusError("offline test: no corpus")
 
     monkeypatch.setattr(graph_mod, "_ipcc_retriever", no_corpus)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_forecast_cache(tmp_path, monkeypatch):
+    """Forecast cache -> tmp_path.
+
+    The real one is a repo directory with a one-hour TTL, so a second run of
+    this file inside the hour would be served from disk and leave the mocked
+    response unused. Per-test isolation makes every run identical.
+    """
+    from tools.cache_backend import DiskCache, JsonCache
+
+    monkeypatch.setattr(
+        "tools.forecast._forecast_cache",
+        lambda: JsonCache("forecast", backend=DiskCache(tmp_path / "fc")),
+    )
 
 # ~20 years of (illustrative) annual-max 2m_temperature in Kelvin.
 _HEAT_MAXIMA = [
@@ -40,12 +60,16 @@ CANNED = {
         "precipitation_sum": "mm",
         "temperature_2m_max": "°C",
         "wind_speed_10m_max": "km/h",
+        "wind_gusts_10m_max": "km/h",
     },
     "daily": {
         "time": ["2026-07-02", "2026-07-03", "2026-07-04"],
-        "precipitation_sum": [14.2, 0.1, 80.0],     # max 80mm  -> HIGH precip band
-        "temperature_2m_max": [46.0, 44.0, 40.0],   # max 46°C  -> SEVERE heat band
-        "wind_speed_10m_max": [70.0, 45.0, 30.0],   # max 70km/h -> HIGH wind band
+        # Peaks below are the FALLBACK (absolute-cutoff) bands, which is what a
+        # run without an injected HazardStat lands on.
+        "precipitation_sum": [14.2, 0.1, 80.0],     # max 80 mm    -> HIGH
+        "temperature_2m_max": [46.0, 44.0, 40.0],   # max 46 °C    -> SEVERE
+        "wind_speed_10m_max": [70.0, 45.0, 30.0],   # max 70 km/h  -> HIGH (sustained)
+        "wind_gusts_10m_max": [95.0, 60.0, 42.0],   # max 95 km/h gust: the GEV metric
     },
 }
 
@@ -85,9 +109,16 @@ def test_wind_query_yields_high_risk_report(httpx_mock):
     )
 
     assert report.refusal is None
-    assert report.risk_level is RiskLevel.HIGH  # 70 km/h
+    assert report.risk_level is RiskLevel.HIGH
     assert report.drivers[0].factor == "wind"
-    assert "m/s" in report.drivers[0].detail  # km/h converted for ERA5 comparability
+    assert "m/s" in report.drivers[0].detail  # km/h also shown in m/s
+    # No climatology injected -> the absolute-cutoff fallback, which says so and
+    # grades the SUSTAINED 70 km/h (what those Beaufort-derived cutoffs mean),
+    # not the 95 km/h gust.
+    basis = _severity_basis(report)
+    assert "no ERA5 climatology is available for this location" in basis
+    assert "fixed absolute cutoffs" in basis
+    assert "sustained 10 m wind 70 km/h grades high (62 to 88 km/h)" in basis
 
 
 def test_unsupported_hazard_takes_refusal_path_without_forecast(monkeypatch):
@@ -121,14 +152,16 @@ def test_heatwave_report_includes_injected_hazard_stats(httpx_mock):
     assert "return level" in report.summary.lower()
 
 
-def _precip_stat(ten, fifty, hundred) -> HazardStat:
+def _stat(variable: str, unit: str, two, ten, fifty, hundred) -> HazardStat:
+    """A HazardStat carrying the four fitted return levels the bands need."""
     return HazardStat(
-        variable="precipitation_sum", statistic_definition="annual max daily precip",
-        unit="mm", source="test", model="era5", native_resolution_deg=0.25,
+        variable=variable, statistic_definition=f"annual max {variable}",
+        unit=unit, source="test", model="era5", native_resolution_deg=0.25,
         captures_diurnal_peak=True, timezone="Asia/Kolkata",
         latitude=22.26, longitude=84.85, n_years=63,
-        record_start_year=1960, record_end_year=2022, record_max=150.0,
+        record_start_year=1960, record_end_year=2022, record_max=hundred,
         return_levels=[
+            ReturnLevel(return_period_years=2, level=two),
             ReturnLevel(return_period_years=10, level=ten),
             ReturnLevel(return_period_years=50, level=fifty),
             ReturnLevel(return_period_years=100, level=hundred),
@@ -139,27 +172,89 @@ def _precip_stat(ten, fifty, hundred) -> HazardStat:
     )
 
 
+def _precip_stat(two, ten, fifty, hundred) -> HazardStat:
+    return _stat("precipitation_sum", "mm", two, ten, fifty, hundred)
+
+
+def _severity_basis(report) -> str:
+    return next(d.detail for d in report.drivers if d.factor == "severity_basis")
+
+
 def test_gev_verdict_overrides_absolute_thresholds(httpx_mock):
     # 80 mm peak = "HIGH" on the absolute Day-1 scale, but at a wet-climate
-    # location whose 10-yr event is 100 mm it's within decadal experience -> LOW.
+    # location where an ordinary year already delivers 85 mm it is LOW.
     httpx_mock.add_response(json=CANNED)
 
     report = run_agent(
         location="Rourkela", latitude=22.26, longitude=84.85,
         hazard=Hazard.EXTREME_PRECIP, horizon_days=3,
-        hazard_stat=_precip_stat(100.0, 140.0, 160.0),
+        hazard_stat=_precip_stat(85.0, 100.0, 140.0, 160.0),
     )
 
     assert report.risk_level is RiskLevel.LOW  # location-relative, not absolute
-    basis = [d for d in report.drivers if d.factor == "severity_basis"]
-    assert basis and "GEV return levels" in basis[0].detail
+    basis = _severity_basis(report)
+    assert "below the 2-year level (85.0 mm)" in basis
+    assert "ordinary year" in basis
+
+
+def test_band_between_two_fitted_levels_reports_the_bracket_and_period(httpx_mock):
+    # 80 mm sits between the 2-yr (60) and 10-yr (100) levels -> MODERATE, and the
+    # explanation must carry the bracket AND the interpolated return period.
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.EXTREME_PRECIP, horizon_days=3,
+        hazard_stat=_precip_stat(60.0, 100.0, 140.0, 160.0),
+    )
+
+    assert report.risk_level is RiskLevel.MODERATE
+    basis = _severity_basis(report)
+    assert "between the 2- and 10-year levels (60.0 / 100.0 mm)" in basis
+    assert "1-in-4-year event" in basis  # log-interpolated: exp(ln2 + 0.5*(ln10-ln2))
+
+
+def test_heatwave_band_comes_from_the_local_curve(httpx_mock):
+    # 46 °C peak against a hot-climate curve: between the 10-yr (44) and 50-yr
+    # (47) levels -> HIGH, not the SEVERE the absolute 45 °C cutoff would give.
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.HEATWAVE, horizon_days=3,
+        hazard_stat=_stat("temperature_2m_max", "°C", 38.0, 44.0, 47.0, 49.0),
+    )
+
+    assert report.risk_level is RiskLevel.HIGH
+    assert "between the 10- and 50-year levels (44.0 / 47.0 °C)" in _severity_basis(report)
+
+
+def test_wind_band_compares_the_gust_against_the_gust_climatology(httpx_mock):
+    # The DEBT fix: the forecast GUST (95 km/h) is what gets compared to the
+    # ERA5 gust fit. Comparing the 70 km/h sustained speed instead would land a
+    # band lower and understate the risk.
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.WIND, horizon_days=3,
+        hazard_stat=_stat("wind_gusts_10m_max", "km/h", 70.0, 90.0, 110.0, 125.0),
+    )
+
+    assert report.risk_level is RiskLevel.HIGH
+    basis = _severity_basis(report)
+    assert "Forecast peak 95 km/h" in basis
+    assert "between the 10- and 50-year levels (90.0 / 110.0 km/h)" in basis
+    assert "absolute cutoffs" not in basis  # the climatology path, not the fallback
+    assert "max daily gust 95.0 km/h" in report.drivers[0].detail
+    assert "max daily sustained 70.0 km/h" in report.drivers[0].detail
 
 
 def test_significant_trend_surfaces_in_summary_and_driver(httpx_mock):
     # When the stat carries a significant warming trend, the report must SAY
     # the levels are effective (evaluated at the latest year), not 60-yr averages.
     httpx_mock.add_response(json=CANNED)
-    stat = _precip_stat(100.0, 140.0, 160.0).model_copy(update={
+    stat = _precip_stat(60.0, 100.0, 140.0, 160.0).model_copy(update={
         "trend": TrendInfo(slope_per_decade=2.5, p_value=0.003,
                            significant=True, evaluated_at_year=2022),
     })
@@ -176,7 +271,7 @@ def test_significant_trend_surfaces_in_summary_and_driver(httpx_mock):
 
 def test_insignificant_trend_reports_the_test_ran(httpx_mock):
     httpx_mock.add_response(json=CANNED)
-    stat = _precip_stat(100.0, 140.0, 160.0).model_copy(update={
+    stat = _precip_stat(60.0, 100.0, 140.0, 160.0).model_copy(update={
         "trend": TrendInfo(slope_per_decade=0.4, p_value=0.61,
                            significant=False, evaluated_at_year=None),
     })
@@ -198,7 +293,7 @@ def test_gev_verdict_flags_record_class_event(httpx_mock):
     report = run_agent(
         location="Rourkela", latitude=22.26, longitude=84.85,
         hazard=Hazard.EXTREME_PRECIP, horizon_days=3,
-        hazard_stat=_precip_stat(40.0, 60.0, 70.0),
+        hazard_stat=_precip_stat(25.0, 40.0, 60.0, 70.0),
     )
 
     assert report.risk_level is RiskLevel.SEVERE
@@ -276,4 +371,117 @@ def test_offline_corpus_degrades_loudly_report_still_ships(httpx_mock, caplog):
     assert report.citations == []
     assert report.risk_level is RiskLevel.SEVERE
     assert "IPCC grounding unavailable" in caplog.text  # loud (WARNING), never silent
+
+
+# --- forecast skill: a day-7 peak is a weaker claim than a day-1 one --------
+
+
+def _skill_state(hazard: Hazard, horizon_days: int) -> dict:
+    return {
+        "location": "Rourkela", "latitude": 22.26, "longitude": 84.85,
+        "hazard": hazard, "horizon_days": horizon_days,
+    }
+
+
+def _skill_driver(report) -> str:
+    return next(d.detail for d in report.drivers if d.factor == "forecast_skill")
+
+
+@pytest.mark.parametrize(
+    "hazard, variable, horizon, pct",
+    [
+        (Hazard.HEATWAVE, "temperature_2m_max", 1, 85),
+        (Hazard.HEATWAVE, "temperature_2m_max", 7, 47),
+        (Hazard.EXTREME_PRECIP, "precipitation_sum", 1, 53),
+        (Hazard.EXTREME_PRECIP, "precipitation_sum", 7, 3),
+        (Hazard.WIND, "wind_gusts_10m_max", 1, 69),
+        (Hazard.WIND, "wind_gusts_10m_max", 7, 34),
+    ],
+)
+def test_forecast_node_attaches_the_measured_row_for_the_hazards_own_variable(
+    httpx_mock, hazard, variable, horizon, pct
+):
+    # Wind reads the GUST row, because the gust is the quantity it is graded on.
+    httpx_mock.add_response(json=CANNED)
+
+    skill = graph_mod.call(_skill_state(hazard, horizon))["forecast"].skill
+
+    assert skill is not None
+    assert skill.variable == variable
+    assert skill.lead_day == horizon and skill.requested_horizon_days == horizon
+    assert skill.extrapolated is False
+    assert skill.extreme_hit_rate == skill_for(variable, horizon).extreme_hit_rate
+    assert round(skill.extreme_hit_rate * 100) == pct
+    assert "13 cities" in skill.source and "2024-2025" in skill.source
+
+
+def test_skill_past_the_measured_archive_is_clamped_and_flagged(httpx_mock):
+    # The archive stops at lead day 7; the forecast tool accepts 16.
+    httpx_mock.add_response(json=CANNED)
+
+    skill = graph_mod.call(_skill_state(Hazard.HEATWAVE, 10))["forecast"].skill
+
+    assert skill.requested_horizon_days == 10
+    assert skill.lead_day == 7
+    assert skill.extrapolated is True
+    assert skill.confidence_weight == forecast_skill("temperature_2m_max", 7).confidence_weight
+
+
+def test_report_driver_quotes_the_measured_hit_rate(httpx_mock):
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(**_skill_state(Hazard.HEATWAVE, 7))
+
+    detail = _skill_driver(report)
+    assert "47%" in detail  # the measured number, in the report, in words
+    assert "GFS Global" in detail and "13 cities" in detail and "2024-2025" in detail
+    # 0.3 * (0.4705 / 0.8467), no climatology and no citations to add to it
+    assert report.confidence == 0.17
+
+
+def test_extrapolated_driver_says_the_day_7_value_is_being_reused(httpx_mock):
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(**_skill_state(Hazard.HEATWAVE, 10))
+
+    detail = _skill_driver(report)
+    assert "past the measured archive" in detail
+    assert "day-7 figure is reused" in detail
+    assert "47%" in detail
+
+
+def test_confidence_never_rises_with_the_horizon(httpx_mock):
+    """The property that must hold for every hazard: further out is never surer."""
+    httpx_mock.add_response(json=CANNED, is_reusable=True)
+
+    confidences = [
+        run_agent(**_skill_state(Hazard.HEATWAVE, h)).confidence for h in range(1, 17)
+    ]
+
+    assert confidences[0] == 0.3  # day 1 = the pre-skill number, unchanged
+    assert max(confidences) <= 0.3  # nothing scores above the old maximum
+    assert all(b <= a for a, b in zip(confidences, confidences[1:])), confidences
+    assert confidences[-1] < confidences[0]
+
+
+def test_confidence_keeps_the_flat_term_when_the_table_lacks_the_variable(
+    httpx_mock, tmp_path, monkeypatch, caplog
+):
+    """A gap in our own measurement must not silently penalise the report."""
+    thin = {
+        "schema_version": 1,
+        "provenance": {"model": "gfs_global", "city_count": 13},
+        # precipitation only: a heatwave run finds no row for its variable
+        "hazards": {"precipitation_sum": skill_mod.load_skill_table().hazards["precipitation_sum"]},
+    }
+    path = tmp_path / "thin_table.json"
+    path.write_text(json.dumps(thin), encoding="utf-8")
+    monkeypatch.setattr(skill_mod, "TABLE_PATH", path)
+    httpx_mock.add_response(json=CANNED)
+
+    report = run_agent(**_skill_state(Hazard.HEATWAVE, 7))
+
+    assert report.confidence == 0.3  # exactly the old, lead-blind number
+    assert all(d.factor != "forecast_skill" for d in report.drivers)
+    assert "no measured forecast skill" in caplog.text  # loud, never silent
 

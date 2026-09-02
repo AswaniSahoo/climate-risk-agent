@@ -27,6 +27,9 @@ EXPECTED_QUOTAS = {
     Slice.OUT_OF_CORPUS: 3,
     Slice.PREMISE_INJECTION: 4,
     Slice.DUPLICATE_REGION: 2,
+    # Added with rag/cid.py (2026-09-02): one Ch.12 climatic impact-driver
+    # projection per AR6 region/hazard pair the chapter actually assesses.
+    Slice.CID_TABLE: 15,
 }
 
 
@@ -35,8 +38,8 @@ def gold_set():
     return load_gold_set()
 
 
-def test_gold_set_has_45_valid_questions(gold_set):
-    assert len(gold_set.questions) == 45
+def test_gold_set_has_60_valid_questions(gold_set):
+    assert len(gold_set.questions) == 60
 
 
 def test_slice_quotas_match_spec(gold_set):

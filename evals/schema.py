@@ -20,8 +20,14 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Slice(str, Enum):
-    """The seven eval slices (Fable-locked spec). Slice-wise metrics expose which
-    kind of question a retrieval change actually helped or hurt."""
+    """The eval slices. Slice-wise metrics expose which kind of question a
+    retrieval change actually helped or hurt.
+
+    The first seven are the Fable-locked spec; `cid-table` was added later, for
+    the Ch.12 climatic impact-driver projections that rag/cid.py reads. It is
+    hyphenated because the feature request named it that way; the underscore
+    convention above is the older one.
+    """
 
     SINGLE_PAGE = "single_page"           # answer sits on one page
     MULTI_PAGE = "multi_page"             # any_of: several acceptable pages
@@ -30,6 +36,7 @@ class Slice(str, Enum):
     OUT_OF_CORPUS = "out_of_corpus"       # answerable by no document we hold
     PREMISE_INJECTION = "premise_injection"      # embeds a false premise
     DUPLICATE_REGION = "duplicate_region"        # traps the orphaned-cell bug
+    CID_TABLE = "cid-table"               # Ch.12 CID projection for an AR6 region
 
 
 class ExpectedBehavior(str, Enum):

@@ -525,6 +525,171 @@
       "supporting_quote": "Median increase of more than 5°C in the 50-year TXx and TNn events compared to the 1°C warming level (Li et al., 2021) and more than 6°C in annual TXx and TNn compared to pre-industrial (11.SM)",
       "hazard": "heatwave",
       "notes": "Trap: East Central Asia (ECA) — one letter off WCA — has its own Table 11.7 row (Ch11 p124) projecting only 'more than 3.5°C' at 4°C GWL vs WCA's 'more than 5°C'. Gold is West Central Asia's page only."
+    },
+    {
+      "id": "CID-01",
+      "slice": "cid-table",
+      "question": "How is heavy precipitation projected to change in South-Eastern South America (SES) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 50}],
+      "supporting_quote": "Heavy precipitation and pluvial flood: Table 11.14 indicated that there is low confidence due to limited evidence of extreme precipitation trends in almost all Central and South America, except in SES where increases in the magnitude and frequency of heavy precipitation have been observed ( high confidence ).",
+      "hazard": "extreme_precip",
+      "notes": "Ch.12 climatic impact-driver assessment for SES, summarised in Table 12.6 (Central and South America). Parsed direction: increase; high confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p50#0."
+    },
+    {
+      "id": "CID-02",
+      "slice": "cid-table",
+      "question": "How is heavy precipitation projected to change in South American Monsoon (SAM) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 50}],
+      "supporting_quote": "Chapter 11 projections indicate low confidence of increase, compared to the modern period, in the intensity and frequency of heavy precipitation in SCA and SWS for all GWLs, and medium confidence of increase in NSA, NES, SSA, SAM and SES for GWL of 4°C.",
+      "hazard": "extreme_precip",
+      "notes": "Ch.12 climatic impact-driver assessment for SAM, summarised in Table 12.6 (Central and South America). Parsed direction: increase; medium confidence; GWL of 4°C. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p50#1."
+    },
+    {
+      "id": "CID-03",
+      "slice": "cid-table",
+      "question": "How is heavy precipitation projected to change in Southern Central America (SCA) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 50}],
+      "supporting_quote": "Chapter 11 projections indicate low confidence of increase, compared to the modern period, in the intensity and frequency of heavy precipitation in SCA and SWS for all GWLs, and medium confidence of increase in NSA, NES, SSA, SAM and SES for GWL of 4°C.",
+      "hazard": "extreme_precip",
+      "notes": "Ch.12 climatic impact-driver assessment for SCA, summarised in Table 12.6 (Central and South America). Parsed direction: increase; low confidence; for all GWLs. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p50#1."
+    },
+    {
+      "id": "CID-04",
+      "slice": "cid-table",
+      "question": "How is heavy precipitation projected to change in Northern Australia (NAU) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 44}],
+      "supporting_quote": "Heavy precipitation and pluvial flooding are projected to increase with medium confidence in Northern Australia and Central Australia.",
+      "hazard": "extreme_precip",
+      "notes": "Ch.12 climatic impact-driver assessment for NAU, summarised in Table 12.5 (Australasia). Parsed direction: increase; medium confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p44#0."
+    },
+    {
+      "id": "CID-05",
+      "slice": "cid-table",
+      "question": "How is heavy precipitation projected to change in Central Australia (CAU) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 44}],
+      "supporting_quote": "Heavy precipitation and pluvial flooding are projected to increase with medium confidence in Northern Australia and Central Australia.",
+      "hazard": "extreme_precip",
+      "notes": "Ch.12 climatic impact-driver assessment for CAU, summarised in Table 12.5 (Australasia). Parsed direction: increase; medium confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p44#0."
+    },
+    {
+      "id": "CID-06",
+      "slice": "cid-table",
+      "question": "How is heavy precipitation projected to change in New Zealand (NZ) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 44}],
+      "supporting_quote": "There is medium confidence that river flooding will increase in New Zealand and Australia, with higher increases in Northern Australia.",
+      "hazard": "extreme_precip",
+      "notes": "Ch.12 climatic impact-driver assessment for NZ, summarised in Table 12.5 (Australasia). Parsed direction: increase; medium confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p44#0."
+    },
+    {
+      "id": "CID-07",
+      "slice": "cid-table",
+      "question": "How is heavy precipitation projected to change in Northern Europe (NEU) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 56}],
+      "supporting_quote": "Projections based on multiple lines of evidence from global to convective permitting model scales show high confidence in extreme precipitation increase in the northern, central and eastern European regions (NEU, WCE, EEU) and in the Alpine area.",
+      "hazard": "extreme_precip",
+      "notes": "Ch.12 climatic impact-driver assessment for NEU, summarised in Table 12.7 (Europe). Parsed direction: increase; high confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p56#6."
+    },
+    {
+      "id": "CID-08",
+      "slice": "cid-table",
+      "question": "How is heavy precipitation projected to change in Central Africa (CAF) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 28}],
+      "supporting_quote": "In West Africa and Central Africa, there is high confidence that the intensity of extreme precipitation will increase in a future climate under both RCP4.5 and RCP8.5 scenarios and 1.5°C and 2°C GWLs threatening widespread flood occurrences before, during and after the mature monsoon season (Chapter 11).",
+      "hazard": "extreme_precip",
+      "notes": "Ch.12 climatic impact-driver assessment for CAF, summarised in Table 12.3 (Africa). Parsed direction: increase; high confidence; RCP4.5. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p28#2."
+    },
+    {
+      "id": "CID-09",
+      "slice": "cid-table",
+      "question": "How is mean wind speed projected to change in Western North America (WNA) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 66}],
+      "supporting_quote": "model types is a reduction in wind speed in Western North America (high confidence).",
+      "hazard": "wind",
+      "notes": "Ch.12 climatic impact-driver assessment for WNA, summarised in Table 12.8 (North America). Parsed direction: decrease; high confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p66#4."
+    },
+    {
+      "id": "CID-10",
+      "slice": "cid-table",
+      "question": "How is mean wind speed projected to change in Mediterranean (MED) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 58}],
+      "supporting_quote": "There is high confidence that mean wind speeds will decrease in Mediterranean areas and medium confidence of such decreases in Northern Europe for global warming levels of 2°C or more and beyond the middle of the century.",
+      "hazard": "wind",
+      "notes": "Ch.12 climatic impact-driver assessment for MED, summarised in Table 12.7 (Europe). Parsed direction: decrease; high confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p58#6."
+    },
+    {
+      "id": "CID-11",
+      "slice": "cid-table",
+      "question": "How is mean wind speed projected to change in East Southern Africa (ESAF) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 29}],
+      "supporting_quote": "equal or superior to 2°C, high confidence of a decrease in frequency of cyclones landing in SEAF, ESAF and MDG, and low confidence of a general increase in wind storms in most African regions located south of the Sahel.",
+      "hazard": "wind",
+      "notes": "Ch.12 climatic impact-driver assessment for ESAF, summarised in Table 12.3 (Africa). Parsed direction: decrease; high confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p29#5."
+    },
+    {
+      "id": "CID-12",
+      "slice": "cid-table",
+      "question": "How is mean wind speed projected to change in Western Africa (WAF) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 29}],
+      "supporting_quote": "Over Western Africa and Southern Africa a future significant increase in wind speeds and wind energy potential is expected ( medium confidence) (Figure 12.4m–o;",
+      "hazard": "wind",
+      "notes": "Ch.12 climatic impact-driver assessment for WAF, summarised in Table 12.3 (Africa). Parsed direction: increase; medium confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p29#1."
+    },
+    {
+      "id": "CID-13",
+      "slice": "cid-table",
+      "question": "How is extreme heat projected to change in South East Asia (SEA) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 33}],
+      "supporting_quote": "In these regions, the increase in number of days with exceedance of 35°C of high heat stress is also expected to increase substantially for the midcentury under SSP5-8.5 (typically by 10–50 days except in Arctic and Siberian regions), and by more than 60 days in areas of SEA, and a large difference is found between low- and high-end scenarios in the end of the century (high confidence) (Figure 12.4b).",
+      "hazard": "heatwave",
+      "notes": "Ch.12 climatic impact-driver assessment for SEA, summarised in Table 12.4 (Asia). Parsed direction: increase; high confidence; midcentury. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p33#13."
+    },
+    {
+      "id": "CID-14",
+      "slice": "cid-table",
+      "question": "How is extreme heat projected to change in Caribbean (CAR) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 71}],
+      "supporting_quote": "A detectable anthropogenic increase in summer heat stress has been identified over a number of island regions in CAR, western tropical Pacific, and tropical Indian Ocean, based on wet bulb globe temperature (WBGT) index trends for 1973–2012 ( medium confidence) (Knutson and Ploshay, 2016).",
+      "hazard": "heatwave",
+      "notes": "Ch.12 climatic impact-driver assessment for CAR, summarised in Table 12.9 (Small Islands). Parsed direction: increase; medium confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p71#2."
+    },
+    {
+      "id": "CID-15",
+      "slice": "cid-table",
+      "question": "How is extreme heat projected to change in West Siberia (WSB) under AR6?",
+      "answerable": true,
+      "expected_behavior": "answer",
+      "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 33}],
+      "supporting_quote": "Over WSB, ESB and RFE also, an increase of extreme heat durations and frequency is expected in all scenarios (high confidence) (Kattsov et al., 2017;",
+      "hazard": "heatwave",
+      "notes": "Ch.12 climatic impact-driver assessment for WSB, summarised in Table 12.4 (Asia). Parsed direction: increase; high confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p33#13."
     }
   ]
 }

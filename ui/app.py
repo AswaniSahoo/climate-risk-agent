@@ -23,14 +23,23 @@ from obs.log import configure
 configure()  # the UI process owns logging config (library layers just log)
 
 # imports below the sys.path shim + logging config on purpose (script entrypoint)
-from agent import graph as agent_graph  # noqa: E402
+# agent.graph is NOT imported here: it pulls langgraph (~17 s cold) and nothing
+# on the boot path needs it. It is imported where a report is actually run.
 from agent.contracts import Hazard, RiskLevel  # noqa: E402
+from agent.location import (  # noqa: E402
+    coordinate_error,
+    name_still_applies,
+    resolve_coordinates,
+    resolve_place,
+)
 from tools import climatology  # noqa: E402
 from tools.climatology import ClimatologyError  # noqa: E402
 from tools.forecast import ForecastError  # noqa: E402
+from tools.geocode import GeocodeError  # noqa: E402
 
-# Demo locations (geocoding is a documented DEBT item; these cover the
-# India-weighted eval set plus one non-Indian sanity point).
+# Shortcut buttons, not the menu: any place on Earth works via the Place box or
+# the coordinate inputs. These are the eval-set cities whose ERA5/answer caches
+# are pre-warmed, so a first click returns instantly.
 LOCATIONS: dict[str, tuple[float, float]] = {
     "Rourkela, India": (22.26, 84.85),
     "Mumbai, India": (19.08, 72.88),
@@ -70,6 +79,10 @@ with st.expander("How to use this (start here)", icon=":material/help:"):
 - *How risky are heatwaves in Berlin over the next 7 days?*
 - *Is extreme rainfall a concern in Mumbai next week?*
 - *What is the wind risk in Chennai over the next 10 days?*
+
+**Or pick the point yourself** in the sidebar: geocode any place name, or type a
+latitude/longitude. The map marks the selected point (display-only — it cannot
+be clicked to move the pin).
 
 **What it covers.** Three hazards only: **heat / heatwaves**, **extreme
 precipitation**, and **wind**. Anything else (drought, flooding, cyclones,
@@ -148,9 +161,77 @@ nl_query = st.text_input(
 )
 ask = st.button("Ask", type="primary", icon=":material/travel_explore:")
 
+
+def _remember_place(name: str, country: str, latitude: float, longitude: float) -> None:
+    """Pin a name to the point it was resolved for (see location.name_still_applies)."""
+    st.session_state["lat_input"] = latitude
+    st.session_state["lon_input"] = longitude
+    st.session_state["place_name"] = name
+    st.session_state["place_country"] = country
+    st.session_state["place_coords"] = (latitude, longitude)
+
+
+# Seeded BEFORE the coordinate widgets exist, so the example buttons and the
+# geocoder can write into them (Streamlit forbids the reverse order).
+st.session_state.setdefault("lat_input", 22.26)
+st.session_state.setdefault("lon_input", 84.85)
+st.session_state.setdefault("place_name", "Rourkela")
+st.session_state.setdefault("place_country", "India")
+st.session_state.setdefault("place_coords", (22.26, 84.85))
+
 with st.sidebar:
     st.caption("…or configure the assessment manually")
-    location = st.selectbox("Location", list(LOCATIONS))
+
+    st.caption("Examples (pre-warmed — instant)")
+    _example_names = list(LOCATIONS)
+    for _start in range(0, len(_example_names), 3):
+        for _col, _name in zip(st.columns(3), _example_names[_start:_start + 3]):
+            _city, _, _country = _name.partition(", ")
+            if _col.button(_city, key=f"ex_{_name}", width="stretch", help=_name):
+                _remember_place(_city, _country, *LOCATIONS[_name])
+
+    place_query = st.text_input(
+        "Place", key="place_query", placeholder="Any town, city or region on Earth",
+        help="Geocoded via Open-Meteo. The resolved name, country and coordinates are "
+             "shown on the map, so a wrong match is visible rather than silent.",
+    )
+    if st.button("Find place", icon=":material/search:", width="stretch") and place_query.strip():
+        try:
+            _found = resolve_place(place_query)
+            _remember_place(
+                _found.name, _found.country, _found.latitude, _found.longitude
+            )
+        except GeocodeError as exc:
+            st.warning(f"Could not resolve that place — {exc}", icon=":material/wrong_location:")
+
+    # Ranges mirror tools/validation.validate_coordinates; coordinate_error is the
+    # same check, so a value typed past the widget still refuses instead of flying.
+    latitude = st.number_input(
+        "Latitude", min_value=-90.0, max_value=90.0, step=0.01, format="%.4f",
+        key="lat_input", help="Decimal degrees, −90 to 90 (negative = southern).",
+    )
+    longitude = st.number_input(
+        "Longitude", min_value=-180.0, max_value=180.0, step=0.01, format="%.4f",
+        key="lon_input", help="Decimal degrees, −180 to 180 (negative = western).",
+    )
+
+    selected = None
+    _coord_error = coordinate_error(latitude, longitude)
+    if _coord_error is not None:
+        st.error(_coord_error, icon=":material/error:")
+    else:
+        # A name only describes the point it was resolved for. Edit the boxes and
+        # it is dropped for the coordinates themselves, rather than labelling a
+        # spot in the Pacific "Rourkela".
+        _named = name_still_applies(
+            st.session_state.get("place_coords"), latitude, longitude
+        )
+        selected = resolve_coordinates(
+            latitude, longitude,
+            name=st.session_state["place_name"] if _named else None,
+            country=st.session_state["place_country"] if _named else "",
+        )
+
     hazard = st.selectbox(
         "Hazard", list(Hazard), format_func=lambda h: h.value.replace("_", " ")
     )
@@ -160,8 +241,35 @@ with st.sidebar:
         help="First call fetches 60+ years of daily extremes (~3 s), then cached.",
     )
     run = st.button(
-        "Assess risk", type="primary", icon=":material/troubleshoot:", width="stretch",
+        "Assess risk", key="assess", type="primary",
+        icon=":material/troubleshoot:", width="stretch",
     )
+
+# Where the assessment will run. Display-only by design: Streamlit's map
+# selection reports which OBJECTS a click picked (per-layer `indices` /
+# `objects`), never the coordinates of the click itself, so a click cannot
+# place a new point. The Place box and the coordinate inputs do that.
+if selected is not None:
+    with st.container(border=True):
+        _map_col, _info_col = st.columns([2, 1])
+        with _map_col:
+            st.map(
+                {"lat": [selected.latitude], "lon": [selected.longitude]},
+                zoom=3, size=40000, height=240,
+            )
+        with _info_col:
+            st.markdown(f"**{selected.name}**")
+            st.caption(
+                " · ".join(
+                    part for part in (
+                        selected.country,
+                        selected.region.label if selected.region else None,
+                        f"{selected.latitude:.4f}, {selected.longitude:.4f}",
+                    ) if part
+                )
+            )
+            if selected.notice is not None:
+                st.info(selected.notice, icon=":material/public_off:")
 
 report = None
 # The live forecast is the agent's core input; if Open-Meteo is down (503s
@@ -181,26 +289,26 @@ if ask and nl_query.strip():
                 report = run_agent_nl(nl_query)
             except ForecastError:
                 st.error(_FORECAST_DOWN, icon=":material/cloud_off:")
-elif run:
-    latitude, longitude = LOCATIONS[location]
-
+elif run and selected is not None:
     hazard_stat = None
     if use_climatology:
         try:
             with st.spinner("Fitting ERA5 GEV climatology…"):
                 hazard_stat = climatology.climatology_hazard_stat(
-                    latitude, longitude, hazard
+                    selected.latitude, selected.longitude, hazard
                 )
         except ClimatologyError as exc:
             st.warning(f"Climatology unavailable ({exc}) — continuing without it.")
 
+    from agent import graph as agent_graph
     from obs.telemetry import Span
 
     with st.spinner("Running agent (forecast → IPCC research → synthesis)…"):
         with Span("report") as span:
             try:
                 report = agent_graph.run_agent(
-                    location=location, latitude=latitude, longitude=longitude,
+                    location=selected.label,
+                    latitude=selected.latitude, longitude=selected.longitude,
                     hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
                 )
             except ForecastError:
@@ -255,6 +363,38 @@ if report is not None:
                     st.caption(
                         "No IPCC citations in this report (RAG layer offline or the "
                         "answerer honestly abstained — it never invents)."
+                    )
+
+            # Display-only: the report JSON already carries the whole thing.
+            with st.container(border=True):
+                st.markdown("**Projected change (IPCC AR6 Ch.12)**")
+                _pc = report.projected_change
+                if _pc is not None:
+                    st.markdown(
+                        f":gray-badge[:material/public: {_pc.region_name} "
+                        f"({_pc.region_acronym})] "
+                        f":blue-badge[{_pc.direction.value.replace('_', ' ')}]"
+                        + (
+                            f" :green-badge[{_pc.confidence_language}]"
+                            if _pc.confidence_language
+                            else ""
+                        )
+                        + (
+                            f" :orange-badge[{_pc.warming_level_or_period}]"
+                            if _pc.warming_level_or_period
+                            else ""
+                        )
+                    )
+                    st.caption(f"“{_pc.statement}”")
+                    for _c in _pc.citations:
+                        st.markdown(
+                            f":gray-badge[:material/description: {_c.source}] "
+                            f":blue-badge[{_c.locator}]"
+                        )
+                else:
+                    st.caption(
+                        "Regional projections were not found in the corpus for this "
+                        "hazard and AR6 region — nothing is asserted in their place."
                     )
 
         if report.hazard_stats:

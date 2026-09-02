@@ -32,12 +32,29 @@ class Hazard(str, Enum):
     rejected here, which forces the agent down the refusal path.
 
     heatwave ← temperature_2m_max, extreme_precip ← precipitation_sum,
-    wind ← wind_speed_10m_max (all from get_forecast).
+    wind ← wind_gusts_10m_max (all from get_forecast). Wind is graded on the
+    gust, not the sustained speed, because the ERA5 wind climatology it is
+    compared against is a gust fit.
     """
 
     HEATWAVE = "heatwave"
     EXTREME_PRECIP = "extreme_precip"
     WIND = "wind"
+
+
+class ChangeDirection(str, Enum):
+    """Direction of a projected change, as the IPCC text states it.
+
+    UNKNOWN is a real answer, not a failure: AR6 marks many region/CID pairs
+    "low confidence in direction of change", and MIXED covers a sentence that
+    states an increase in one part of the region and a decrease in another.
+    """
+
+    INCREASE = "increase"
+    DECREASE = "decrease"
+    NO_CHANGE = "no_change"
+    MIXED = "mixed"
+    UNKNOWN = "unknown"
 
 
 class RiskDriver(BaseModel):
@@ -54,10 +71,52 @@ class Citation(BaseModel):
     retrieved for the question: a citation that cannot be tied to a retrieved
     page forces a refusal rather than a fabricated reference. `source` is the
     document; `locator` is the page.
+
+    `chunk_id` is optional and carries the retrieval unit the claim came from,
+    so a consumer can re-check the claim against the exact excerpt rather than
+    a whole page. It defaults to None because the page-level citations built in
+    agent/graph.py deliberately collapse several chunks of one page into one.
     """
 
     source: str
     locator: str
+    chunk_id: str | None = None
+
+
+class ProjectedChange(BaseModel):
+    """One cited AR6 Ch.12 climatic impact-driver (CID) projection for a region.
+
+    STRUCTURAL CITATION RULE (the same guarantee `CitedAnswer` gives in
+    rag/answer.py): every citation must carry a `chunk_id` drawn from
+    `retrieved_chunk_ids` — the chunks retrieval actually returned for this
+    region/hazard query. A citation to anything else is a schema violation, so
+    a fabricated reference cannot be constructed, only rejected. `statement` is
+    derived verbatim from those same chunks; nothing here is generated text.
+    """
+
+    region_acronym: str
+    region_name: str
+    hazard: Hazard
+    statement: str  # verbatim-derived sentence from a retrieved Ch.12 chunk
+    direction: ChangeDirection
+    confidence_language: str | None = None  # the IPCC calibrated phrase as written
+    warming_level_or_period: str | None = None
+    citations: list[Citation]
+    retrieved_chunk_ids: list[str]  # the chunk_ids this projection is bound to
+
+    @model_validator(mode="after")
+    def _check_citation_integrity(self) -> "ProjectedChange":
+        if not self.citations:
+            raise ValueError("a projected change must cite at least one retrieved chunk")
+        missing = [c.locator for c in self.citations if c.chunk_id is None]
+        if missing:
+            raise ValueError(f"projected-change citations must carry a chunk_id: {missing}")
+        unknown = [
+            c.chunk_id for c in self.citations if c.chunk_id not in self.retrieved_chunk_ids
+        ]
+        if unknown:
+            raise ValueError(f"citations {unknown} not among the retrieved chunks")
+        return self
 
 
 class DataProvenance(BaseModel):
@@ -92,6 +151,9 @@ class RiskReport(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     provenance: list[DataProvenance] = Field(default_factory=list)
     hazard_stats: list[HazardStat] = Field(default_factory=list)
+    # Absent (None) whenever the AR6 Ch.12 CID assessment yielded nothing for
+    # this region/hazard — the report then says so rather than guessing.
+    projected_change: ProjectedChange | None = None
     refusal: str | None = None
 
     @model_validator(mode="after")

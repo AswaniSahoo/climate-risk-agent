@@ -11,7 +11,11 @@ Checks per report (beyond what Pydantic already enforces):
 - verdict basis: GEV return-level basis used whenever climatology is attached
   and variables match (heat/precip); wind must say absolute-thresholds
 - citations: page-level, deduped, non-empty unless the answerer abstained
-- confidence within the composed range [0.3, 0.75]
+- confidence within the composed range (0, 0.75]. The floor moved off 0.3 when
+  the forecast term became lead-day-aware: these scenarios run at horizon 7,
+  where measured precipitation detection is ~3% of day-1's, so a day-7 precip
+  report composes to about 0.26 even with climatology attached. A hard 0.3
+  lower bound would now fail the honest number.
 - provenance present
 
 Run:  uv run python -m evals.run_graph_eval   (needs network + Gemini auth)
@@ -63,7 +67,7 @@ def main() -> None:
             )))
         if stat is not None and hazard is Hazard.WIND:
             checks.append(("wind_declares_absolute_basis", "absolute thresholds" in basis))
-        checks.append(("confidence_in_composed_range", 0.3 <= report.confidence <= 0.75))
+        checks.append(("confidence_in_composed_range", 0.0 < report.confidence <= 0.75))
         checks.append(("provenance_present", len(report.provenance) >= 1))
         checks.append(("citations_deduped", len(report.citations)
                        == len({(c.source, c.locator) for c in report.citations})))

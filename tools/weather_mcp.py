@@ -34,7 +34,7 @@ mcp = MCPServer("weather")
     )
 )
 def forecast(latitude: float, longitude: float, horizon_days: int = 7) -> ForecastResult:
-    """Daily forecast (precipitation, max temperature, max wind) from Open-Meteo."""
+    """Daily forecast (precipitation, max temperature, max sustained wind, max gust)."""
     return get_forecast(latitude, longitude, horizon_days)
 
 
@@ -46,7 +46,7 @@ def forecast(latitude: float, longitude: float, horizon_days: int = 7) -> Foreca
     )
 )
 def hazard_climatology(latitude: float, longitude: float, hazard: Hazard) -> HazardStat:
-    """ERA5 return levels (10/50/100-yr) for a hazard at a location, with full provenance."""
+    """ERA5 return levels (2/10/50/100-yr) for a hazard at a location, with full provenance."""
     return climatology_hazard_stat(latitude, longitude, hazard)
 
 

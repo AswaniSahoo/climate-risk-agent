@@ -1,18 +1,26 @@
-r"""The agent: a 4-node LangGraph that fills a RiskReport for one query.
+r"""The agent: a 5-node LangGraph that fills a RiskReport for one query.
 
-Flow:  START -> plan -> (call -> research -> synthesize) -> END
-                    \------------ refusal -------------/
+Flow:  START -> plan -> (call -> research -> project -> synthesize) -> END
+                    \----------------- refusal ------------------/
 
 - plan       : is this hazard answerable with our data? if not, write a refusal.
 - call       : run get_forecast, put the ForecastResult on the shared state.
 - research   : IPCC AR6 RAG — retrieve + cited LLM answer for this hazard/region.
                Loud, non-fatal: offline/no-LLM degrades to a citation-less report.
+- project    : the AR6 Ch.12 climatic impact-driver projection for the AR6
+               reference region containing the point (rag/cid.py — retrieval +
+               regex, no LLM). Absent for an ocean point or an unassessed
+               region/hazard pair, and the report says so.
 - synthesize : turn forecast (+ optional ERA5 climatology + IPCC answer) into a
-               RiskReport with page-level Citations. Severity comes from the
-               forecast peak's position on the location's GEV return-level curve
-               when climatology is present (location-relative); absolute Day-1
-               thresholds remain only as the ungrounded fallback. Confidence is
-               composed from the report's actual grounding (agent/verdict.py).
+               RiskReport with page-level Citations. Severity is the forecast
+               peak's return period on the location's own GEV curve
+               (agent/risk_bands.py: 2 / 10 / 50-year band edges); absolute
+               cutoffs survive only as the fallback for a location with no
+               fitted climatology, and say so in the report. Confidence is
+               composed from the report's actual grounding (agent/verdict.py),
+               with the forecast term scaled by the MEASURED skill at that
+               horizon (tools/forecast_skill.py), so the same peak predicted a
+               week out is worth less than one predicted tomorrow.
 
 Every node reads/writes one shared `AgentState` (the "clipboard"). Nodes depend on
 the state shape, not on each other — which is what lets this grow into the
@@ -31,30 +39,38 @@ from agent.contracts import (
     Citation,
     DataProvenance,
     Hazard,
+    ProjectedChange,
     RiskDriver,
-    RiskLevel,
     RiskReport,
 )
-from agent.verdict import compose_confidence, level_from_return_periods
+from agent.risk_bands import band_from_fixed_thresholds, band_from_return_period
+from agent.verdict import compose_confidence
 from rag.answer import AnswerError, CitedAnswer, answer_with_guard
 from rag.chunk import Chunk
+from rag.cid import projected_change_for
 from rag.corpus import CorpusError, load_corpus_chunks
+from rag.embed import EmbeddingError
 from rag.gemini_client import GeminiError
 from rag.retrieve import HybridRetriever
+from tools.ar6_regions import region_for
 from tools.forecast import OPEN_METEO_URL, ForecastResult, get_forecast
+from tools.forecast_skill import SkillTableError, forecast_skill
 from tools.hazard_stats import HazardStat
 
 _log = logging.getLogger(__name__)
 
 # Hazards we can actually answer today (have a data path in get_forecast).
 _ANSWERABLE = {Hazard.HEATWAVE, Hazard.EXTREME_PRECIP, Hazard.WIND}
-_KMH_TO_MS = 1.0 / 3.6  # Open-Meteo reports km/h; ERA5 return levels are m/s.
+# Open-Meteo reports wind in km/h on BOTH the forecast and the archive endpoint
+# (verified in the docs), so the forecast-vs-climatology comparison is km/h to
+# km/h. m/s is shown alongside because wind hazard literature quotes m/s.
+_KMH_TO_MS = 1.0 / 3.6
 # Which forecast variable each hazard's peak metric comes from — must equal the
-# fitted HazardStat.variable for the GEV verdict to be a like-for-like comparison.
+# fitted HazardStat.variable for the GEV band to be a like-for-like comparison.
 _FORECAST_VARIABLE = {
     Hazard.HEATWAVE: "temperature_2m_max",
     Hazard.EXTREME_PRECIP: "precipitation_sum",
-    Hazard.WIND: "wind_speed_10m_max",  # climatology fits GUSTS -> never matches (by design)
+    Hazard.WIND: "wind_gusts_10m_max",  # gust vs the ERA5 GUST fit, like for like
 }
 # A/B-measured on the frozen set: k=8 admits table-header chunks (GWL column
 # labels), fixing column-ambiguity refusals — matrix 33/11/1/0, false_answer 0.
@@ -73,40 +89,9 @@ class AgentState(TypedDict, total=False):
     hazard_stat: Optional[HazardStat]  # optional ERA5 climatology, injected by caller
     ipcc_answer: Optional[CitedAnswer]  # research node output (None if degraded)
     ipcc_chunks: list[Chunk]  # what research retrieved — needed to map chunk_id -> page
+    projected_change: Optional[ProjectedChange]  # project node output (None if nothing found)
+    projection_note: str  # why there is no projection, when there is none
     report: Optional[RiskReport]
-
-
-def _precip_level(max_mm: float) -> RiskLevel:
-    """Day-1 flood/precip heuristic on max daily precipitation (mm)."""
-    if max_mm < 20:
-        return RiskLevel.LOW
-    if max_mm < 50:
-        return RiskLevel.MODERATE
-    if max_mm < 100:
-        return RiskLevel.HIGH
-    return RiskLevel.SEVERE
-
-
-def _heat_level(max_c: float) -> RiskLevel:
-    """Day-1 heatwave heuristic on max daily temperature (°C)."""
-    if max_c < 35:
-        return RiskLevel.LOW
-    if max_c < 40:
-        return RiskLevel.MODERATE
-    if max_c < 45:
-        return RiskLevel.HIGH
-    return RiskLevel.SEVERE
-
-
-def _wind_level(max_kmh: float) -> RiskLevel:
-    """Day-1 wind heuristic on max daily 10 m wind speed (km/h), Beaufort-inspired."""
-    if max_kmh < 40:
-        return RiskLevel.LOW
-    if max_kmh < 62:
-        return RiskLevel.MODERATE
-    if max_kmh < 88:
-        return RiskLevel.HIGH
-    return RiskLevel.SEVERE
 
 
 def plan(state: AgentState) -> dict:
@@ -126,13 +111,34 @@ def plan(state: AgentState) -> dict:
 
 
 def call(state: AgentState) -> dict:
-    """Fetch live weather for the requested location."""
+    """Fetch live weather for the requested location, and how much it is worth.
+
+    The skill block is attached HERE rather than inside get_forecast because it
+    is per-hazard (heat reads the temperature row, wind the gust row) while the
+    fetch and its cache key are hazard-blind: baking it into the cached
+    ForecastResult would serve one hazard's skill to the next hazard asking for
+    the same city and horizon. The hazard -> variable map already lives in this
+    module, so this is also the only place that mapping is written down.
+
+    Missing skill is non-fatal and loud: the report ships without the block and
+    confidence falls back to its old flat forecast term.
+    """
     forecast = get_forecast(
         latitude=state["latitude"],
         longitude=state["longitude"],
         horizon_days=state["horizon_days"],
     )
-    return {"forecast": forecast}
+    variable = _FORECAST_VARIABLE[state["hazard"]]
+    try:
+        skill = forecast_skill(variable, state["horizon_days"])
+    except (SkillTableError, ValueError) as exc:
+        _log.warning(
+            "no measured forecast skill for %s (%s), confidence keeps the flat forecast term",
+            variable,
+            exc,
+        )
+        return {"forecast": forecast}
+    return {"forecast": forecast.model_copy(update={"skill": skill})}
 
 
 @lru_cache(maxsize=1)
@@ -143,12 +149,15 @@ def _ipcc_retriever() -> HybridRetriever:
 
 @lru_cache(maxsize=1)
 def _answer_cache():
-    """Disk cache: repeat (question, evidence) pairs cost zero tokens."""
-    from pathlib import Path
+    """Shared cache: repeat (question, evidence) pairs cost zero tokens.
 
+    No directory argument, so it takes the process-wide backend from the
+    environment (Redis when configured, disk otherwise) instead of a folder
+    that dies with the replica.
+    """
     from rag.answer_cache import AnswerCache
 
-    return AnswerCache(Path("data/cache/answers"))
+    return AnswerCache()
 
 
 # Fused vocabulary per hazard: AR6 table terms ("hot extremes", "heavy
@@ -192,31 +201,68 @@ def research(state: AgentState) -> dict:
     return {"ipcc_answer": answer, "ipcc_chunks": chunks}
 
 
+_NO_REGION_NOTE = (
+    "This location is outside the AR6 land reference regions (ocean), so no "
+    "regional AR6 Ch.12 projection applies."
+)
+_NOT_FOUND_NOTE = (
+    "No AR6 Ch.12 regional projection for this hazard was found in the corpus."
+)
+
+
+def project(state: AgentState) -> dict:
+    """Attach the cited AR6 Ch.12 CID projection for this location's AR6 region.
+
+    Guarded on both sides: an ocean point has no AR6 land region, and a region
+    with no qualifying Ch.12 sentence yields nothing. Either way the forecast /
+    hazard path is untouched and the report carries a note saying which it was —
+    an absent section is stated, never silently dropped and never invented.
+    """
+    region = region_for(state["latitude"], state["longitude"])
+    if region is None:
+        _log.info("no AR6 land region for this point — skipping the Ch.12 projection")
+        return {"projection_note": _NO_REGION_NOTE}
+    try:
+        change = projected_change_for(region, state["hazard"], retriever=_ipcc_retriever())
+    except (CorpusError, EmbeddingError, GeminiError) as exc:
+        _log.warning("AR6 Ch.12 projection unavailable (%s) — report ships without it", exc)
+        return {"projection_note": _NOT_FOUND_NOTE}
+    if change is None:
+        return {"projection_note": _NOT_FOUND_NOTE}
+    return {"projected_change": change}
+
+
 def synthesize(state: AgentState) -> dict:
     """Turn the forecast into a structured, provenanced RiskReport."""
     forecast = state["forecast"]
     hazard = state["hazard"]
     assert forecast is not None  # guaranteed by the graph path (plan -> call -> here)
 
+    # `metric` is the quantity compared against the fitted climatology curve.
+    # `absolute_metric` is what the Day-1 absolute cutoffs were calibrated on;
+    # the two differ for wind only (gust vs sustained speed).
     if hazard is Hazard.EXTREME_PRECIP:
-        metric = max(forecast.precipitation_sum)
-        level = _precip_level(metric)
+        metric = absolute_metric = max(forecast.precipitation_sum)
         driver = RiskDriver(factor="precipitation", detail=f"max daily {metric} mm")
         summary = f"Peak daily rainfall of {metric} mm over {state['horizon_days']} days."
     elif hazard is Hazard.HEATWAVE:
-        metric = max(forecast.temperature_2m_max)
-        level = _heat_level(metric)
+        metric = absolute_metric = max(forecast.temperature_2m_max)
         driver = RiskDriver(factor="temperature", detail=f"max daily {metric} °C")
         summary = f"Peak daily max temperature of {metric} °C over {state['horizon_days']} days."
-    else:  # Hazard.WIND — km/h from Open-Meteo, also shown in m/s for ERA5 comparability
-        metric = max(forecast.wind_speed_10m_max)
+    else:  # Hazard.WIND — graded on the GUST, which is what the ERA5 fit describes
+        metric = max(forecast.wind_gusts_10m_max)
+        absolute_metric = max(forecast.wind_speed_10m_max)
         metric_ms = metric * _KMH_TO_MS
-        level = _wind_level(metric)
         driver = RiskDriver(
-            factor="wind", detail=f"max daily {metric} km/h ({metric_ms:.1f} m/s)"
+            factor="wind",
+            detail=(
+                f"max daily gust {metric} km/h ({metric_ms:.1f} m/s), "
+                f"max daily sustained {absolute_metric} km/h"
+            ),
         )
         summary = (
-            f"Peak daily wind of {metric} km/h ({metric_ms:.1f} m/s) "
+            f"Peak daily wind gust of {metric} km/h ({metric_ms:.1f} m/s), "
+            f"peak sustained wind {absolute_metric} km/h, "
             f"over {state['horizon_days']} days."
         )
 
@@ -258,31 +304,33 @@ def synthesize(state: AgentState) -> dict:
                 clim_detail += f", no significant trend (p={trend.p_value:.2f})"
             summary += f" ERA5 return levels ({levels_txt})."
         drivers.append(RiskDriver(factor="climatology", detail=clim_detail))
-        # GEV-grounded verdict: severity = the forecast peak's position on THIS
-        # location's return-level curve. Only when forecast metric and fitted
-        # variable are the same quantity — wind is excluded (forecast = sustained
-        # speed, climatology = gusts; comparing them would understate risk).
-        if stat.variable == _FORECAST_VARIABLE[hazard]:
-            level = level_from_return_periods(metric, stat.return_levels)
-            drivers.append(
-                RiskDriver(
-                    factor="severity_basis",
-                    detail=(
-                        f"forecast peak {metric} {stat.unit} vs GEV return levels "
-                        f"({levels_txt}) -> {level.value}"
-                    ),
-                )
-            )
-        else:
-            drivers.append(
-                RiskDriver(
-                    factor="severity_basis",
-                    detail=(
-                        f"absolute thresholds (forecast/climatology variable mismatch: "
-                        f"{_FORECAST_VARIABLE[hazard]} vs {stat.variable})"
-                    ),
-                )
-            )
+
+    # Severity = where the forecast peak lands on THIS location's return-level
+    # curve. The absolute cutoffs only survive as the fallback, and the
+    # explanation that ships with the band always says which of the two it is.
+    if stat is not None and stat.variable == _FORECAST_VARIABLE[hazard]:
+        level, severity_basis = band_from_return_period(metric, stat)
+    elif stat is not None:
+        # A caller-injected statistic for a different quantity: real climatology,
+        # but not comparable, so say that rather than "no climatology".
+        level, severity_basis = band_from_fixed_thresholds(
+            absolute_metric,
+            hazard,
+            reason=(
+                f"the fitted climatology variable {stat.variable} is not the "
+                f"forecast quantity {_FORECAST_VARIABLE[hazard]}"
+            ),
+        )
+    else:
+        level, severity_basis = band_from_fixed_thresholds(absolute_metric, hazard)
+    drivers.append(RiskDriver(factor="severity_basis", detail=severity_basis))
+
+    # How much the forecast behind that severity is worth at this horizon. The
+    # number is measured, not asserted, and it is the same number that scales
+    # the forecast term of the confidence below.
+    skill = forecast.skill
+    if skill is not None:
+        drivers.append(RiskDriver(factor="forecast_skill", detail=skill.detail()))
 
     citations: list[Citation] = []
     answer = state.get("ipcc_answer")
@@ -297,9 +345,21 @@ def synthesize(state: AgentState) -> dict:
         citations = list(per_page.values())
         summary += f" IPCC AR6: {answer.answer}"
 
+    # The Ch.12 projection is verbatim corpus text, so it goes into the summary
+    # quoted; its absence is stated in words rather than left to be noticed.
+    projected = state.get("projected_change")
+    if projected is not None:
+        summary += (
+            f' AR6 Ch.12 projection for {projected.region_name} '
+            f'({projected.region_acronym}): "{projected.statement}"'
+        )
+    else:
+        summary += " " + state.get("projection_note", _NOT_FOUND_NOTE)
+
     confidence = compose_confidence(
         representativeness=stat.representativeness if stat is not None else None,
         ipcc_cited=bool(citations),
+        forecast_skill_weight=skill.confidence_weight if skill is not None else None,
     )
 
     report = RiskReport(
@@ -312,6 +372,7 @@ def synthesize(state: AgentState) -> dict:
         citations=citations,
         provenance=[provenance],
         hazard_stats=hazard_stats,
+        projected_change=projected,
         confidence=confidence,
     )
     return {"report": report}
@@ -327,11 +388,13 @@ def _build_graph():
     builder.add_node("plan", plan)
     builder.add_node("call", call)
     builder.add_node("research", research)
+    builder.add_node("project", project)
     builder.add_node("synthesize", synthesize)
     builder.add_edge(START, "plan")
     builder.add_conditional_edges("plan", _route_after_plan, {"call": "call", "end": END})
     builder.add_edge("call", "research")
-    builder.add_edge("research", "synthesize")
+    builder.add_edge("research", "project")
+    builder.add_edge("project", "synthesize")
     builder.add_edge("synthesize", END)
     return builder.compile()
 
