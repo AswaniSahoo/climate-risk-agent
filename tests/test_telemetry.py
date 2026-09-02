@@ -118,3 +118,36 @@ def test_recorder_is_thread_safe():
     for t in threads:
         t.join()
     assert len(snapshot()) == 400
+
+
+def test_zero_token_records_are_not_reported_as_unpriced(caplog):
+    """Cache v2 events reuse this record shape: op "cache:<namespace>" and
+    model = the backend that served the read. They bill nothing, so a missing
+    price for "redis" is not the "cost is UNKNOWN, not zero" case the warning
+    exists to catch — it would fire on every cache read and mark every rollup
+    incomplete."""
+    import logging
+
+    from obs.telemetry import unpriced_models
+
+    events = [dict(op="cache:hazard_fit", model="redis", latency_ms=2.0, tokens_in=0,
+                   tokens_out=0, retries=0, ok=True, cached=False, ts="t")]
+
+    with caplog.at_level(logging.WARNING):
+        assert estimate_cost_usd(events) == 0.0
+    assert "no price" not in caplog.text
+    assert unpriced_models(events) == []
+
+
+def test_an_unpriced_model_that_burned_tokens_is_still_flagged(caplog):
+    import logging
+
+    from obs.telemetry import unpriced_models
+
+    events = [dict(op="generate", model="some-new-model", latency_ms=1.0, tokens_in=1000,
+                   tokens_out=10, retries=0, ok=True, cached=False, ts="t")]
+
+    with caplog.at_level(logging.WARNING):
+        assert estimate_cost_usd(events) == 0.0
+    assert "no price" in caplog.text  # $0 must stay distinguishable from unknown
+    assert unpriced_models(events) == ["some-new-model"]

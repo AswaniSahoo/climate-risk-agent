@@ -59,7 +59,9 @@ def test_build_hazard_stat_is_provenanced_and_honest():
     assert stat.representativeness is Representativeness.POINT_INTERPOLATED_REANALYSIS
     assert stat.record_max == max(maxima)
     assert (stat.record_start_year, stat.record_end_year) == (1990, 2019)
-    assert [rl.return_period_years for rl in stat.return_levels] == [10, 50, 100]
+    # The 2-year level is a risk-band edge (agent/risk_bands.py), so it is fitted
+    # alongside the rarer ones rather than extrapolated at report time.
+    assert [rl.return_period_years for rl in stat.return_levels] == [2, 10, 50, 100]
 
 
 def test_wind_uses_gust_variable_with_lower_bound_caveat():
@@ -96,7 +98,8 @@ def test_trending_series_reports_effective_levels(monkeypatch):
     assert all(rl.ci_low is not None for rl in stat.return_levels)
     # effective 10-yr level at 2022 must sit near the END of the warmed series,
     # far above the stationary whole-period fit would put it
-    assert stat.return_levels[0].level > max(maxima) - 3.0
+    ten_year = next(rl for rl in stat.return_levels if rl.return_period_years == 10)
+    assert ten_year.level > max(maxima) - 3.0
 
 
 def test_flat_series_keeps_stationary_levels_but_reports_the_test():
@@ -136,3 +139,59 @@ def test_climatology_hazard_stat_raises_on_http_error(httpx_mock):
 
     with pytest.raises(ClimatologyError):
         climatology_hazard_stat(22.26, 84.85, Hazard.HEATWAVE)
+
+
+# --- Cache v2: the fitted statistic, not just the raw series ----------------
+#
+# The 1960-2022 ERA5 record is static, so a (location, hazard) statistic never
+# changes. Caching the FIT is what matters: the measured cost is ~42 s for the
+# archive fetch plus 12.9 s for the GEV fit + trend test + bootstrap, and a
+# raw-series cache would still pay the second half.
+
+def _fit_cache_for(tmp_path):
+    from tools.cache_backend import DiskCache, JsonCache
+
+    return JsonCache("hazard_fit", backend=DiskCache(tmp_path))
+
+
+def test_hazard_fit_cache_makes_a_repeat_skip_the_archive(httpx_mock, tmp_path, monkeypatch):
+    import tools.climatology as clim
+
+    monkeypatch.setattr(clim, "_fit_cache", lambda: _fit_cache_for(tmp_path))
+    httpx_mock.add_response(json=CANNED)  # exactly ONE archive response is registered
+
+    first = clim.climatology_hazard_stat(
+        22.26, 84.85, Hazard.HEATWAVE, start_year=2000, end_year=2002
+    )
+    # Drop the in-process memo so ONLY the persistent cache can serve run two —
+    # that is the tier a Cloud Run cold start actually has.
+    clim.climatology_hazard_stat.cache_clear()
+    second = clim.climatology_hazard_stat(
+        22.26, 84.85, Hazard.HEATWAVE, start_year=2000, end_year=2002
+    )
+
+    assert len(httpx_mock.get_requests()) == 1  # fetched once, served twice
+    assert second == first
+
+
+def test_hazard_fit_cache_key_rounds_coordinates_to_two_decimals():
+    import tools.climatology as clim
+
+    args = (Hazard.HEATWAVE, 1960, 2022, (10, 50, 100))
+    # ~1.1 km apart, far inside one ~25 km ERA5 cell: the same fit, one entry.
+    assert clim._fit_cache_key(22.2601, 84.85, *args) == clim._fit_cache_key(22.2649, 84.85, *args)
+    assert clim._fit_cache_key(22.26, 84.85, *args) != clim._fit_cache_key(22.30, 84.85, *args)
+
+
+def test_hazard_fit_cache_key_tracks_bootstrap_count_and_fitting_code(monkeypatch):
+    import tools.climatology as clim
+
+    args = (22.26, 84.85, Hazard.HEATWAVE, 1960, 2022, (10, 50, 100))
+    base = clim._fit_cache_key(*args)
+
+    monkeypatch.setattr(clim, "_N_BOOT", 42)  # narrower CIs are a different statistic
+    assert clim._fit_cache_key(*args) != base
+
+    monkeypatch.undo()
+    monkeypatch.setattr(clim, "_code_fingerprint", lambda: "0000deadbeef")
+    assert clim._fit_cache_key(*args) != base  # edit the GEV code -> refit, no stale numbers

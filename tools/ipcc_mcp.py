@@ -103,7 +103,7 @@ def answer_ipcc(question: str) -> Answer:
     result = answer_with_guard(
         question,
         _retriever().retrieve(question, top_k=_ANSWER_TOP_K),
-        cache=AnswerCache(Path("data/cache/answers")),
+        cache=AnswerCache(),  # process-wide backend: shared Redis tier when configured
     )
     # allowed_ids is retrieval bookkeeping, not part of the answer contract
     return Answer.model_validate(result.model_dump(exclude={"allowed_ids"}))

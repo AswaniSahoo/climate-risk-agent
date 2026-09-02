@@ -1,0 +1,30 @@
+{
+  "_note": "Starter prewarm set: 25 cities spread across six continents, chosen so the shared cache is warm for the locations a demo or a recruiter is most likely to type. Coordinates are APPROXIMATE CITY CENTRES rounded to 2 decimals (~1.1 km), which is far inside the ~25 km ERA5 grid cell the hazard statistic is computed on — they identify the right cell, they are not survey-grade points. Add a city and re-run scripts/prewarm.py; entries are keyed by coordinates, not by name.",
+  "cities": [
+    {"name": "Rourkela", "country": "IN", "latitude": 22.26, "longitude": 84.85},
+    {"name": "Delhi", "country": "IN", "latitude": 28.61, "longitude": 77.21},
+    {"name": "Mumbai", "country": "IN", "latitude": 19.08, "longitude": 72.88},
+    {"name": "Chennai", "country": "IN", "latitude": 13.08, "longitude": 80.27},
+    {"name": "Dhaka", "country": "BD", "latitude": 23.81, "longitude": 90.41},
+    {"name": "Karachi", "country": "PK", "latitude": 24.86, "longitude": 67.01},
+    {"name": "Jakarta", "country": "ID", "latitude": -6.21, "longitude": 106.85},
+    {"name": "Manila", "country": "PH", "latitude": 14.6, "longitude": 120.98},
+    {"name": "Tokyo", "country": "JP", "latitude": 35.68, "longitude": 139.69},
+    {"name": "Shanghai", "country": "CN", "latitude": 31.23, "longitude": 121.47},
+    {"name": "Berlin", "country": "DE", "latitude": 52.52, "longitude": 13.4},
+    {"name": "London", "country": "GB", "latitude": 51.51, "longitude": -0.13},
+    {"name": "Paris", "country": "FR", "latitude": 48.86, "longitude": 2.35},
+    {"name": "Madrid", "country": "ES", "latitude": 40.42, "longitude": -3.7},
+    {"name": "Athens", "country": "GR", "latitude": 37.98, "longitude": 23.73},
+    {"name": "Cairo", "country": "EG", "latitude": 30.04, "longitude": 31.24},
+    {"name": "Lagos", "country": "NG", "latitude": 6.52, "longitude": 3.38},
+    {"name": "Nairobi", "country": "KE", "latitude": -1.29, "longitude": 36.82},
+    {"name": "Cape Town", "country": "ZA", "latitude": -33.92, "longitude": 18.42},
+    {"name": "New York", "country": "US", "latitude": 40.71, "longitude": -74.01},
+    {"name": "Houston", "country": "US", "latitude": 29.76, "longitude": -95.37},
+    {"name": "Mexico City", "country": "MX", "latitude": 19.43, "longitude": -99.13},
+    {"name": "Sao Paulo", "country": "BR", "latitude": -23.55, "longitude": -46.63},
+    {"name": "Buenos Aires", "country": "AR", "latitude": -34.6, "longitude": -58.38},
+    {"name": "Sydney", "country": "AU", "latitude": -33.87, "longitude": 151.21}
+  ]
+}

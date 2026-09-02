@@ -104,9 +104,22 @@ def reset() -> None:
         _EVENTS.clear()
 
 
+def _bills_tokens(event: dict) -> bool:
+    """Could this event have cost money at all?
+
+    Cache v2 reuses this record shape for cache reads (op `cache:<namespace>`,
+    model = the backend that served it) with both token counts at 0. Nothing
+    was billed, so there is no price to be missing — without this the unpriced
+    warning would fire on every cache read and mark every rollup incomplete.
+    """
+    return not event.get("cached") and bool(event["tokens_in"] or event["tokens_out"])
+
+
 def unpriced_models(events: list[dict]) -> list[str]:
-    """Models in `events` with no entry in the price table (cost is UNKNOWN)."""
-    return sorted({e["model"] for e in events if e["model"] not in _PRICE_PER_MTOK})
+    """Models that burned tokens with no entry in the price table (cost UNKNOWN)."""
+    return sorted(
+        {e["model"] for e in events if _bills_tokens(e) and e["model"] not in _PRICE_PER_MTOK}
+    )
 
 
 def estimate_cost_usd(events: list[dict]) -> float:
@@ -119,8 +132,8 @@ def estimate_cost_usd(events: list[dict]) -> float:
     """
     total = 0.0
     for e in events:
-        if e.get("cached"):
-            continue
+        if not _bills_tokens(e):
+            continue  # cache hit or zero-token event: nothing was billed
         if e["model"] not in _PRICE_PER_MTOK:
             _log.warning(
                 "no price for model %r — its cost is UNKNOWN, not zero; "

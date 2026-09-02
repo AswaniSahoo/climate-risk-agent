@@ -1,4 +1,4 @@
-"""Disk cache for cited answers: a repeat query costs zero tokens and zero latency.
+"""Cache for cited answers: a repeat query costs zero tokens and zero latency.
 
 MEASURED CAVEAT (2026-07-22, evals/determinism_probe.py): temperature 0 does
 NOT make generation deterministic. Repeating one fixed (question, chunks) pair
@@ -13,12 +13,16 @@ consistency choice, not a correctness guarantee, and it is why the e2e eval
 must never use this cache (it would freeze one sample of a distribution and
 hide model drift). Run the probe again after any model change.
 
-Why not Redis: single-process app (Streamlit / stdio MCP), so the right cache
-is a directory of JSON files, not a cache server. Redis earns its place only
-when multiple replicas need shared state (recorded in DEBT with that trigger).
+STORAGE, since Cache v2: this used to be a private directory of JSON files,
+with a note saying Redis would earn its place only once multiple replicas
+needed shared state. That trigger fired — Cloud Run, up to 2 replicas, an
+ephemeral per-replica disk, and a redeploy on every push — so the entries now
+go through `tools/cache_backend.py`: Upstash Redis when it is configured, the
+same local disk when it is not. The key logic is untouched, and a corrupt entry
+is still a LOUD miss rather than a crash.
 
 The key hashes the chunk TEXTS, not just ids: a re-chunk that changes content
-under a stable id invalidates naturally. Corrupt entries are a LOUD miss.
+under a stable id invalidates naturally.
 """
 from __future__ import annotations
 
@@ -30,16 +34,32 @@ from pathlib import Path
 from rag.answer import CitedAnswer
 from rag.chunk import Chunk
 from rag.gemini_client import GENERATE_MODEL
+from tools.cache_backend import CacheBackend, DiskCache, JsonCache
 
 _log = logging.getLogger(__name__)
 
+# The corpus is frozen, but a cached answer still embeds one model version and
+# one prompt. 30 days bounds how long a superseded pairing can keep answering.
+_ANSWER_TTL_S = 30 * 24 * 3600
+
 
 class AnswerCache:
-    """sha256-keyed JSON files, one per (question, evidence, model)."""
+    """sha256-keyed entries, one per (question, evidence, model).
 
-    def __init__(self, directory: Path | str) -> None:
-        self.directory = Path(directory)
-        self.directory.mkdir(parents=True, exist_ok=True)
+    `directory` pins the cache to a local folder (what the tests and offline
+    runs want); passing nothing takes the process-wide backend from the
+    environment, which is how the deployed app gets the shared Redis tier.
+    """
+
+    def __init__(
+        self,
+        directory: Path | str | None = None,
+        *,
+        backend: CacheBackend | None = None,
+    ) -> None:
+        if backend is None and directory is not None:
+            backend = DiskCache(directory)
+        self._cache = JsonCache("answers", backend=backend)
 
     def key(self, question: str, chunks: Sequence[Chunk]) -> str:
         hasher = hashlib.sha256()
@@ -51,13 +71,8 @@ class AnswerCache:
         return hasher.hexdigest()
 
     def get(self, key: str) -> CitedAnswer | None:
-        path = self.directory / f"{key}.json"
-        if not path.exists():
-            return None
-        try:
-            answer = CitedAnswer.model_validate_json(path.read_text(encoding="utf-8"))
-        except Exception as exc:  # corrupt entry -> loud miss, never a crash
-            _log.warning("corrupt cache entry %s ignored (%s)", path.name, exc)
+        answer = self._cache.get_model(key, CitedAnswer)
+        if answer is None:
             return None
         from obs.telemetry import record
 
@@ -67,5 +82,4 @@ class AnswerCache:
         return answer
 
     def put(self, key: str, answer: CitedAnswer) -> None:
-        path = self.directory / f"{key}.json"
-        path.write_text(answer.model_dump_json(), encoding="utf-8")
+        self._cache.set_model(key, answer, ttl_s=_ANSWER_TTL_S)

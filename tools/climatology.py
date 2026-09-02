@@ -21,6 +21,7 @@ from pathlib import Path
 import httpx
 
 from agent.contracts import Hazard
+from tools.cache_backend import JsonCache
 from tools.gev_trend import GevTrendFit, fit_gev_trend, trend_return_levels
 from tools.hazard_stats import (
     HazardStat,
@@ -148,7 +149,10 @@ def build_hazard_stat(
     latitude: float,
     longitude: float,
     timezone: str,
-    return_periods: Sequence[int] = (10, 50, 100),
+    # The 2-year level is a band edge in agent/risk_bands.py (below it, a peak is
+    # what an ordinary year does here), so it is fitted like any other level
+    # rather than extrapolated off the bottom of the curve.
+    return_periods: Sequence[int] = (2, 10, 50, 100),
 ) -> HazardStat:
     """Assemble a fully-provenanced HazardStat from annual maxima (pure; no network)."""
     cfg = _HAZARD_VARS[hazard]
@@ -184,21 +188,38 @@ def build_hazard_stat(
 
 _log = logging.getLogger(__name__)
 
-# Disk cache for the fitted GEV stat. The 1960–2022 ERA5 record is STATIC, so a
-# (location, hazard) statistic never changes — persisting it across process
-# restarts turns every cold-start (Cloud Run scale events) repeat query from a
-# ~20 s archive fetch + bootstrap into an instant disk read. The in-process
-# lru_cache below still handles same-instance repeats; this survives restarts.
-_STAT_CACHE_DIR = Path(os.environ.get("CLIMATOLOGY_CACHE_DIR", "data/cache/climatology"))
+# Persistent cache for the FITTED stat (Cache v2 — see tools/cache_backend.py).
+# The 1960–2022 ERA5 record is STATIC, so a (location, hazard) statistic never
+# changes, and the expensive half is the FIT, not the fetch: ~42 s for a cold
+# archive request PLUS 12.9 s of GEV fit + trend test + bootstrap at n_boot=150
+# (measured). Caching the finished HazardStat skips both. Since v2 the entry
+# goes through the shared backend, so on Cloud Run — where every replica has
+# its own ephemeral disk — a warm entry survives a redeploy and is visible to
+# the other replica instead of dying with the container.
+_FIT_TTL_S = 365 * 24 * 3600  # the record is static; the TTL is hygiene, not staleness
 
 
-def _stat_cache_enabled() -> bool:
-    # Hermetic tests: never touch the shared on-disk cache during pytest (mirrors
-    # the corpus-download guard in ui/app.py), so network-mocked tests stay exact.
-    return not os.environ.get("PYTEST_CURRENT_TEST")
+@lru_cache(maxsize=1)
+def _code_fingerprint() -> str:
+    """Identity of the code that PRODUCES the numbers, hashed from its source.
+
+    Same trick as rag/corpus.py's chunk-cache fingerprint: edit the GEV fit or
+    the trend test and every cached statistic invalidates itself, so nobody can
+    forget to bump a version constant and ship stale return levels.
+    """
+    digest = hashlib.sha256()
+    for name in ("hazard_stats.py", "gev_trend.py"):
+        digest.update((Path(__file__).parent / name).read_bytes())
+    return digest.hexdigest()[:16]
 
 
-def _stat_cache_key(
+@lru_cache(maxsize=1)
+def _fit_cache() -> JsonCache:
+    """The hazard-fit namespace (memoised; tests swap this for a tmp_path one)."""
+    return JsonCache("hazard_fit")
+
+
+def _fit_cache_key(
     latitude: float,
     longitude: float,
     hazard: Hazard,
@@ -206,38 +227,15 @@ def _stat_cache_key(
     end_year: int,
     return_periods: tuple[int, ...],
 ) -> str:
-    # ~4 dp ≈ 11 m, well inside the ERA5 ~25 km grid cell, so nearby coords that
-    # resolve to the same cell still share a cache entry.
+    # 2 dp ≈ 1.1 km, far inside the ERA5 ~25 km grid cell: two requests for the
+    # same city collapse onto one entry instead of paying one fit each. n_boot
+    # is in the key because a narrower bootstrap is a DIFFERENT statistic.
     raw = (
-        f"{round(latitude, 4)}|{round(longitude, 4)}|{hazard.value}|"
-        f"{start_year}|{end_year}|{tuple(return_periods)}"
+        f"{round(latitude, 2)}|{round(longitude, 2)}|{hazard.value}|"
+        f"{start_year}|{end_year}|{tuple(return_periods)}|"
+        f"{_N_BOOT}|{_TREND_N_BOOT}|{_code_fingerprint()}"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _stat_cache_load(key: str) -> HazardStat | None:
-    if not _stat_cache_enabled():
-        return None
-    path = _STAT_CACHE_DIR / f"{key}.json"
-    if not path.exists():
-        return None
-    try:
-        return HazardStat.model_validate_json(path.read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001 — a corrupt/stale cache file must never break a request
-        _log.warning("climatology cache read failed (%s) — refetching", exc)
-        return None
-
-
-def _stat_cache_store(key: str, stat: HazardStat) -> None:
-    if not _stat_cache_enabled():
-        return
-    try:
-        _STAT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        (_STAT_CACHE_DIR / f"{key}.json").write_text(
-            stat.model_dump_json(), encoding="utf-8"
-        )
-    except OSError as exc:
-        _log.warning("climatology cache write failed (%s) — continuing", exc)
 
 
 @lru_cache(maxsize=256)
@@ -248,25 +246,28 @@ def climatology_hazard_stat(
     *,
     start_year: int = 1960,
     end_year: int = 2022,
-    return_periods: tuple[int, ...] = (10, 50, 100),
+    return_periods: tuple[int, ...] = (2, 10, 50, 100),
 ) -> HazardStat:
     """Live: fetch ERA5 daily history from the Open-Meteo Archive → GEV → HazardStat.
 
     Two cache tiers, because the historical archive is static so the fitted
     statistic for a (location, hazard) never changes:
     - in-process `lru_cache`: instant repeats within one running instance;
-    - on-disk cache (`_STAT_CACHE_DIR`): survives restarts / cold starts, so a
-      re-scheduled Cloud Run container skips the ~20 s archive fetch + bootstrap.
+    - the shared backend (`tools/cache_backend.py`): Upstash Redis when it is
+      configured, local disk otherwise. It survives restarts AND crosses
+      replicas, so a re-scheduled Cloud Run container skips the ~42 s archive
+      fetch and the 12.9 s bootstrap instead of paying them again.
     Both also act as denial-of-wallet guards on the free Archive tier.
     """
     from tools.validation import validate_coordinates
 
     validate_coordinates(latitude, longitude)
 
-    cache_key = _stat_cache_key(
+    cache = _fit_cache()
+    cache_key = _fit_cache_key(
         latitude, longitude, hazard, start_year, end_year, return_periods
     )
-    cached = _stat_cache_load(cache_key)
+    cached = cache.get_model(cache_key, HazardStat)
     if cached is not None:
         return cached
 
@@ -298,5 +299,5 @@ def climatology_hazard_stat(
         timezone=data.get("timezone", "auto"),
         return_periods=return_periods,
     )
-    _stat_cache_store(cache_key, stat)
+    cache.set_model(cache_key, stat, ttl_s=_FIT_TTL_S)
     return stat
