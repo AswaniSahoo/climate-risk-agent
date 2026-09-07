@@ -13,6 +13,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from typing import Literal
 
 # `streamlit run ui/app.py` puts ui/ (not the repo root) on sys.path: same
 # entry-point shim the MCP servers use.
@@ -65,8 +66,6 @@ LOCATIONS: dict[str, tuple[float, float]] = {
     "Kolkata, India": (22.57, 88.36),
     "Berlin, Germany": (52.52, 13.40),
 }
-
-from typing import Literal
 
 # Severity -> (badge color, Material icon). Colors match the semantic palette
 # in .streamlit/config.toml, so the badge is themed consistently in light/dark.
