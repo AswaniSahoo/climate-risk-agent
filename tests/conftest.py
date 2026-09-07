@@ -5,6 +5,11 @@ so any test that touches it would otherwise append to the real
 data/telemetry/*.jsonl. Route all test telemetry to a tmp dir and reset the
 in-memory ring per test — tests must never pollute production observability data.
 """
+try:
+    import pyarrow  # noqa: F401 (initialize Arrow C++ symbols before scipy/geos)
+except ImportError:
+    pass
+
 import pytest
 
 

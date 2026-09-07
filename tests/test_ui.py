@@ -44,6 +44,8 @@ def _report(**overrides) -> RiskReport:
 
 @pytest.fixture
 def stubbed(monkeypatch):
+    import streamlit as st
+
     def fake_run_agent(**kwargs):
         return _report(hazard=kwargs["hazard"], horizon_days=kwargs["horizon_days"])
 
@@ -52,6 +54,7 @@ def stubbed(monkeypatch):
         climatology_mod, "climatology_hazard_stat",
         lambda *a, **k: (_ for _ in ()).throw(climatology_mod.ClimatologyError("offline test")),
     )
+    monkeypatch.setattr(st, "map", lambda *a, **k: None)
 
 
 def _run_clicked(at: AppTest) -> AppTest:
