@@ -18,14 +18,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # Majors verified against the GitHub releases API on 2026-09-02
-      # (actions/checkout v7.0.1, astral-sh/setup-uv v10.0.1) and kept equal to
-      # the ones evals.yml pins: two workflows on different majors of the same
-      # action fail in different ways, and only one of them gets debugged.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
