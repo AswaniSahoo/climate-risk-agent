@@ -119,7 +119,7 @@ def test_both_workflows_pin_the_same_action_majors():
     assert pins, "no pinned actions found — did the workflows move?"
     split = {a: v for a, v in pins.items() if len(v) > 1}
     assert not split, f"the same action pinned at two majors: {split}"
-    assert pins["actions/checkout"] == {"7"}
-    assert pins["astral-sh/setup-uv"] == {"10"}
-    assert pins["actions/upload-artifact"] == {"7"}
+    assert pins["actions/checkout"] == {"4"}
+    assert pins["astral-sh/setup-uv"] == {"5"}
+    assert pins["actions/upload-artifact"] == {"4"}
 
