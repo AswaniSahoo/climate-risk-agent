@@ -26,7 +26,7 @@ from tools.validation import validate_coordinates
 NO_REGION_NOTICE = (
     "This point falls outside every IPCC AR6 land region (open ocean, or a gap "
     "between regions). The live forecast and the ERA5 hazard statistics are still "
-    "computed for these exact coordinates — only the regional IPCC context is "
+    "computed for these exact coordinates: only the regional IPCC context is "
     "unavailable, so this report may carry no citations."
 )
 

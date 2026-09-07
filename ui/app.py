@@ -1,4 +1,4 @@
-"""Streamlit UI: one page over the agent — pick a location + hazard, get a
+"""Streamlit UI: one page over the agent: pick a location and hazard, get a
 grounded, cited RiskReport.
 
 The UI reads ONLY the RiskReport contract (never internal state), so every
@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-# `streamlit run ui/app.py` puts ui/ (not the repo root) on sys.path — same
+# `streamlit run ui/app.py` puts ui/ (not the repo root) on sys.path: same
 # entry-point shim the MCP servers use.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -66,9 +66,12 @@ LOCATIONS: dict[str, tuple[float, float]] = {
     "Berlin, Germany": (52.52, 13.40),
 }
 
-# Severity → (badge color, Material icon). Colors match the semantic palette
+from typing import Literal
+
+# Severity -> (badge color, Material icon). Colors match the semantic palette
 # in .streamlit/config.toml, so the badge is themed consistently in light/dark.
-_LEVEL_STYLE: dict[RiskLevel, tuple[str, str]] = {
+_BadgeColor = Literal["green", "yellow", "orange", "red"]
+_LEVEL_STYLE: dict[RiskLevel, tuple[_BadgeColor, str]] = {
     RiskLevel.LOW: ("green", ":material/check_circle:"),
     RiskLevel.MODERATE: ("yellow", ":material/warning:"),
     RiskLevel.HIGH: ("orange", ":material/priority_high:"),
@@ -77,14 +80,356 @@ _LEVEL_STYLE: dict[RiskLevel, tuple[str, str]] = {
 
 st.set_page_config(
     page_title="Climate-Risk Analyst Agent",
-    page_icon="🌍",
+    page_icon="assets/favicon.png",
     layout="wide",
 )
-st.title("🌍 Climate-Risk Analyst Agent")
+
+st.markdown(
+    """
+    <style>
+    /* Organic Earth & Forest Climate Intelligence Theme */
+    :root {
+      --cra-forest: #245E48;
+      --cra-forest-dark: #1B4736;
+      --cra-sage: #489B73;
+      --cra-alabaster: #F9F8F5;
+      --cra-sand: #F0ECE4;
+      --cra-stone: #D6D1C7;
+      --cra-charcoal: #1E2621;
+    }
+
+    /* Eyebrow Pill Badge */
+    .cra-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.28rem 0.8rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #245E48;
+      background: rgba(36, 94, 72, 0.08);
+      border: 1px solid rgba(36, 94, 72, 0.18);
+      border-radius: 9999px;
+      margin-bottom: 0.6rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-eyebrow {
+        color: #52B788;
+        background: rgba(82, 183, 136, 0.12);
+        border: 1px solid rgba(82, 183, 136, 0.25);
+      }
+    }
+    .cra-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #2D6A4F;
+      box-shadow: 0 0 6px rgba(45, 106, 79, 0.4);
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-dot {
+        background: #52B788;
+        box-shadow: 0 0 6px rgba(82, 183, 136, 0.5);
+      }
+    }
+
+    /* Double-Bezel Card Depth & Weightlessness */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+      border-radius: 14px !important;
+      border: 1px solid rgba(36, 94, 72, 0.12) !important;
+      background: rgba(255, 255, 255, 0.82) !important;
+      backdrop-filter: blur(12px) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      box-shadow: 0 4px 20px -2px rgba(30, 38, 33, 0.035), 0 1px 3px 0 rgba(30, 38, 33, 0.02) !important;
+      transition: border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+      border-color: rgba(36, 94, 72, 0.22) !important;
+      box-shadow: 0 8px 28px -4px rgba(30, 38, 33, 0.065), 0 2px 6px 0 rgba(30, 38, 33, 0.02) !important;
+    }
+    @media (prefers-color-scheme: dark) {
+      div[data-testid="stVerticalBlockBorderWrapper"] {
+        border: 1px solid rgba(82, 183, 136, 0.16) !important;
+        background: rgba(26, 34, 30, 0.72) !important;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35) !important;
+      }
+      div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border-color: rgba(82, 183, 136, 0.3) !important;
+        box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.45) !important;
+      }
+    }
+
+    /* Tactile Physics for Buttons */
+    .stButton > button {
+      border-radius: 10px !important;
+      font-weight: 500 !important;
+      letter-spacing: -0.01em !important;
+      border: 1px solid rgba(36, 94, 72, 0.16) !important;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+    .stButton > button:hover {
+      transform: translateY(-1px) !important;
+      box-shadow: 0 4px 12px -2px rgba(36, 94, 72, 0.12) !important;
+    }
+    .stButton > button:active {
+      transform: translateY(0) scale(0.985) !important;
+    }
+    .stButton > button[kind="primary"] {
+      background: #245E48 !important;
+      border-color: #1A4635 !important;
+      color: #F9F8F5 !important;
+      box-shadow: 0 2px 8px -1px rgba(36, 94, 72, 0.25) !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+      background: #1B4736 !important;
+      box-shadow: 0 6px 18px -2px rgba(36, 94, 72, 0.32) !important;
+    }
+
+    /* Metric Tabular Numbers & Clean Hierarchy */
+    div[data-testid="stMetric"] {
+      padding: 8px 4px !important;
+    }
+    div[data-testid="stMetricLabel"] {
+      font-size: 0.72rem !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.08em !important;
+      font-weight: 600 !important;
+      opacity: 0.75 !important;
+    }
+    div[data-testid="stMetricValue"] {
+      font-feature-settings: "tnum" 1 !important;
+      font-variant-numeric: tabular-nums !important;
+      letter-spacing: -0.025em !important;
+      font-weight: 600 !important;
+    }
+
+    /* Status & Expander Widgets */
+    div[data-testid="stStatusWidget"] {
+      border-radius: 12px !important;
+      border-color: rgba(36, 94, 72, 0.2) !important;
+    }
+    div[data-testid="stExpander"] {
+      border-radius: 12px !important;
+      border: 1px solid rgba(36, 94, 72, 0.12) !important;
+    }
+
+    /* Badges */
+    span[data-testid="stBadge"] {
+      border-radius: 6px !important;
+      font-weight: 500 !important;
+      letter-spacing: 0.02em !important;
+    }
+
+    /* Input Fields Focus State */
+    div[data-baseweb="input"] {
+      border-radius: 10px !important;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    }
+    div[data-baseweb="input"]:focus-within {
+      border-color: #245E48 !important;
+      box-shadow: 0 0 0 3px rgba(36, 94, 72, 0.12) !important;
+    }
+
+    /* Empty State Pipeline Styles */
+    .cra-pipeline-card {
+      padding: 1.1rem 1.2rem;
+      border-radius: 12px;
+      background: rgba(36, 94, 72, 0.03);
+      border: 1px solid rgba(36, 94, 72, 0.09);
+      margin-bottom: 0.85rem;
+      transition: all 0.2s ease;
+    }
+    .cra-pipeline-card:hover {
+      background: rgba(36, 94, 72, 0.05);
+      border-color: rgba(36, 94, 72, 0.16);
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-pipeline-card {
+        background: rgba(82, 183, 136, 0.04);
+        border: 1px solid rgba(82, 183, 136, 0.1);
+      }
+      .cra-pipeline-card:hover {
+        background: rgba(82, 183, 136, 0.07);
+        border-color: rgba(82, 183, 136, 0.2);
+      }
+    }
+    .cra-step-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #245E48;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-step-badge {
+        color: #52B788;
+      }
+    }
+    .cra-step-title {
+      font-size: 0.96rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin: 0.25rem 0 0.4rem 0;
+    }
+    .cra-step-desc {
+      font-size: 0.85rem;
+      line-height: 1.5;
+      opacity: 0.85;
+    }
+    .cra-callout {
+      padding: 1.1rem 1.2rem;
+      border-radius: 12px;
+      background: rgba(198, 146, 20, 0.05);
+      border: 1px solid rgba(198, 146, 20, 0.16);
+      margin-bottom: 0.85rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-callout {
+        background: rgba(198, 146, 20, 0.08);
+        border: 1px solid rgba(198, 146, 20, 0.22);
+      }
+    }
+    .cra-callout-green {
+      padding: 1.1rem 1.2rem;
+      border-radius: 12px;
+      background: rgba(45, 106, 79, 0.05);
+      border: 1px solid rgba(45, 106, 79, 0.16);
+      margin-bottom: 0.85rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-callout-green {
+        background: rgba(82, 183, 136, 0.07);
+        border: 1px solid rgba(82, 183, 136, 0.2);
+      }
+    }
+
+    /* Sidebar Instrument Deck */
+    .cra-sidebar-header {
+      padding: 0.35rem 0 0.85rem 0;
+      margin-bottom: 0.65rem;
+      border-bottom: 1px solid rgba(36, 94, 72, 0.12);
+    }
+    .cra-sidebar-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.22rem 0.65rem;
+      font-size: 0.64rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #245E48;
+      background: rgba(36, 94, 72, 0.08);
+      border: 1px solid rgba(36, 94, 72, 0.18);
+      border-radius: 9999px;
+      margin-bottom: 0.45rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-sidebar-pill {
+        color: #52B788;
+        background: rgba(82, 183, 136, 0.12);
+        border-color: rgba(82, 183, 136, 0.25);
+      }
+    }
+    .cra-sidebar-title {
+      font-size: 1.08rem;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: #1E2621;
+      margin-bottom: 2px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-sidebar-title {
+        color: #F0ECE4;
+      }
+    }
+    .cra-sidebar-desc {
+      font-size: 0.78rem;
+      line-height: 1.42;
+      color: #556058;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-sidebar-desc {
+        color: #A3ACA5;
+      }
+    }
+    .cra-section-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #3C4741;
+      margin: 0.85rem 0 0.45rem 0;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-section-label {
+        color: #A3ACA5;
+      }
+    }
+    .cra-fast-badge {
+      font-size: 0.62rem;
+      font-weight: 600;
+      padding: 0.12rem 0.45rem;
+      border-radius: 4px;
+      background: rgba(45, 106, 79, 0.1);
+      color: #245E48;
+      border: 1px solid rgba(45, 106, 79, 0.2);
+      letter-spacing: 0.04em;
+    }
+    @media (prefers-color-scheme: dark) {
+      .cra-fast-badge {
+        background: rgba(82, 183, 136, 0.15);
+        color: #52B788;
+        border-color: rgba(82, 183, 136, 0.3);
+      }
+    }
+
+    /* Tactile Sidebar Preset Buttons */
+    [data-testid="stSidebar"] .stButton > button {
+      border-radius: 8px !important;
+      font-size: 0.82rem !important;
+      font-weight: 500 !important;
+      padding: 0.32rem 0.5rem !important;
+      border: 1px solid rgba(36, 94, 72, 0.14) !important;
+      background: rgba(255, 255, 255, 0.72) !important;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+      background: rgba(36, 94, 72, 0.08) !important;
+      border-color: rgba(36, 94, 72, 0.3) !important;
+      color: #245E48 !important;
+      transform: translateY(-1px) !important;
+    }
+    @media (prefers-color-scheme: dark) {
+      [data-testid="stSidebar"] .stButton > button {
+        background: rgba(30, 38, 33, 0.6) !important;
+        border-color: rgba(82, 183, 136, 0.18) !important;
+      }
+      [data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(82, 183, 136, 0.12) !important;
+        border-color: rgba(82, 183, 136, 0.35) !important;
+        color: #52B788 !important;
+      }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<div class="cra-eyebrow"><span class="cra-dot"></span>DECISION-GRADE CLIMATE INTELLIGENCE</div>',
+    unsafe_allow_html=True,
+)
+st.title("Climate-Risk Analyst Agent")
 st.caption(
     "Ask about heat, extreme rainfall or wind risk anywhere on Earth. You get a "
     "structured report built from a live forecast, 60+ years of ERA5 climate "
-    "statistics, and the IPCC AR6 assessment — with page-level citations, and an "
+    "statistics, and the IPCC AR6 assessment, complete with page-level citations and an "
     "honest refusal when the evidence is not there."
 )
 
@@ -98,7 +443,7 @@ with st.expander("How to use this (start here)", icon=":material/help:"):
 - *What is the wind risk in Chennai over the next 10 days?*
 
 **Or pick the point yourself** in the sidebar: geocode any place name, or type a
-latitude/longitude. The map marks the selected point (display-only — it cannot
+latitude/longitude. The map marks the selected point (display-only: it cannot
 be clicked to move the pin).
 
 **What it covers.** Three hazards only: **heat / heatwaves**, **extreme
@@ -137,7 +482,7 @@ if not _os.environ.get("PYTEST_CURRENT_TEST") and not corpus_present():
         _download_corpus()
 
 # Dense-retrieval self-test (once per session). A wrong embedding region/model
-# must surface LOUDLY here — not hide behind a citation-less report while every
+# must surface LOUDLY here: not hide behind a citation-less report while every
 # query silently 404s to BM25-only. Skipped under pytest (hermetic UI tests).
 if not _os.environ.get("PYTEST_CURRENT_TEST"):
     if "dense_ok" not in st.session_state:
@@ -156,16 +501,16 @@ if not _os.environ.get("PYTEST_CURRENT_TEST"):
 # One-click examples: a first-time visitor should be able to see a real report
 # without inventing a question. Each writes the query into the input via
 # session_state, so the text stays editable afterwards.
-_EXAMPLES = {
-    "🌡️ Heat in Berlin": "How risky are heatwaves in Berlin over the next 7 days?",
-    "🌧️ Rainfall in Mumbai": "Is extreme rainfall a concern in Mumbai over the next 7 days?",
-    "💨 Wind in Chennai": "What is the wind risk in Chennai over the next 10 days?",
-    "🚫 Out of scope": "What is the wildfire risk in Sydney next week?",
-}
-st.caption("Try an example:")
-_cols = st.columns(len(_EXAMPLES))
-for _col, (_label, _query) in zip(_cols, _EXAMPLES.items()):
-    if _col.button(_label, width="stretch"):
+_SUGGESTIONS = [
+    ("Heatwave · Berlin (7d)", ":material/thermostat:", "How risky are heatwaves in Berlin over the next 7 days?"),
+    ("Rainfall · Mumbai (7d)", ":material/rainy:", "Is extreme rainfall a concern in Mumbai over the next 7 days?"),
+    ("Wind gusts · Chennai (10d)", ":material/air:", "What is the wind risk in Chennai over the next 10 days?"),
+    ("Wildfire · Sydney (Refusal)", ":material/block:", "What is the wildfire risk in Sydney next week?"),
+]
+st.caption("Suggested inquiries (click to populate query):")
+_cols = st.columns(len(_SUGGESTIONS))
+for _col, (_label, _icon, _query) in zip(_cols, _SUGGESTIONS):
+    if _col.button(_label, icon=_icon, width="stretch"):
         st.session_state["nl_query"] = _query
 
 # Natural-language front door: any place on Earth, plain English.
@@ -197,9 +542,23 @@ st.session_state.setdefault("place_country", "India")
 st.session_state.setdefault("place_coords", (22.26, 84.85))
 
 with st.sidebar:
-    st.caption("…or configure the assessment manually")
-
-    st.caption("Examples (pre-warmed — instant)")
+    st.markdown(
+        """
+        <div class="cra-sidebar-header">
+            <div class="cra-sidebar-pill">
+                <span class="cra-dot"></span>
+                <span>CONTROL DECK</span>
+            </div>
+            <div class="cra-sidebar-title">Assessment Controls</div>
+            <div class="cra-sidebar-desc">Configure coordinates, hazard domain, and climatology baseline manually.</div>
+        </div>
+        <div class="cra-section-label">
+            <span>PRESET LOCATIONS</span>
+            <span class="cra-fast-badge">⚡ INSTANT</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     _example_names = list(LOCATIONS)
     for _start in range(0, len(_example_names), 3):
         for _col, _name in zip(st.columns(3), _example_names[_start:_start + 3]):
@@ -219,7 +578,7 @@ with st.sidebar:
                 _found.name, _found.country, _found.latitude, _found.longitude
             )
         except GeocodeError as exc:
-            st.warning(f"Could not resolve that place — {exc}", icon=":material/wrong_location:")
+            st.warning(f"Could not resolve that place: {exc}", icon=":material/wrong_location:")
 
     # Ranges mirror tools/validation.validate_coordinates; coordinate_error is the
     # same check, so a value typed past the widget still refuses instead of flying.
@@ -293,6 +652,7 @@ if selected is not None:
                 st.info(selected.notice, icon=":material/public_off:")
 
 report = None
+failure: str | None = None
 
 
 class _StepPanel:
@@ -317,9 +677,9 @@ class _StepPanel:
             # The collapsed title says what is happening right now, so the panel
             # is useful even when the reader has it shut.
             self._status.update(label=f"{event.label}…")
-            head = f":blue-badge[running] **{event.label}**"
+            head = f":green-badge[running] **{event.label}**"
         elif event.status is StepStatus.FINISHED:
-            badge = f" :violet-badge[{event.detail}]" if event.detail else ""
+            badge = f" :gray-badge[{event.detail}]" if event.detail else ""
             head = f":green-badge[{format_elapsed(event.seconds)}] **{event.label}**{badge}"
         elif event.status is StepStatus.SKIPPED:
             badge = f" :gray-badge[{event.detail}]" if event.detail else ""
@@ -363,10 +723,12 @@ if ask and nl_query.strip():
         )
     if failure is not None:
         st.error(failure, icon=":material/error:")
-elif run and selected is not None:
+elif run and selected is not None and hazard is not None:
     from agent import graph as agent_graph  # noqa: E402
     from obs.telemetry import Span  # noqa: E402
 
+    sel = selected
+    haz = hazard
     # Collected rather than written inline: a warning drawn inside the status
     # container would vanish when the panel collapses on success.
     notices: list[str] = []
@@ -380,7 +742,7 @@ elif run and selected is not None:
             try:
                 with track(on_step, CLIMATOLOGY):
                     hazard_stat = climatology.climatology_hazard_stat(
-                        selected.latitude, selected.longitude, hazard
+                        sel.latitude, sel.longitude, haz
                     )
             except ClimatologyError as exc:
                 # Loud but non-fatal, exactly as before: the band falls back to
@@ -389,9 +751,9 @@ elif run and selected is not None:
         else:
             emit_step(on_step, CLIMATOLOGY, StepStatus.SKIPPED, detail="ERA5 grounding off")
         return agent_graph.run_agent(
-            location=selected.label,
-            latitude=selected.latitude, longitude=selected.longitude,
-            hazard=hazard, horizon_days=horizon, hazard_stat=hazard_stat,
+            location=sel.label,
+            latitude=sel.latitude, longitude=sel.longitude,
+            hazard=haz, horizon_days=horizon, hazard_stat=hazard_stat,
             on_step=on_step,
         )
 
@@ -405,7 +767,7 @@ elif run and selected is not None:
 if report is not None:
     if report.refusal is not None:
         st.error(f"**Refused:** {report.refusal}", icon=":material/block:")
-        st.caption("Out-of-scope is an explicit, valid output — not a fabricated risk.")
+        st.caption("Out-of-scope is an explicit, valid output: not a fabricated risk.")
     else:
         color, icon = _LEVEL_STYLE[report.risk_level]
 
@@ -439,7 +801,7 @@ if report is not None:
         with st.container(border=True):
             with st.container(horizontal=True, vertical_alignment="center"):
                 st.subheader(
-                    f"{report.risk_level.value.upper()} — "
+                    f"{report.risk_level.value.upper()} · "
                     f"{report.hazard.value.replace('_', ' ')} risk in {report.location}"
                 )
                 st.badge(report.risk_level.value.upper(), color=color, icon=icon)
@@ -472,12 +834,12 @@ if report is not None:
                     for c in report.citations:
                         st.markdown(
                             f":gray-badge[:material/description: {c.source}] "
-                            f":blue-badge[{c.locator}]"
+                            f":gray-badge[{c.locator}]"
                         )
                 else:
                     st.caption(
                         "No IPCC citations in this report (RAG layer offline or the "
-                        "answerer honestly abstained — it never invents)."
+                        "answerer honestly abstained; it never invents)."
                     )
 
             # Display-only: the report JSON already carries the whole thing.
@@ -488,7 +850,7 @@ if report is not None:
                     st.markdown(
                         f":gray-badge[:material/public: {_pc.region_name} "
                         f"({_pc.region_acronym})] "
-                        f":blue-badge[{_pc.direction.value.replace('_', ' ')}]"
+                        f":gray-badge[{_pc.direction.value.replace('_', ' ')}]"
                         + (
                             f" :green-badge[{_pc.confidence_language}]"
                             if _pc.confidence_language
@@ -504,18 +866,18 @@ if report is not None:
                     for _c in _pc.citations:
                         st.markdown(
                             f":gray-badge[:material/description: {_c.source}] "
-                            f":blue-badge[{_c.locator}]"
+                            f":gray-badge[{_c.locator}]"
                         )
                 else:
                     st.caption(
                         "Regional projections were not found in the corpus for this "
-                        "hazard and AR6 region — nothing is asserted in their place."
+                        "hazard and AR6 region: nothing is asserted in their place."
                     )
 
         if report.hazard_stats:
             stat = report.hazard_stats[0]
             with st.container(border=True):
-                st.markdown(f"**ERA5 climatology** — {stat.n_years} years, {stat.variable}")
+                st.markdown(f"**ERA5 climatology** ({stat.n_years} years, {stat.variable})")
                 table = {
                     "return_period_years": [
                         r.return_period_years for r in stat.return_levels
@@ -524,7 +886,7 @@ if report is not None:
                 }
                 if all(r.ci_low is not None for r in stat.return_levels):
                     table["ci"] = [
-                        f"{r.ci_low:.1f} – {r.ci_high:.1f}" for r in stat.return_levels
+                        f"{r.ci_low:.1f} to {r.ci_high:.1f}" for r in stat.return_levels
                     ]
                 st.dataframe(
                     table,
@@ -540,7 +902,7 @@ if report is not None:
                     hide_index=True,
                 )
                 st.caption(
-                    f"Record max in series: {round(stat.record_max, 1)} — "
+                    f"Record max in series: {round(stat.record_max, 1)} · "
                     f"representativeness: {stat.representativeness.value}"
                 )
                 if stat.trend is not None:
@@ -548,14 +910,14 @@ if report is not None:
                         st.warning(
                             f"Warming trend detected: {stat.trend.slope_per_decade:+.1f} "
                             f"{stat.unit}/decade (p={stat.trend.p_value:.3f}). Return levels "
-                            f"above are EFFECTIVE at {stat.trend.evaluated_at_year} — "
-                            "today's climate, not the historical average.",
+                            f"above are EFFECTIVE at {stat.trend.evaluated_at_year} "
+                            "(today's climate, not the historical average).",
                             icon=":material/trending_up:",
                         )
                     else:
                         st.caption(
                             f"Non-stationarity tested: no significant trend "
-                            f"(p={stat.trend.p_value:.2f}) — stationary fit reported."
+                            f"(p={stat.trend.p_value:.2f}) · stationary fit reported."
                         )
 
     with st.expander("Cost & latency (measured telemetry)", icon=":material/speed:"):
@@ -565,17 +927,96 @@ if report is not None:
         obs_cols[1].metric("Model calls", s["calls"], help="Live Gemini calls (cache hits excluded)")
         obs_cols[2].metric("Cache hits", s["cache_hits"])
         obs_cols[3].metric("Est. cost", f"${s['est_cost_usd']:.4f}",
-                           help="Estimated from token counts × configured prices — not a bill.")
+                           help="Estimated from token counts × configured prices (not a bill).")
         st.caption(
             f"tokens in/out: {s['tokens_in']}/{s['tokens_out']} · "
-            f"retries: {s['retries']} · failures: {s['failures']} — every model "
+            f"retries: {s['retries']} · failures: {s['failures']} · every model "
             "call is measured at the SDK seam; none can opt out."
         )
 
     with st.expander("Data provenance (audit trail)", icon=":material/fact_check:"):
         for p in report.provenance:
-            st.markdown(f"- **{p.source}** — `{p.url}` at {p.retrieved_at:%Y-%m-%d %H:%M} UTC")
+            st.markdown(f"- **{p.source}**: `{p.url}` at {p.retrieved_at:%Y-%m-%d %H:%M} UTC")
             st.json(p.params, expanded=False)
 
     with st.expander("Raw RiskReport JSON (the contract)", icon=":material/code:"):
         st.code(report.model_dump_json(indent=2), language="json")
+
+elif failure is None and not run and not ask:
+    col_pipeline, col_principles = st.columns([11, 9], gap="medium")
+    with col_pipeline:
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style="margin-bottom: 0.9rem;">
+                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #245E48; margin-bottom: 4px;">
+                        EMPIRICAL EVALUATION PIPELINE
+                    </div>
+                    <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px;">
+                        How the agent grounds risk assessments
+                    </div>
+                    <div style="font-size: 0.86rem; opacity: 0.82; line-height: 1.5;">
+                        Every assessment cross-examines operational forecast signals against 60+ years of extreme value distributions and the IPCC AR6 assessment tables:
+                    </div>
+                </div>
+                <div class="cra-pipeline-card">
+                    <div class="cra-step-badge">LAYER 01 · OPERATIONAL FORECAST</div>
+                    <div class="cra-step-title">Numerical Forecast Ensemble</div>
+                    <div class="cra-step-desc">
+                        Fetches high-resolution weather models (Open-Meteo) up to 16 days out for daily temperature extremes, heavy rainfall accumulation, or maximum wind gusts at your exact coordinate.
+                    </div>
+                </div>
+                <div class="cra-pipeline-card">
+                    <div class="cra-step-badge">LAYER 02 · HISTORICAL REANALYSIS</div>
+                    <div class="cra-step-title">ERA5 Extreme Value Climatology</div>
+                    <div class="cra-step-desc">
+                        Fits 60+ years (1940 to 2023) of daily historical extremes using Generalized Extreme Value (GEV) parametric distributions. Calibrates local 10, 50, and 100-year return levels with 90% bootstrap confidence intervals and tests for non-stationary warming trends.
+                    </div>
+                </div>
+                <div class="cra-pipeline-card">
+                    <div class="cra-step-badge">LAYER 03 · PEER-REVIEWED SYNTHESIS</div>
+                    <div class="cra-step-title">IPCC AR6 Grounding & Verification</div>
+                    <div class="cra-step-desc">
+                        Cross-references physical drivers against Chapter 11 and regional trend projections against Chapter 12. Every assertion requires machine-checked page citations; ungrounded statements are strictly omitted.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    with col_principles:
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style="margin-bottom: 0.75rem;">
+                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #245E48; margin-bottom: 4px;">
+                        DECISION PRINCIPLES
+                    </div>
+                    <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px;">
+                        Scientific Guarantees
+                    </div>
+                </div>
+                <div class="cra-callout">
+                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #9E2A2B; margin-bottom: 2px;">
+                        CLIMATOLOGICAL RARITY
+                    </div>
+                    <div style="font-size: 0.95rem; font-weight: 600; margin-bottom: 4px;">
+                        Relative Severity vs. Raw Weather
+                    </div>
+                    <div style="font-size: 0.84rem; line-height: 1.48; opacity: 0.88;">
+                        Conventional weather apps only report raw predictions. The Climate-Risk Analyst determines how extreme that forecast is relative to the historical climatology of that specific location. For instance, 38 °C in Berlin triggers a severe risk rating because it surpasses the local 50-year return level, whereas the same temperature in Rourkela represents expected seasonal weather.
+                    </div>
+                </div>
+                <div class="cra-callout-green">
+                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #2D6A4F; margin-bottom: 2px;">
+                        AUDITED ABSTENTION
+                    </div>
+                    <div style="font-size: 0.95rem; font-weight: 600; margin-bottom: 4px;">
+                        Zero Fabricated Answers
+                    </div>
+                    <div style="font-size: 0.84rem; line-height: 1.48; opacity: 0.88;">
+                        Three physical hazards are supported: heatwaves, extreme precipitation, and wind. Out-of-scope hazards (cyclones, wildfires, drought, sea-level rise) and ungrounded queries trigger explicit typed refusals rather than hallucinated estimates.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )

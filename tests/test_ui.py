@@ -1,4 +1,4 @@
-"""Streamlit UI smoke tests (streamlit.testing.AppTest — headless, offline).
+"""Streamlit UI smoke tests (streamlit.testing.AppTest: headless, offline).
 
 The agent + climatology are monkeypatched: these pin that the UI renders every
 RiskReport path honestly (risk, citations, refusal), not the agent logic.
@@ -115,7 +115,7 @@ def test_point_with_no_ar6_region_shows_the_notice_and_still_runs(stubbed, monke
 
     assert not at.exception
     assert any("IPCC AR6 land region" in i.value for i in at.info)
-    assert at.subheader  # the report still rendered — no region is not a refusal
+    assert at.subheader  # the report still rendered: no region is not a refusal
 
 
 def test_progress_panel_shows_step_labels_timings_and_cache_badges(stubbed, monkeypatch):
