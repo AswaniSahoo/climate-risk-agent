@@ -1,6 +1,8 @@
 # Climate-Risk Analyst Agent
 
 [![CI](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/ci.yml)
+[![Security](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/security.yml/badge.svg)](https://github.com/AswaniSahoo/climate-risk-agent/actions/workflows/security.yml)
+[![Release](https://img.shields.io/github/v/release/AswaniSahoo/climate-risk-agent?color=blue)](https://github.com/AswaniSahoo/climate-risk-agent/releases)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![LangGraph](https://img.shields.io/badge/agent-LangGraph-8A2BE2.svg)
