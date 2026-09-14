@@ -9,11 +9,12 @@ Run:  uv run streamlit run ui/app.py
 """
 from __future__ import annotations
 
+import base64
 import logging
 import sys
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 # `streamlit run ui/app.py` puts ui/ (not the repo root) on sys.path: same
 # entry-point shim the MCP servers use.
@@ -77,24 +78,176 @@ _LEVEL_STYLE: dict[RiskLevel, tuple[_BadgeColor, str]] = {
     RiskLevel.SEVERE: ("red", ":material/emergency:"),
 }
 
+_ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
+_FAVICON_PATH = _ASSETS_DIR / "favicon.png"
+if not _FAVICON_PATH.is_file():
+    _FAVICON_PATH = Path("assets/favicon.png")
+
+_LOGO_B64 = ""
+if _FAVICON_PATH.is_file():
+    try:
+        _LOGO_B64 = base64.b64encode(_FAVICON_PATH.read_bytes()).decode("utf-8")
+    except Exception as _exc:
+        _log.warning("Could not read brand logo: %s", _exc)
+
 st.set_page_config(
     page_title="Climate-Risk Analyst Agent",
-    page_icon="assets/favicon.png",
+    page_icon=str(_FAVICON_PATH) if _FAVICON_PATH.is_file() else "assets/favicon.png",
     layout="wide",
 )
+
+if hasattr(st, "logo") and _FAVICON_PATH.is_file():
+    try:
+        st.logo(str(_FAVICON_PATH), icon_image=str(_FAVICON_PATH))
+    except Exception:
+        pass
 
 st.markdown(
     """
     <style>
-    /* Organic Earth & Forest Climate Intelligence Theme */
+    /* Scientific Climate Risk Intelligence Theme (Dark & Light) */
     :root {
-      --cra-forest: #245E48;
-      --cra-forest-dark: #1B4736;
-      --cra-sage: #489B73;
-      --cra-alabaster: #F9F8F5;
-      --cra-sand: #F0ECE4;
-      --cra-stone: #D6D1C7;
-      --cra-charcoal: #1E2621;
+      --cra-bg: #111613;
+      --cra-surface: rgba(26, 34, 30, 0.72);
+      --cra-surface-card: rgba(22, 29, 25, 0.85);
+      --cra-surface-card-hover: rgba(28, 38, 33, 0.95);
+      --cra-border: rgba(82, 183, 136, 0.18);
+      --cra-border-subtle: rgba(82, 183, 136, 0.10);
+      --cra-border-hover: rgba(82, 183, 136, 0.35);
+      --cra-text: #ECEAE4;
+      --cra-text-muted: #9BA59F;
+      --cra-text-subtle: #6E7972;
+      --cra-primary: #3E886D;
+      --cra-primary-dark: #2D6A4F;
+      --cra-primary-hover: #4D9E80;
+      --cra-primary-glow: rgba(62, 136, 109, 0.25);
+      --cra-badge-bg: rgba(62, 136, 109, 0.14);
+      --cra-badge-border: rgba(62, 136, 109, 0.28);
+      --cra-badge-text: #52B788;
+      --cra-dot: #52B788;
+      --cra-callout-red-bg: rgba(229, 115, 115, 0.08);
+      --cra-callout-red-border: rgba(229, 115, 115, 0.24);
+      --cra-callout-red-text: #EF9A9A;
+      --cra-callout-green-bg: rgba(62, 136, 109, 0.09);
+      --cra-callout-green-border: rgba(62, 136, 109, 0.24);
+      --cra-callout-green-text: #66BB6A;
+      --cra-shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.4), 0 1px 3px 0 rgba(0, 0, 0, 0.2);
+      --cra-shadow-hover: 0 8px 30px -4px rgba(0, 0, 0, 0.55), 0 2px 6px 0 rgba(0, 0, 0, 0.25);
+      --cra-inner-refract: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    [data-theme="light"], .stApp[data-theme="light"], [data-base-theme="light"], .stApp[data-base-theme="light"] {
+      --cra-bg: #F9F8F5;
+      --cra-surface: rgba(255, 255, 255, 0.82);
+      --cra-surface-card: rgba(255, 255, 255, 0.90);
+      --cra-surface-card-hover: rgba(255, 255, 255, 0.98);
+      --cra-border: rgba(36, 94, 72, 0.14);
+      --cra-border-subtle: rgba(36, 94, 72, 0.08);
+      --cra-border-hover: rgba(36, 94, 72, 0.28);
+      --cra-text: #1E2621;
+      --cra-text-muted: #556058;
+      --cra-text-subtle: #8A948D;
+      --cra-primary: #245E48;
+      --cra-primary-dark: #1B4736;
+      --cra-primary-hover: #1B4736;
+      --cra-primary-glow: rgba(36, 94, 72, 0.16);
+      --cra-badge-bg: rgba(36, 94, 72, 0.08);
+      --cra-badge-border: rgba(36, 94, 72, 0.18);
+      --cra-badge-text: #245E48;
+      --cra-dot: #2D6A4F;
+      --cra-callout-red-bg: rgba(198, 146, 20, 0.05);
+      --cra-callout-red-border: rgba(198, 146, 20, 0.18);
+      --cra-callout-red-text: #9E2A2B;
+      --cra-callout-green-bg: rgba(45, 106, 79, 0.05);
+      --cra-callout-green-border: rgba(45, 106, 79, 0.18);
+      --cra-callout-green-text: #2D6A4F;
+      --cra-shadow-card: 0 4px 20px -2px rgba(30, 38, 33, 0.04), 0 1px 3px 0 rgba(30, 38, 33, 0.02);
+      --cra-shadow-hover: 0 8px 28px -4px rgba(30, 38, 33, 0.07), 0 2px 6px 0 rgba(30, 38, 33, 0.02);
+      --cra-inner-refract: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]):not([data-base-theme="dark"]) {
+        --cra-bg: #F9F8F5;
+        --cra-surface: rgba(255, 255, 255, 0.82);
+        --cra-surface-card: rgba(255, 255, 255, 0.90);
+        --cra-surface-card-hover: rgba(255, 255, 255, 0.98);
+        --cra-border: rgba(36, 94, 72, 0.14);
+        --cra-border-subtle: rgba(36, 94, 72, 0.08);
+        --cra-border-hover: rgba(36, 94, 72, 0.28);
+        --cra-text: #1E2621;
+        --cra-text-muted: #556058;
+        --cra-text-subtle: #8A948D;
+        --cra-primary: #245E48;
+        --cra-primary-dark: #1B4736;
+        --cra-primary-hover: #1B4736;
+        --cra-primary-glow: rgba(36, 94, 72, 0.16);
+        --cra-badge-bg: rgba(36, 94, 72, 0.08);
+        --cra-badge-border: rgba(36, 94, 72, 0.18);
+        --cra-badge-text: #245E48;
+        --cra-dot: #2D6A4F;
+        --cra-callout-red-bg: rgba(198, 146, 20, 0.05);
+        --cra-callout-red-border: rgba(198, 146, 20, 0.18);
+        --cra-callout-red-text: #9E2A2B;
+        --cra-callout-green-bg: rgba(45, 106, 79, 0.05);
+        --cra-callout-green-border: rgba(45, 106, 79, 0.18);
+        --cra-callout-green-text: #2D6A4F;
+        --cra-shadow-card: 0 4px 20px -2px rgba(30, 38, 33, 0.04), 0 1px 3px 0 rgba(30, 38, 33, 0.02);
+        --cra-shadow-hover: 0 8px 28px -4px rgba(30, 38, 33, 0.07), 0 2px 6px 0 rgba(30, 38, 33, 0.02);
+        --cra-inner-refract: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      }
+    }
+
+    /* Brand Header with Logo */
+    .cra-header-container {
+      display: flex;
+      align-items: center;
+      gap: 1.15rem;
+      margin-top: 0.2rem;
+      margin-bottom: 0.6rem;
+    }
+    .cra-brand-logo {
+      width: 50px;
+      height: 50px;
+      border-radius: 12px;
+      border: 1px solid var(--cra-border);
+      box-shadow: 0 4px 14px -2px var(--cra-primary-glow), 0 1px 3px rgba(0, 0, 0, 0.15);
+      object-fit: contain;
+      image-rendering: -webkit-optimize-contrast;
+      background: var(--cra-surface-card);
+      padding: 2px;
+      flex-shrink: 0;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .cra-brand-logo:hover {
+      transform: translateY(-1px) scale(1.03);
+      box-shadow: 0 8px 22px -4px var(--cra-primary-glow);
+    }
+    .cra-header-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .cra-title {
+      font-size: 2.3rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.12;
+      margin: 0;
+      color: var(--cra-text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    @media (max-width: 640px) {
+      .cra-header-container {
+        gap: 0.85rem;
+      }
+      .cra-brand-logo {
+        width: 44px;
+        height: 44px;
+      }
+      .cra-title {
+        font-size: 1.7rem;
+      }
     }
 
     /* Eyebrow Pill Badge */
@@ -102,62 +255,44 @@ st.markdown(
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.28rem 0.8rem;
+      padding: 0.26rem 0.75rem;
       font-size: 0.68rem;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      color: #245E48;
-      background: rgba(36, 94, 72, 0.08);
-      border: 1px solid rgba(36, 94, 72, 0.18);
+      color: var(--cra-badge-text);
+      background: var(--cra-badge-bg);
+      border: 1px solid var(--cra-badge-border);
       border-radius: 9999px;
-      margin-bottom: 0.6rem;
+      margin-bottom: 0.45rem;
+      width: fit-content;
     }
-    @media (prefers-color-scheme: dark) {
-      .cra-eyebrow {
-        color: #52B788;
-        background: rgba(82, 183, 136, 0.12);
-        border: 1px solid rgba(82, 183, 136, 0.25);
-      }
+    @keyframes cra-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
     }
     .cra-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #2D6A4F;
-      box-shadow: 0 0 6px rgba(45, 106, 79, 0.4);
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-dot {
-        background: #52B788;
-        box-shadow: 0 0 6px rgba(82, 183, 136, 0.5);
-      }
+      background: var(--cra-dot);
+      box-shadow: 0 0 6px var(--cra-dot);
+      animation: cra-pulse 2.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
 
-    /* Double-Bezel Card Depth & Weightlessness */
+    /* Double-Bezel Card Depth */
     div[data-testid="stVerticalBlockBorderWrapper"] {
       border-radius: 14px !important;
-      border: 1px solid rgba(36, 94, 72, 0.12) !important;
-      background: rgba(255, 255, 255, 0.82) !important;
-      backdrop-filter: blur(12px) !important;
-      -webkit-backdrop-filter: blur(12px) !important;
-      box-shadow: 0 4px 20px -2px rgba(30, 38, 33, 0.035), 0 1px 3px 0 rgba(30, 38, 33, 0.02) !important;
+      border: 1px solid var(--cra-border) !important;
+      background: var(--cra-surface-card) !important;
+      backdrop-filter: blur(14px) !important;
+      -webkit-backdrop-filter: blur(14px) !important;
+      box-shadow: var(--cra-shadow-card), var(--cra-inner-refract) !important;
       transition: border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-      border-color: rgba(36, 94, 72, 0.22) !important;
-      box-shadow: 0 8px 28px -4px rgba(30, 38, 33, 0.065), 0 2px 6px 0 rgba(30, 38, 33, 0.02) !important;
-    }
-    @media (prefers-color-scheme: dark) {
-      div[data-testid="stVerticalBlockBorderWrapper"] {
-        border: 1px solid rgba(82, 183, 136, 0.16) !important;
-        background: rgba(26, 34, 30, 0.72) !important;
-        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35) !important;
-      }
-      div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border-color: rgba(82, 183, 136, 0.3) !important;
-        box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.45) !important;
-      }
+      border-color: var(--cra-border-hover) !important;
+      box-shadow: var(--cra-shadow-hover), var(--cra-inner-refract) !important;
     }
 
     /* Tactile Physics for Buttons */
@@ -165,25 +300,31 @@ st.markdown(
       border-radius: 10px !important;
       font-weight: 500 !important;
       letter-spacing: -0.01em !important;
-      border: 1px solid rgba(36, 94, 72, 0.16) !important;
+      border: 1px solid var(--cra-border) !important;
+      background: var(--cra-surface) !important;
+      color: var(--cra-text) !important;
+      box-shadow: var(--cra-inner-refract) !important;
       transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
     .stButton > button:hover {
       transform: translateY(-1px) !important;
-      box-shadow: 0 4px 12px -2px rgba(36, 94, 72, 0.12) !important;
+      border-color: var(--cra-border-hover) !important;
+      box-shadow: 0 4px 12px -2px var(--cra-primary-glow), var(--cra-inner-refract) !important;
+      color: var(--cra-badge-text) !important;
     }
     .stButton > button:active {
       transform: translateY(0) scale(0.985) !important;
     }
     .stButton > button[kind="primary"] {
-      background: #245E48 !important;
-      border-color: #1A4635 !important;
+      background: var(--cra-primary) !important;
+      border-color: var(--cra-primary-dark) !important;
       color: #F9F8F5 !important;
-      box-shadow: 0 2px 8px -1px rgba(36, 94, 72, 0.25) !important;
+      box-shadow: 0 2px 8px -1px var(--cra-primary-glow) !important;
     }
     .stButton > button[kind="primary"]:hover {
-      background: #1B4736 !important;
-      box-shadow: 0 6px 18px -2px rgba(36, 94, 72, 0.32) !important;
+      background: var(--cra-primary-hover) !important;
+      box-shadow: 0 6px 18px -2px var(--cra-primary-glow) !important;
+      color: #FFFFFF !important;
     }
 
     /* Metric Tabular Numbers & Clean Hierarchy */
@@ -195,23 +336,26 @@ st.markdown(
       text-transform: uppercase !important;
       letter-spacing: 0.08em !important;
       font-weight: 600 !important;
-      opacity: 0.75 !important;
+      color: var(--cra-text-muted) !important;
     }
     div[data-testid="stMetricValue"] {
       font-feature-settings: "tnum" 1 !important;
       font-variant-numeric: tabular-nums !important;
       letter-spacing: -0.025em !important;
       font-weight: 600 !important;
+      color: var(--cra-text) !important;
     }
 
     /* Status & Expander Widgets */
     div[data-testid="stStatusWidget"] {
       border-radius: 12px !important;
-      border-color: rgba(36, 94, 72, 0.2) !important;
+      border: 1px solid var(--cra-border) !important;
+      background: var(--cra-surface-card) !important;
     }
     div[data-testid="stExpander"] {
       border-radius: 12px !important;
-      border: 1px solid rgba(36, 94, 72, 0.12) !important;
+      border: 1px solid var(--cra-border) !important;
+      background: var(--cra-surface-card) !important;
     }
 
     /* Badges */
@@ -224,91 +368,67 @@ st.markdown(
     /* Input Fields Focus State */
     div[data-baseweb="input"] {
       border-radius: 10px !important;
+      border: 1px solid var(--cra-border) !important;
+      background: var(--cra-surface) !important;
       transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
     }
     div[data-baseweb="input"]:focus-within {
-      border-color: #245E48 !important;
-      box-shadow: 0 0 0 3px rgba(36, 94, 72, 0.12) !important;
+      border-color: var(--cra-primary) !important;
+      box-shadow: 0 0 0 3px var(--cra-primary-glow) !important;
     }
 
     /* Empty State Pipeline Styles */
     .cra-pipeline-card {
       padding: 1.1rem 1.2rem;
       border-radius: 12px;
-      background: rgba(36, 94, 72, 0.03);
-      border: 1px solid rgba(36, 94, 72, 0.09);
+      background: var(--cra-badge-bg);
+      border: 1px solid var(--cra-border-subtle);
       margin-bottom: 0.85rem;
       transition: all 0.2s ease;
     }
     .cra-pipeline-card:hover {
-      background: rgba(36, 94, 72, 0.05);
-      border-color: rgba(36, 94, 72, 0.16);
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-pipeline-card {
-        background: rgba(82, 183, 136, 0.04);
-        border: 1px solid rgba(82, 183, 136, 0.1);
-      }
-      .cra-pipeline-card:hover {
-        background: rgba(82, 183, 136, 0.07);
-        border-color: rgba(82, 183, 136, 0.2);
-      }
+      background: rgba(62, 136, 109, 0.12);
+      border-color: var(--cra-border);
     }
     .cra-step-badge {
       font-size: 0.68rem;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      color: #245E48;
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-step-badge {
-        color: #52B788;
-      }
+      color: var(--cra-badge-text);
     }
     .cra-step-title {
       font-size: 0.96rem;
       font-weight: 600;
       letter-spacing: -0.01em;
       margin: 0.25rem 0 0.4rem 0;
+      color: var(--cra-text);
     }
     .cra-step-desc {
       font-size: 0.85rem;
       line-height: 1.5;
-      opacity: 0.85;
+      color: var(--cra-text-muted);
     }
     .cra-callout {
       padding: 1.1rem 1.2rem;
       border-radius: 12px;
-      background: rgba(198, 146, 20, 0.05);
-      border: 1px solid rgba(198, 146, 20, 0.16);
+      background: var(--cra-callout-red-bg);
+      border: 1px solid var(--cra-callout-red-border);
       margin-bottom: 0.85rem;
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-callout {
-        background: rgba(198, 146, 20, 0.08);
-        border: 1px solid rgba(198, 146, 20, 0.22);
-      }
     }
     .cra-callout-green {
       padding: 1.1rem 1.2rem;
       border-radius: 12px;
-      background: rgba(45, 106, 79, 0.05);
-      border: 1px solid rgba(45, 106, 79, 0.16);
+      background: var(--cra-callout-green-bg);
+      border: 1px solid var(--cra-callout-green-border);
       margin-bottom: 0.85rem;
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-callout-green {
-        background: rgba(82, 183, 136, 0.07);
-        border: 1px solid rgba(82, 183, 136, 0.2);
-      }
     }
 
     /* Sidebar Instrument Deck */
     .cra-sidebar-header {
       padding: 0.35rem 0 0.85rem 0;
       margin-bottom: 0.65rem;
-      border-bottom: 1px solid rgba(36, 94, 72, 0.12);
+      border-bottom: 1px solid var(--cra-border-subtle);
     }
     .cra-sidebar-pill {
       display: inline-flex;
@@ -319,40 +439,23 @@ st.markdown(
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      color: #245E48;
-      background: rgba(36, 94, 72, 0.08);
-      border: 1px solid rgba(36, 94, 72, 0.18);
+      color: var(--cra-badge-text);
+      background: var(--cra-badge-bg);
+      border: 1px solid var(--cra-badge-border);
       border-radius: 9999px;
       margin-bottom: 0.45rem;
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-sidebar-pill {
-        color: #52B788;
-        background: rgba(82, 183, 136, 0.12);
-        border-color: rgba(82, 183, 136, 0.25);
-      }
     }
     .cra-sidebar-title {
       font-size: 1.08rem;
       font-weight: 600;
       letter-spacing: -0.015em;
-      color: #1E2621;
+      color: var(--cra-text);
       margin-bottom: 2px;
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-sidebar-title {
-        color: #F0ECE4;
-      }
     }
     .cra-sidebar-desc {
       font-size: 0.78rem;
       line-height: 1.42;
-      color: #556058;
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-sidebar-desc {
-        color: #A3ACA5;
-      }
+      color: var(--cra-text-muted);
     }
     .cra-section-label {
       display: flex;
@@ -362,69 +465,86 @@ st.markdown(
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      color: #3C4741;
+      color: var(--cra-text-muted);
       margin: 0.85rem 0 0.45rem 0;
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-section-label {
-        color: #A3ACA5;
-      }
     }
     .cra-fast-badge {
       font-size: 0.62rem;
       font-weight: 600;
       padding: 0.12rem 0.45rem;
       border-radius: 4px;
-      background: rgba(45, 106, 79, 0.1);
-      color: #245E48;
-      border: 1px solid rgba(45, 106, 79, 0.2);
+      background: var(--cra-badge-bg);
+      color: var(--cra-badge-text);
+      border: 1px solid var(--cra-badge-border);
       letter-spacing: 0.04em;
-    }
-    @media (prefers-color-scheme: dark) {
-      .cra-fast-badge {
-        background: rgba(82, 183, 136, 0.15);
-        color: #52B788;
-        border-color: rgba(82, 183, 136, 0.3);
-      }
     }
 
     /* Tactile Sidebar Preset Buttons */
-    [data-testid="stSidebar"] .stButton > button {
+    [data-testid="stSidebar"] .stButton > button:not([kind="primary"]) {
       border-radius: 8px !important;
       font-size: 0.82rem !important;
       font-weight: 500 !important;
       padding: 0.32rem 0.5rem !important;
-      border: 1px solid rgba(36, 94, 72, 0.14) !important;
-      background: rgba(255, 255, 255, 0.72) !important;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+      border: 1px solid var(--cra-border) !important;
+      background: var(--cra-surface) !important;
+      color: var(--cra-text) !important;
+      box-shadow: var(--cra-inner-refract) !important;
     }
-    [data-testid="stSidebar"] .stButton > button:hover {
-      background: rgba(36, 94, 72, 0.08) !important;
-      border-color: rgba(36, 94, 72, 0.3) !important;
-      color: #245E48 !important;
+    [data-testid="stSidebar"] .stButton > button:not([kind="primary"]):hover {
+      background: var(--cra-badge-bg) !important;
+      border-color: var(--cra-border-hover) !important;
+      color: var(--cra-badge-text) !important;
       transform: translateY(-1px) !important;
     }
-    @media (prefers-color-scheme: dark) {
-      [data-testid="stSidebar"] .stButton > button {
-        background: rgba(30, 38, 33, 0.6) !important;
-        border-color: rgba(82, 183, 136, 0.18) !important;
-      }
-      [data-testid="stSidebar"] .stButton > button:hover {
-        background: rgba(82, 183, 136, 0.12) !important;
-        border-color: rgba(82, 183, 136, 0.35) !important;
-        color: #52B788 !important;
-      }
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+      border-radius: 10px !important;
+      font-weight: 600 !important;
+      letter-spacing: -0.01em !important;
+      background: var(--cra-primary) !important;
+      border: 1px solid var(--cra-primary-dark) !important;
+      color: #F9F8F5 !important;
+      box-shadow: 0 4px 14px -2px var(--cra-primary-glow), var(--cra-inner-refract) !important;
+    }
+    [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+      background: var(--cra-primary-hover) !important;
+      border-color: var(--cra-primary) !important;
+      box-shadow: 0 6px 20px -2px var(--cra-primary-glow), var(--cra-inner-refract) !important;
+      color: #FFFFFF !important;
+      transform: translateY(-1px) !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+_SVG_FALLBACK_LOGO = (
+    '<svg class="cra-brand-logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">'
+    '<rect width="48" height="48" rx="12" fill="#1A221E" stroke="#3E886D" stroke-width="1.5"/>'
+    '<circle cx="24" cy="24" r="14" stroke="#52B788" stroke-width="1.5" stroke-dasharray="2 3"/>'
+    '<circle cx="24" cy="24" r="8" stroke="#3E886D" stroke-width="1.5"/>'
+    '<circle cx="24" cy="24" r="3" fill="#52B788"/>'
+    '<path d="M24 10V14M24 34V38M10 24H14M34 24H38" stroke="#52B788" stroke-width="1.5" stroke-linecap="round"/>'
+    '</svg>'
+)
+
+_logo_html = (
+    f'<img src="data:image/png;base64,{_LOGO_B64}" class="cra-brand-logo" alt="Climate-Risk Analyst Logo" />'
+    if _LOGO_B64
+    else _SVG_FALLBACK_LOGO
+)
+
 st.markdown(
-    '<div class="cra-eyebrow"><span class="cra-dot"></span>DECISION-GRADE CLIMATE INTELLIGENCE</div>',
+    f"""
+    <div class="cra-header-container">
+        {_logo_html}
+        <div class="cra-header-content">
+            <div class="cra-eyebrow"><span class="cra-dot"></span>DECISION-GRADE CLIMATE INTELLIGENCE</div>
+            <h1 class="cra-title">Climate-Risk Analyst Agent</h1>
+        </div>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
-st.title("Climate-Risk Analyst Agent")
 st.caption(
     "Ask about heat, extreme rainfall or wind risk anywhere on Earth. You get a "
     "structured report built from a live forecast, 60+ years of ERA5 climate "
@@ -497,20 +617,96 @@ if not _os.environ.get("PYTEST_CURRENT_TEST"):
             icon=":material/warning:",
         )
 
-# One-click examples: a first-time visitor should be able to see a real report
-# without inventing a question. Each writes the query into the input via
-# session_state, so the text stays editable afterwards.
+def _remember_place(name: str, country: str, latitude: float, longitude: float) -> None:
+    """Pin a name to the point it was resolved for (see location.name_still_applies)."""
+    st.session_state["lat_input"] = float(latitude)
+    st.session_state["lon_input"] = float(longitude)
+    st.session_state["place_name"] = name
+    st.session_state["place_country"] = country
+    st.session_state["place_coords"] = (float(latitude), float(longitude))
+
+
+def _resolve_and_set_place(query_text: str) -> bool:
+    """Geocode and synchronize coordinates immediately for a place name."""
+    clean = query_text.strip()
+    if not clean:
+        return False
+    try:
+        found = resolve_place(clean)
+        _remember_place(found.name, found.country, found.latitude, found.longitude)
+        st.session_state["_place_geocode_error"] = None
+        return True
+    except GeocodeError as exc:
+        st.session_state["_place_geocode_error"] = str(exc)
+        return False
+
+
+def _on_nl_query_submit() -> None:
+    """Invoked when user hits Enter in the plain language input."""
+    st.session_state["_nl_submitted"] = True
+
+
+def _on_place_query_change() -> None:
+    """Invoked when user changes the place query text input."""
+    _resolve_and_set_place(st.session_state.get("place_query", ""))
+
+
+# Seeded BEFORE any input widgets exist, so suggestion chips and preset buttons
+# can populate them reliably.
+st.session_state.setdefault("lat_input", 22.26)
+st.session_state.setdefault("lon_input", 84.85)
+st.session_state.setdefault("place_name", "Rourkela")
+st.session_state.setdefault("place_country", "India")
+st.session_state.setdefault("place_coords", (22.26, 84.85))
+st.session_state.setdefault("place_query", "Rourkela, India")
+
+# One-click examples: each chip populates the query text AND synchronizes the
+# coordinates, place name, and map to the target location immediately.
 _SUGGESTIONS = [
-    ("Heatwave · Berlin (7d)", ":material/thermostat:", "How risky are heatwaves in Berlin over the next 7 days?"),
-    ("Rainfall · Mumbai (7d)", ":material/rainy:", "Is extreme rainfall a concern in Mumbai over the next 7 days?"),
-    ("Wind gusts · Chennai (10d)", ":material/air:", "What is the wind risk in Chennai over the next 10 days?"),
-    ("Wildfire · Sydney (Refusal)", ":material/block:", "What is the wildfire risk in Sydney next week?"),
+    (
+        "Heatwave · Berlin (7d)",
+        ":material/thermostat:",
+        "How risky are heatwaves in Berlin over the next 7 days?",
+        "Berlin",
+        "Germany",
+        52.52,
+        13.40,
+    ),
+    (
+        "Rainfall · Mumbai (7d)",
+        ":material/rainy:",
+        "Is extreme rainfall a concern in Mumbai over the next 7 days?",
+        "Mumbai",
+        "India",
+        19.08,
+        72.88,
+    ),
+    (
+        "Wind gusts · Chennai (10d)",
+        ":material/air:",
+        "What is the wind risk in Chennai over the next 10 days?",
+        "Chennai",
+        "India",
+        13.08,
+        80.27,
+    ),
+    (
+        "Wildfire · Sydney (Refusal)",
+        ":material/block:",
+        "What is the wildfire risk in Sydney next week?",
+        "Sydney",
+        "Australia",
+        -33.87,
+        151.21,
+    ),
 ]
 st.caption("Suggested inquiries (click to populate query):")
 _cols = st.columns(len(_SUGGESTIONS))
-for _col, (_label, _icon, _query) in zip(_cols, _SUGGESTIONS):
+for _col, (_label, _icon, _query, _city, _country, _lat, _lon) in zip(_cols, _SUGGESTIONS):
     if _col.button(_label, icon=_icon, width="stretch"):
         st.session_state["nl_query"] = _query
+        _remember_place(_city, _country, _lat, _lon)
+        st.rerun()
 
 # Natural-language front door: any place on Earth, plain English.
 nl_query = st.text_input(
@@ -519,26 +715,27 @@ nl_query = st.text_input(
     placeholder="How risky are heatwaves in Rourkela over the next 10 days?",
     help="Deterministic parsing → geocoding → AR6 region mapping → the agent. "
          "Unsupported hazards and unknown places refuse honestly.",
+    on_change=_on_nl_query_submit,
 )
 ask = st.button("Ask", type="primary", icon=":material/travel_explore:")
+nl_triggered = bool(ask or st.session_state.pop("_nl_submitted", False))
 
-
-def _remember_place(name: str, country: str, latitude: float, longitude: float) -> None:
-    """Pin a name to the point it was resolved for (see location.name_still_applies)."""
-    st.session_state["lat_input"] = latitude
-    st.session_state["lon_input"] = longitude
-    st.session_state["place_name"] = name
-    st.session_state["place_country"] = country
-    st.session_state["place_coords"] = (latitude, longitude)
-
-
-# Seeded BEFORE the coordinate widgets exist, so the example buttons and the
-# geocoder can write into them (Streamlit forbids the reverse order).
-st.session_state.setdefault("lat_input", 22.26)
-st.session_state.setdefault("lon_input", 84.85)
-st.session_state.setdefault("place_name", "Rourkela")
-st.session_state.setdefault("place_country", "India")
-st.session_state.setdefault("place_coords", (22.26, 84.85))
+# When plain language inquiry is run, resolve its target location early so the
+# map and coordinates immediately reflect the queried place.
+if nl_triggered and nl_query.strip():
+    from agent.nl import parse_query
+    _parsed_early = parse_query(nl_query)
+    if _parsed_early.place:
+        try:
+            _found_early = resolve_place(_parsed_early.place)
+            _remember_place(
+                _found_early.name,
+                _found_early.country,
+                _found_early.latitude,
+                _found_early.longitude,
+            )
+        except GeocodeError:
+            pass
 
 with st.sidebar:
     st.markdown(
@@ -553,7 +750,7 @@ with st.sidebar:
         </div>
         <div class="cra-section-label">
             <span>PRESET LOCATIONS</span>
-            <span class="cra-fast-badge">⚡ INSTANT</span>
+            <span class="cra-fast-badge">CACHED</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -564,20 +761,21 @@ with st.sidebar:
             _city, _, _country = _name.partition(", ")
             if _col.button(_city, key=f"ex_{_name}", width="stretch", help=_name):
                 _remember_place(_city, _country, *LOCATIONS[_name])
+                st.rerun()
 
     place_query = st.text_input(
         "Place", key="place_query", placeholder="Any town, city or region on Earth",
         help="Geocoded via Open-Meteo. The resolved name, country and coordinates are "
              "shown on the map, so a wrong match is visible rather than silent.",
+        on_change=_on_place_query_change,
     )
-    if st.button("Find place", icon=":material/search:", width="stretch") and place_query.strip():
-        try:
-            _found = resolve_place(place_query)
-            _remember_place(
-                _found.name, _found.country, _found.latitude, _found.longitude
-            )
-        except GeocodeError as exc:
-            st.warning(f"Could not resolve that place: {exc}", icon=":material/wrong_location:")
+    if st.button("Find place", icon=":material/search:", width="stretch"):
+        if _resolve_and_set_place(place_query):
+            st.rerun()
+
+    _geocode_err = st.session_state.pop("_place_geocode_error", None)
+    if _geocode_err:
+        st.warning(f"Could not resolve that place: {_geocode_err}", icon=":material/wrong_location:")
 
     # Ranges mirror tools/validation.validate_coordinates; coordinate_error is the
     # same check, so a value typed past the widget still refuses instead of flying.
@@ -634,7 +832,7 @@ if selected is not None:
         with _map_col:
             st.map(
                 {"lat": [selected.latitude], "lon": [selected.longitude]},
-                zoom=3, size=40000, height=240,
+                zoom=3, color="#E25C48", height=240,
             )
         with _info_col:
             st.markdown(f"**{selected.name}**")
@@ -662,11 +860,11 @@ class _StepPanel:
     checklist a person can read, not a scrolling log.
     """
 
-    def __init__(self, status) -> None:
+    def __init__(self, status: Any) -> None:
         self._status = status
-        self._slots: dict[str, object] = {}
+        self._slots: dict[str, Any] = {}
 
-    def _slot(self, node: str):
+    def _slot(self, node: str) -> Any:
         if node not in self._slots:
             self._slots[node] = self._status.empty()
         return self._slots[node]
@@ -688,7 +886,7 @@ class _StepPanel:
         self._slot(event.node).markdown(f"{head}  \n:small[{step_meaning(event.node)}]")
 
 
-def _run_with_panel(work):
+def _run_with_panel(work: Any) -> tuple[Any, str | None]:
     """Run `work(on_step)` under a live status panel. Returns (report, message).
 
     The panel's own title carries the outcome: total time when it worked, one
@@ -712,7 +910,7 @@ def _run_with_panel(work):
         return result, None
 
 
-if ask and nl_query.strip():
+if nl_triggered and nl_query.strip():
     from agent.nl import run_agent_nl  # noqa: E402
     from obs.telemetry import Span  # noqa: E402
 
@@ -948,13 +1146,13 @@ elif failure is None and not run and not ask:
             st.markdown(
                 """
                 <div style="margin-bottom: 0.9rem;">
-                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #245E48; margin-bottom: 4px;">
+                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--cra-badge-text); margin-bottom: 4px;">
                         EMPIRICAL EVALUATION PIPELINE
                     </div>
-                    <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px;">
+                    <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px; color: var(--cra-text);">
                         How the agent grounds risk assessments
                     </div>
-                    <div style="font-size: 0.86rem; opacity: 0.82; line-height: 1.5;">
+                    <div style="font-size: 0.86rem; color: var(--cra-text-muted); line-height: 1.5;">
                         Every assessment cross-examines operational forecast signals against 60+ years of extreme value distributions and the IPCC AR6 assessment tables:
                     </div>
                 </div>
@@ -987,32 +1185,32 @@ elif failure is None and not run and not ask:
             st.markdown(
                 """
                 <div style="margin-bottom: 0.75rem;">
-                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #245E48; margin-bottom: 4px;">
+                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--cra-badge-text); margin-bottom: 4px;">
                         DECISION PRINCIPLES
                     </div>
-                    <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px;">
+                    <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px; color: var(--cra-text);">
                         Scientific Guarantees
                     </div>
                 </div>
                 <div class="cra-callout">
-                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #9E2A2B; margin-bottom: 2px;">
+                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cra-callout-red-text); margin-bottom: 2px;">
                         CLIMATOLOGICAL RARITY
                     </div>
-                    <div style="font-size: 0.95rem; font-weight: 600; margin-bottom: 4px;">
+                    <div style="font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; color: var(--cra-text);">
                         Relative Severity vs. Raw Weather
                     </div>
-                    <div style="font-size: 0.84rem; line-height: 1.48; opacity: 0.88;">
+                    <div style="font-size: 0.84rem; line-height: 1.48; color: var(--cra-text-muted);">
                         Conventional weather apps only report raw predictions. The Climate-Risk Analyst determines how extreme that forecast is relative to the historical climatology of that specific location. For instance, 38 °C in Berlin triggers a severe risk rating because it surpasses the local 50-year return level, whereas the same temperature in Rourkela represents expected seasonal weather.
                     </div>
                 </div>
                 <div class="cra-callout-green">
-                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #2D6A4F; margin-bottom: 2px;">
+                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cra-callout-green-text); margin-bottom: 2px;">
                         AUDITED ABSTENTION
                     </div>
-                    <div style="font-size: 0.95rem; font-weight: 600; margin-bottom: 4px;">
+                    <div style="font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; color: var(--cra-text);">
                         Zero Fabricated Answers
                     </div>
-                    <div style="font-size: 0.84rem; line-height: 1.48; opacity: 0.88;">
+                    <div style="font-size: 0.84rem; line-height: 1.48; color: var(--cra-text-muted);">
                         Three physical hazards are supported: heatwaves, extreme precipitation, and wind. Out-of-scope hazards (cyclones, wildfires, drought, sea-level rise) and ungrounded queries trigger explicit typed refusals rather than hallucinated estimates.
                     </div>
                 </div>

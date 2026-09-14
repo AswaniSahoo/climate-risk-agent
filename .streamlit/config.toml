@@ -1,13 +1,15 @@
 # Climate-Risk Analyst Agent: custom theme configuration.
 #
-# Earth/climate palette: deep forest-sage primary (grounded, scientific: not a
-# generic SaaS blue), warm neutral backgrounds.
-# Reusable semantic status colors for risk-level badges and alerts.
+# Scientific climate risk intelligence palette:
+# Warm slate/charcoal dark theme (never pitch black #000000),
+# with deep forest sage primary accent and warm neutral surfaces.
+# Designed with high craft to support both dark and light modes.
 
 [theme]
-base = "light"
-primaryColor = "#245E48"
-backgroundColor = "#F9F8F5"
-secondaryBackgroundColor = "#F0ECE4"
-textColor = "#1E2621"
+base = "dark"
+primaryColor = "#3E886D"
+backgroundColor = "#111613"
+secondaryBackgroundColor = "#1A221E"
+textColor = "#ECEAE4"
 font = "sans-serif"
+

@@ -10,6 +10,7 @@ from streamlit.testing.v1 import AppTest
 
 import agent.graph as graph_mod
 import agent.location as location_mod
+import agent.nl as nl_mod
 import tools.climatology as climatology_mod
 from agent.contracts import (
     Citation,
@@ -50,6 +51,7 @@ def stubbed(monkeypatch):
         return _report(hazard=kwargs["hazard"], horizon_days=kwargs["horizon_days"])
 
     monkeypatch.setattr(graph_mod, "run_agent", fake_run_agent)
+    monkeypatch.setattr(nl_mod, "run_agent_nl", lambda *a, **k: _report())
     monkeypatch.setattr(
         climatology_mod, "climatology_hazard_stat",
         lambda *a, **k: (_ for _ in ()).throw(climatology_mod.ClimatologyError("offline test")),
@@ -200,3 +202,96 @@ def test_refusal_path_renders_as_refusal_not_risk(stubbed, monkeypatch):
     assert not at.exception
     assert any("Refused" in e.value for e in at.error)
     assert not at.subheader  # no risk badge on a refusal
+
+
+def test_suggestion_chip_synchronizes_location_state(stubbed):
+    """Clicking a suggestion chip synchronizes coordinates and query text."""
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.run()
+
+    berlin_btn = next(b for b in at.button if "Berlin" in b.label)
+    berlin_btn.click().run()
+
+    assert not at.exception
+    assert at.session_state["lat_input"] == pytest.approx(52.52)
+    assert at.session_state["lon_input"] == pytest.approx(13.40)
+    assert at.session_state["place_name"] == "Berlin"
+    assert at.session_state["place_country"] == "Germany"
+    assert "Berlin" in at.session_state["nl_query"]
+
+
+def test_sidebar_preset_location_synchronizes_coordinates(stubbed):
+    """Clicking an example city button in the sidebar moves the coordinates."""
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.run()
+
+    at.sidebar.button(key="ex_Berlin, Germany").click().run()
+
+    assert not at.exception
+    assert at.session_state["lat_input"] == pytest.approx(52.52)
+    assert at.session_state["lon_input"] == pytest.approx(13.40)
+    assert at.session_state["place_name"] == "Berlin"
+
+
+def test_header_renders_brand_logo_and_eyebrow(stubbed):
+    """Header integrates brand logo and decision-grade badge."""
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.run()
+
+    assert not at.exception
+    markdown_content = " ".join(m.value for m in at.markdown)
+    assert "cra-brand-logo" in markdown_content
+    assert "Climate-Risk Analyst Agent" in markdown_content
+    assert "DECISION-GRADE CLIMATE INTELLIGENCE" in markdown_content
+
+
+def test_place_search_synchronizes_coordinates(stubbed, monkeypatch):
+    """Searching for a place via the sidebar updates coordinates and place state."""
+    from agent.location import ResolvedPlace
+
+    monkeypatch.setattr(
+        location_mod,
+        "resolve_place",
+        lambda query: ResolvedPlace(
+            name="Berlin", country="Germany", latitude=52.52, longitude=13.40
+        ),
+    )
+
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.run()
+
+    at.sidebar.text_input(key="place_query").input("Berlin").run()
+    find_btn = next(b for b in at.sidebar.button if "Find place" in b.label)
+    find_btn.click().run()
+
+    assert not at.exception
+    assert at.session_state["lat_input"] == pytest.approx(52.52)
+    assert at.session_state["lon_input"] == pytest.approx(13.40)
+    assert at.session_state["place_name"] == "Berlin"
+
+
+def test_plain_language_ask_synchronizes_coordinates(stubbed, monkeypatch):
+    """Running a plain-language query synchronizes coordinates before generating report."""
+    from agent.location import ResolvedPlace
+
+    monkeypatch.setattr(
+        location_mod,
+        "resolve_place",
+        lambda query: ResolvedPlace(
+            name="Berlin", country="Germany", latitude=52.52, longitude=13.40
+        ),
+    )
+
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.run()
+
+    at.text_input(key="nl_query").input("How risky are heatwaves in Berlin over the next 7 days?").run()
+    ask_btn = next(b for b in at.button if "Ask" in b.label)
+    ask_btn.click().run()
+
+    assert not at.exception
+    assert at.session_state["lat_input"] == pytest.approx(52.52)
+    assert at.session_state["lon_input"] == pytest.approx(13.40)
+    assert at.session_state["place_name"] == "Berlin"
+
+
