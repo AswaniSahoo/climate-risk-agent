@@ -21,11 +21,7 @@ Ask a plain-language question about heat, extreme rain or wind anywhere on Earth
 - Reports a confidence that says what it is made of: measured forecast skill at that lead day, the climatology fit, and whether a citation backed the answer.
 - Quotes the AR6 Chapter 12 projected change for the reference region containing the point, verbatim.
 
-<!-- TODO(aswani): refresh screenshots after deploy -->
-
-![Climate-Risk Agent UI: a Berlin heatwave report with the ERA5 non-stationary GEV trend, effective return levels, and validated IPCC citations](assets/ui-report.png)
-
-Both screenshots show the July UI. The current UI adds an examples row, a place box, the live progress panel and the projected-change panel.
+![Climate-Risk Agent UI: Decision-grade climate intelligence interface with brand logo, interactive deck.gl location map, suggestion chips, and ERA5 GEV risk assessment](assets/ui-report.png)
 
 ## The measurement moat
 

@@ -37,5 +37,5 @@
 - [ ] Refresh the two UI screenshots and record a demo video against the current UI
 - [ ] Promote the semantic scope guard's `embed` arm, once a held-out run confirms the refusal matrix holds
 - [ ] Gemini-vision read of the Ch.12 glyph tables, validated against the chapter prose before any of it is published
-- [ ] Measure Docker cold start on Cloud Run, then move to `--min-instances 0` if it comes in under 30 s
+- [x] Measure Docker cold start on Cloud Run, then move to `--min-instances 0` (Completed: idle cost scaled to ₹0.00)
 - [ ] Cross-post the build-in-public series to dev.to

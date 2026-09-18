@@ -1,6 +1,6 @@
 [project]
 name = "climate-risk-agent"
-version = "0.1.0"
+version = "1.0.0"
 description = "Climate-Risk Analyst Agent — grounded, cited, structured climate-risk reports from live weather data + IPCC docs."
 requires-python = ">=3.11"
 dependencies = [

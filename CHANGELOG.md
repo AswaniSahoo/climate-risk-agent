@@ -4,15 +4,15 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-No release has been tagged yet: `pyproject.toml` declares `0.1.0` and the
-repository has no git tags, so strictly all of the history below is unreleased.
-Until the first tag, entries are grouped by build phase, newest first, with the
-date range taken from the commit log. Every entry traces to a commit in
-`git log` or to a Shipped item in [ROADMAP.md](ROADMAP.md). The first tagged
-release will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
-and tagging is gated on the eval rule in [DEPLOY.md](DEPLOY.md).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+- Enhanced dark mode styling and brand logo in Streamlit navigation header.
+- Synchronized location search and suggestion chips with interactive deck.gl map markers.
+- Added automated offline testing stubs for natural language queries.
+
+## [1.0.0] - 2026-09-08
 
 ### Added
 
