@@ -137,6 +137,12 @@ def answer_with_guard(question: str, chunks: list[Chunk], *, cache=None) -> Cite
     model), so callers serving repeat queries (UI/graph, MCP) pass one. The e2e
     EVAL must not — it measures live behavior, and a cache would mask
     model-version regressions.
+
+    Only answers are cached, never abstentions. Generation is not deterministic
+    at temperature 0 (rag/answer_cache.py), so one abstention is one sample;
+    caching it would replay that refusal to every identical query for the full
+    TTL. An abstention already in the cache from before this rule is read as a
+    miss for the same reason.
     """
     from rag.scope import scope_verdict
 
@@ -155,10 +161,11 @@ def answer_with_guard(question: str, chunks: list[Chunk], *, cache=None) -> Cite
     if cache is not None:
         key = cache.key(question, chunks)
         hit = cache.get(key)
-        if hit is not None:
+        if hit is not None and not hit.abstain:
             return hit
         result = answer_question(question, chunks)
-        cache.put(key, result)
+        if not result.abstain:
+            cache.put(key, result)
         return result
     return answer_question(question, chunks)
 
