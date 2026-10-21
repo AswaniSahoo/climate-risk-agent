@@ -179,18 +179,32 @@ _IPCC_PHRASES = {
 }
 
 
-def _ipcc_question(hazard: Hazard, location: str) -> str:
-    """Build the IPCC retrieval question for this hazard + location.
+def _ipcc_question(hazard: Hazard, area: str) -> str:
+    """Build the climatological IPCC question for this hazard over `area`.
 
     "intensity and frequency" and "global warming levels" are the exact terms
     the AR6 regional assessment-table rows use — they pull the projection rows,
-    not just prose. Location passes through as-is (city -> AR6 region mapping
-    is a later, measurable upgrade).
+    not just prose. The user's own wording (a 7-day forecast question) never
+    reaches the answerer: AR6 assesses climate, not next week's weather.
     """
     return (
         f"How are {_IPCC_PHRASES[hazard]} projected to change in intensity "
-        f"and frequency over {location} at higher global warming levels?"
+        f"and frequency over {area} at higher global warming levels?"
     )
+
+
+def _ipcc_area(state: AgentState) -> str:
+    """Where the IPCC question asks about: the AR6 region, never the city.
+
+    The corpus assesses AR6 reference regions, so a question naming a city
+    invites an abstention for want of a city-specific excerpt. Measured live
+    on 2026-10-22 (gemini-2.5-flash, same 8-chunk retrieval budget): "over
+    Berlin, Western and Central Europe (WCE)" abstained 3 of 3 runs, while
+    "over Western and Central Europe (WCE)" answered 3 of 3 with citations.
+    A point in no AR6 land region (open ocean) falls back to the location.
+    """
+    region = region_for(state["latitude"], state["longitude"])
+    return region.label if region is not None else state["location"]
 
 
 def research(state: AgentState) -> dict:
@@ -200,7 +214,7 @@ def research(state: AgentState) -> dict:
     a warning and the report ships without citations — degraded, never silent,
     never fabricated.
     """
-    question = _ipcc_question(state["hazard"], state["location"])
+    question = _ipcc_question(state["hazard"], _ipcc_area(state))
     try:
         chunks = _ipcc_retriever().retrieve(question, top_k=_IPCC_TOP_K)
         answer = answer_with_guard(question, chunks, cache=_answer_cache())

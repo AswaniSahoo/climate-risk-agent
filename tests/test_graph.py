@@ -404,6 +404,82 @@ def test_offline_corpus_degrades_loudly_report_still_ships(httpx_mock, caplog):
     assert "IPCC grounding unavailable" in caplog.text  # loud (WARNING), never silent
 
 
+# --- research asks AR6 a climate question about the region, not the city ----
+
+
+def _capture_ipcc_questions(monkeypatch) -> list[str]:
+    asked: list[str] = []
+
+    def answer(question, chunks, **_):
+        asked.append(question)
+        return CitedAnswer(answer="", citations=[], abstain=True,
+                           allowed_ids=[c.chunk_id for c in chunks])
+
+    monkeypatch.setattr(graph_mod, "_ipcc_retriever", lambda: _FakeRetriever())
+    monkeypatch.setattr(graph_mod, "answer_with_guard", answer)
+    return asked
+
+
+_WCE_HEAT_QUESTION = (
+    "How are hot extremes and extreme heat projected to change in intensity and "
+    "frequency over Western and Central Europe (WCE) at higher global warming levels?"
+)
+
+
+def test_forecast_heatwave_question_asks_ipcc_a_climatological_region_question(
+    httpx_mock, monkeypatch
+):
+    """The front-door question is a 7-day forecast; AR6 cannot answer that.
+
+    What reaches the answerer is the hazard's AR6 vocabulary over the AR6 region
+    containing the point. Naming the city made gemini-2.5-flash abstain 3 of 3
+    live runs (2026-10-22), which is how the Berlin report lost its citations.
+    """
+    import agent.nl as nl_mod
+    from tools.geocode import GeoLocation
+
+    httpx_mock.add_response(json=CANNED)
+    asked = _capture_ipcc_questions(monkeypatch)
+    monkeypatch.setattr(
+        nl_mod, "geocode",
+        lambda place: GeoLocation(name=place, latitude=52.52, longitude=13.41,
+                                  country="Germany", admin1="Land Berlin"),
+    )
+
+    report = nl_mod.run_agent_nl(
+        "How risky are heatwaves in Berlin over the next 7 days?", use_climatology=False
+    )
+
+    assert report.refusal is None
+    assert report.location == "Berlin, Western and Central Europe (WCE)"
+    assert asked == [_WCE_HEAT_QUESTION]
+
+
+def test_every_derived_ipcc_question_passes_the_scope_guard():
+    """The derived question must not trip the guard that refuses other hazards,
+    or a supported hazard would be refused for the wording we chose."""
+    from rag.scope import scope_verdict
+
+    for hazard in (Hazard.HEATWAVE, Hazard.EXTREME_PRECIP, Hazard.WIND):
+        question = graph_mod._ipcc_question(hazard, "Western and Central Europe (WCE)")
+        assert scope_verdict(question).out_of_scope is None, question
+
+
+def test_a_point_in_no_ar6_land_region_asks_about_the_location(httpx_mock, monkeypatch):
+    httpx_mock.add_response(json=CANNED)
+    asked = _capture_ipcc_questions(monkeypatch)
+
+    run_agent(
+        location="mid-Pacific", latitude=0.0, longitude=-140.0,
+        hazard=Hazard.WIND, horizon_days=3,
+    )
+
+    assert asked == [
+        "How are mean wind speed and wind extremes projected to change in intensity "
+        "and frequency over mid-Pacific at higher global warming levels?"
+    ]
+
+
 # --- forecast skill: a day-7 peak is a weaker claim than a day-1 one --------
 
 
