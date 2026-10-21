@@ -27,7 +27,7 @@ Ask a plain-language question about heat, extreme rain or wind anywhere on Earth
 
 - **ERA5 GEV hazard statistics.** Every hazard number comes from a Generalized Extreme Value distribution fitted to 60+ years of ERA5 annual maxima at the query location. Every return level ships with a 90% bootstrap confidence interval.
 - **Risk levels are local rarity, not a fixed threshold.** The band is the return period of the forecast peak on that location's own curve: below the 2-year level is low, 2 to 10 years moderate, 10 to 50 high, at or above 50 severe. The same 46 °C peak can band low where an ordinary year already reaches it and severe where it is unprecedented, off the same code. Each report carries the sentence the band was decided on, naming the bracketing levels and the estimated return period. A location with no fitted climatology falls back to absolute cutoffs and says so rather than passing them off as local.
-- **Non-stationary GEV.** Alongside the stationary fit, a drifting-location GEV checks whether the climate at that location is actually warming, using a likelihood-ratio test to decide. When the trend is real, return levels are reported "effective" at the latest year rather than averaged across six decades. Berlin comes back at +0.76 °C per decade (p < 0.0001) with effective levels. Delhi comes back stationary (p = 0.56), which agrees with the published literature on aerosol masking suppressing South Asian heat trends.
+- **Non-stationary GEV.** Alongside the stationary fit, a drifting-location GEV checks whether the climate at that location is actually warming, using a likelihood-ratio test to decide. When the trend is real, return levels are reported "effective" at the latest year rather than averaged across six decades. Berlin comes back at about +0.75 °C per decade (p < 0.0001) with effective levels. Delhi comes back stationary, with no significant trend at either Delhi point the app uses (p = 0.46 at the UI's preset Delhi point, p = 0.84 at the geocoded city point about 5 km away), which agrees with the published literature on aerosol masking suppressing South Asian heat trends. The slopes, p-values, exact coordinates and code version are in [`evals/results/warming-trend-2026-10-21.json`](evals/results/warming-trend-2026-10-21.json), written by `scripts/measure_warming_trend.py` from a fresh ERA5 1960 to 2022 fit.
 - **IPCC AR6 RAG with citations that have to hold up.** Every citation is checked structurally against the pages actually retrieved for that question. If the model cannot point to a real retrieved page, it refuses rather than cite one anyway.
 - **Projected change, quoted rather than generated.** Each report carries the AR6 WG1 Chapter 12 climatic impact-driver projection for the reference region containing the point: one verbatim Ch.12 sentence, its direction, the IPCC's own calibrated confidence phrase, and the warming level or period it names. All of it is extracted by regex from retrieved chunks, with no model in the loop. When the chapter assesses no such change for that region and hazard, the section is absent and the report says regional projections were not found in the corpus.
 
@@ -72,7 +72,7 @@ The UI shows the same run as seven named steps, in this order (`agent/progress.p
 ## Evaluation
 
 - **Dev set:** 60 questions, used to steer development choices like chunking and retrieval configuration. The 15 `cid-table` questions arrived with the Chapter 12 projection layer, and the set was re-frozen under a new SHA-256.
-- **Test set:** 105 new questions, written after the dev set existed, never used to tune anything, frozen by SHA-256 so neither set can quietly change.
+- **Test set:** 105 new questions, written after the dev set existed, never used to tune anything, frozen by SHA-256 so neither set can quietly change. 70 are answerable (24 single-page, 22 regional table, 15 multi-page, 9 duplicate region) and 35 are built to be refused (17 premise injection, 10 out-of-scope hazard, 8 out-of-corpus).
 
 Dev-set retrieval, all 60 questions (49 answerable), measured 2026-09-02:
 
@@ -97,10 +97,10 @@ Citation validity 41/48 (85%). Numeric provenance 42/48 (88%). Grounded refusals
 
 Held-out results (second exposure, on the exact configuration deployed):
 
-- Retrieval: R@3 87%, R@5 91%, R@10 96% on answerable questions.
-- Zero false answers across the full held-out refusal matrix. No confabulation.
-- Citation validity: 96%. Numeric provenance: 88%.
-- Measured cost about $0.003 per question, p50 latency 3.9 s.
+- Retrieval, hybrid, on the 70 answerable questions (measured 2026-09-07): R@3 87%, R@5 91%, R@10 96%, that is 61, 64 and 67 of 70.
+- End-to-end, all 105 questions (gemini-2.5-flash, top_k 8, measured 2026-07-22): 49 correct answers, 35 correct refusals, 21 false refusals, **0 false answers**. All 35 questions built to be refused were refused; the price is 21 of the 70 answerable questions refused as well.
+- Citation validity 47/49 correct answers (96%). Numeric provenance 43/49 (88%).
+- The IPCC answer step cost $0.29 for the run, about $0.003 per question, p50 generation latency 3.9 s.
 
 **Reranking and query rewriting: measured, kept off.** Both are wired as `HybridRetriever` keyword arguments and both default to off. Measured on the 45-question dev set (34 answerable), before the `cid-table` questions landed:
 
