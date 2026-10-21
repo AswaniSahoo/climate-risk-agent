@@ -20,12 +20,23 @@ htmlcov
 .env.*
 docs
 MASTER-PLAN*.md
+INTELLIGENCE_SYSTEM_BLUEPRINT.md
 .claude
 .agents
 .serena
 .kiro
 .code-review-graph
+.code-review-graphignore
 .devcontainer
-assets
+.codex
+CLAUDE.md
+AGENTS.md
+.mcp.json
+*.pkl
+mcp-publisher*
+data/telemetry
+# the UI reads the favicon (brand logo); the rest of assets/ is README screenshots
+assets/*
+!assets/favicon.png
 evals
 tests

@@ -5,14 +5,44 @@
 .git
 .github
 .venv
-__pycache__
-*.pyc
+**/__pycache__
+**/*.pyc
 .pytest_cache
 .ruff_cache
+.mypy_cache
 htmlcov
 .env
 .env.*
+**/.env
 docs
 MASTER-PLAN*.md
+INTELLIGENCE_SYSTEM_BLUEPRINT.md
+# assets/ holds README screenshots; the UI only reads the favicon (brand logo).
+assets/*
+!assets/favicon.png
+
+# Local agent, editor and tooling state. None of it is needed at runtime, and
+# some of it is private (agent instructions, memories, a code graph of the
+# repo). `COPY . .` in the Dockerfile copies whatever the context holds, so
+# every such file has to be named here or it ships in the image.
+**/CLAUDE.md
+**/AGENTS.md
 .claude
-assets
+.codex
+.agents
+.serena
+.kiro
+.cursor
+.vscode
+.idea
+.devcontainer
+.code-review-graph
+.code-review-graphignore
+.mcp.json
+**/*.pkl
+
+# Downloaded publisher binary for the MCP registry, not part of the app.
+mcp-publisher*
+
+# Local run logs: the app recreates the directory on first write.
+data/telemetry
