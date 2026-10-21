@@ -480,6 +480,33 @@ def test_a_point_in_no_ar6_land_region_asks_about_the_location(httpx_mock, monke
     ]
 
 
+def test_citation_integrity_failure_degrades_loudly_report_still_ships(
+    httpx_mock, monkeypatch, caplog
+):
+    """A model citing a chunk it was never given is rejected by CitedAnswer with
+    a pydantic ValidationError. That must cost the citations, not the report."""
+    httpx_mock.add_response(json=CANNED)
+    allowed = [c.chunk_id for c in _IPCC_CHUNKS]
+
+    def fabricated_citation(question, chunks, **_):
+        raw = json.dumps({"answer": "Hot extremes intensify.",
+                          "citations": ["IPCC_AR6_WGI_Chapter11.pdf#p999#0"],
+                          "abstain": False})
+        return CitedAnswer.from_llm_json(raw, allowed_ids=allowed)
+
+    monkeypatch.setattr(graph_mod, "_ipcc_retriever", lambda: _FakeRetriever())
+    monkeypatch.setattr(graph_mod, "answer_with_guard", fabricated_citation)
+
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.HEATWAVE, horizon_days=3,
+    )
+
+    assert report.citations == []
+    assert report.risk_level is RiskLevel.SEVERE  # forecast half still works
+    assert "failed citation integrity" in caplog.text  # loud (WARNING), never silent
+
+
 # --- forecast skill: a day-7 peak is a weaker claim than a day-1 one --------
 
 

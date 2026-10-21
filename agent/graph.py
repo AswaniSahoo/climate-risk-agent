@@ -35,6 +35,7 @@ from functools import lru_cache
 from typing import Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from pydantic import ValidationError
 
 from agent.contracts import (
     Citation,
@@ -220,6 +221,15 @@ def research(state: AgentState) -> dict:
         answer = answer_with_guard(question, chunks, cache=_answer_cache())
     except (CorpusError, AnswerError, GeminiError) as exc:
         _log.warning("IPCC grounding unavailable (%s) — report ships without citations", exc)
+        return {}
+    except ValidationError as exc:
+        # The model cited a chunk it was not given, or answered without citing.
+        # CitedAnswer rejects that by construction; here it costs the citations,
+        # not the report.
+        _log.warning(
+            "IPCC answer failed citation integrity (%s), report ships without citations",
+            exc,
+        )
         return {}
     return {"ipcc_answer": answer, "ipcc_chunks": chunks}
 
