@@ -1,0 +1,78 @@
+{
+  "run_utc": "2026-10-21T21:14:32+00:00",
+  "what": "Warming trend in the annual maxima of daily max 2 m temperature: slope of the drifting-location GEV, p-value of the likelihood-ratio test against the stationary fit (tools/gev_trend.py).",
+  "source": "ERA5 via the Open-Meteo archive (models=era5)",
+  "hazard": "heatwave",
+  "code_version": {
+    "git_commit": "23ef5d83f97c96f8cde546509e6744513ef07b99",
+    "climatology_fingerprint": "c27367e60f6074b8",
+    "entry_point": "tools.climatology.climatology_hazard_stat"
+  },
+  "fit_cache": "bypassed (fresh temporary disk cache, no Redis)",
+  "results": [
+    {
+      "query": "Berlin",
+      "resolved_by": "tools.geocode.geocode",
+      "location": "Berlin, Germany",
+      "latitude": 52.52437,
+      "longitude": 13.41053,
+      "variable": "temperature_2m_max",
+      "unit": "\u00b0C",
+      "record_start_year": 1960,
+      "record_end_year": 2022,
+      "n_years": 63,
+      "slope_per_decade": 0.7526433827841733,
+      "p_value": 2.8642329302345384e-07,
+      "significant": true,
+      "evaluated_at_year": 2022
+    },
+    {
+      "query": "Delhi",
+      "resolved_by": "tools.geocode.geocode",
+      "location": "Delhi, India",
+      "latitude": 28.65195,
+      "longitude": 77.23149,
+      "variable": "temperature_2m_max",
+      "unit": "\u00b0C",
+      "record_start_year": 1960,
+      "record_end_year": 2022,
+      "n_years": 63,
+      "slope_per_decade": 0.015500304360685748,
+      "p_value": 0.8443387392090271,
+      "significant": false,
+      "evaluated_at_year": null
+    },
+    {
+      "query": "Berlin (UI preset)",
+      "resolved_by": "fixed coordinates",
+      "location": "Berlin (UI preset)",
+      "latitude": 52.52,
+      "longitude": 13.4,
+      "variable": "temperature_2m_max",
+      "unit": "\u00b0C",
+      "record_start_year": 1960,
+      "record_end_year": 2022,
+      "n_years": 63,
+      "slope_per_decade": 0.752643394237702,
+      "p_value": 2.8642329232193745e-07,
+      "significant": true,
+      "evaluated_at_year": 2022
+    },
+    {
+      "query": "Delhi (UI preset)",
+      "resolved_by": "fixed coordinates",
+      "location": "Delhi (UI preset)",
+      "latitude": 28.61,
+      "longitude": 77.21,
+      "variable": "temperature_2m_max",
+      "unit": "\u00b0C",
+      "record_start_year": 1960,
+      "record_end_year": 2022,
+      "n_years": 63,
+      "slope_per_decade": 0.059274377309967326,
+      "p_value": 0.4587580881837491,
+      "significant": false,
+      "evaluated_at_year": null
+    }
+  ]
+}

@@ -16,7 +16,7 @@ the likelihood-ratio p-value from `tools/gev_trend.py`, exactly as the report's
 climatology driver shows them.
 
 `--point "LABEL=LAT,LON"` measures a fixed coordinate instead, which is how
-the UI's sidebar presets reach the same function (Delhi there is 28.61, 77.21,
+the UI's preset location buttons reach the same function (Delhi there is 28.61, 77.21,
 a different ERA5 grid cell from the geocoded 28.65, 77.23), so both entry
 points can be checked side by side.
 
