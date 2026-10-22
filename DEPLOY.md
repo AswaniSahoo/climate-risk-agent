@@ -37,6 +37,7 @@ Cloud Run service account, so there is no API key to manage):
 gcloud run deploy climate-risk-agent \
   --source . \
   --region us-central1 \
+  --execution-environment gen2 \
   --port 7860 \
   --allow-unauthenticated \
   --min-instances 1 \
@@ -48,6 +49,11 @@ gcloud run deploy climate-risk-agent \
   on `global` / `us` / `eu`, **not** the single region `us-central1`; a regional
   endpoint 404s the embedding call and the app silently drops to BM25-only.
   `gemini-2.5-flash` is also served on `global`.
+- **`--execution-environment gen2` is required.** On 2026-10-22 a rebuild on a
+  newer python:3.11-slim (Python 3.11.17, glibc 2.41-12+deb13u4) segfaulted
+  (`Uncaught signal: 11`) right after geocoding on the default gen1 (gVisor)
+  sandbox, while the identical image ran the full Berlin report on gen2 and
+  locally. The Dockerfile now pins both base images by digest.
 - `--region us-central1` is where the *Cloud Run service* (the container host)
   runs, independent of the Vertex model endpoint (`global`).
 - **`--min-instances 1`** keeps one warm instance, so demo clicks never pay a

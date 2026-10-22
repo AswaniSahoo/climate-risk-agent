@@ -15,9 +15,12 @@
 # Run  :  docker run -p 7860:7860 -e GEMINI_API_KEY=... climate-risk-agent
 
 # ---------- builder ----------
-FROM python:3.11-slim AS builder
+# Base images are pinned by digest: a floating python:3.11-slim rebuilt with a
+# newer glibc crashed the app (SIGSEGV) on the Cloud Run gen1 sandbox on
+# 2026-10-22. Bump the digest deliberately and redeploy to gen2.
+FROM python:3.11-slim@sha256:cce12316475d7d56d605f76e1d811d0dc4e7227f2d4afd29951521264f504ff8 AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /uvx /bin/
 
 WORKDIR /app
 # Pin the interpreter to the image's own: a uv-managed download would live
@@ -50,7 +53,7 @@ RUN .venv/bin/python -m scripts.download_ipcc
 RUN .venv/bin/python -c "from rag.corpus import build_chunk_cache; build_chunk_cache()"
 
 # ---------- runtime ----------
-FROM python:3.11-slim
+FROM python:3.11-slim@sha256:cce12316475d7d56d605f76e1d811d0dc4e7227f2d4afd29951521264f504ff8
 
 # Same path as the builder: uv writes absolute paths into .venv/bin shebangs
 # and pyvenv.cfg, so /app/.venv must land at /app/.venv to stay runnable.
