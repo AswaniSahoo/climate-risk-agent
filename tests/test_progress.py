@@ -101,6 +101,25 @@ def test_a_step_with_no_cache_never_claims_one():
     assert cache_badge([_cache_event("forecast", "redis", hit=True)], "synthesize") == ""
 
 
+def test_a_grounding_hit_badges_the_research_step():
+    """A whole research step served from one (hazard, area) entry is a cache hit too."""
+    records = [_cache_event("grounding", "precomputed", hit=True)]
+
+    assert cache_badge(records, "research") == "cached (precomputed)"
+
+
+def test_a_projection_hit_badges_the_project_step():
+    records = [_cache_event("projection", "disk", hit=True)]
+
+    assert cache_badge(records, "project") == "cached (disk)"
+
+
+def test_a_grounding_miss_still_lets_an_answer_hit_badge_research():
+    records = [_cache_event("grounding", "disk", hit=False), _cache_event("answers", "redis", hit=True)]
+
+    assert cache_badge(records, "research") == "cached (redis)"
+
+
 # --- finished detail --------------------------------------------------------
 
 def test_a_missing_regional_projection_is_stated_on_the_step_that_found_none():

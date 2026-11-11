@@ -172,6 +172,63 @@ def _answer_cache():
     return AnswerCache()
 
 
+@lru_cache(maxsize=1)
+def _grounding_cache():
+    """The research step's result, one entry per (hazard, AR6 area) and version.
+
+    Same backend rule as `_answer_cache`: the committed precomputed entries,
+    then Redis when configured, then local disk.
+    """
+    from rag.answer_cache import GroundingCache
+
+    return GroundingCache()
+
+
+@lru_cache(maxsize=1)
+def _projection_cache():
+    """The project step's result, one entry per (AR6 region, hazard) and version."""
+    from rag.answer_cache import ProjectionCache
+
+    return ProjectionCache()
+
+
+def _retrieve_traced(retriever, question: str, top_k: int) -> tuple[list[Chunk], bool]:
+    """Retrieve, and say whether the dense half ran for THIS question.
+
+    Only a hybrid result may be cached for a whole AR6 area: a BM25-only
+    ranking (the query embedding failed) would otherwise be replayed to every
+    city in the region long after the embedding endpoint recovered. A stand-in
+    retriever with no `retrieve_traced` counts as BM25-only, so it is never cached.
+    """
+    traced = getattr(retriever, "retrieve_traced", None)
+    if traced is None:
+        return retriever.retrieve(question, top_k=top_k), False
+    return traced(question, top_k=top_k)
+
+
+class _TracingRetriever:
+    """Hands rag/cid.py a plain `retrieve` and remembers whether dense ran.
+
+    One instance per project() call, so concurrent sessions never share the flag.
+    """
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self._calls = 0
+        self._all_dense = True
+
+    @property
+    def hybrid(self) -> bool:
+        """True only when retrieval ran, and every ranking it returned was hybrid."""
+        return self._calls > 0 and self._all_dense
+
+    def retrieve(self, question: str, top_k: int) -> list[Chunk]:
+        chunks, dense = _retrieve_traced(self._inner, question, top_k)
+        self._calls += 1
+        self._all_dense = self._all_dense and dense
+        return chunks
+
+
 # Fused vocabulary per hazard: AR6 table terms ("hot extremes", "heavy
 # precipitation" — BM25 anchors) + real-world risk-screening phrasing
 # ("extreme heat", "extreme rainfall" — dense bridges the paraphrase).
@@ -222,23 +279,45 @@ def research(state: AgentState) -> dict:
     this step, rather than as a graph node of its own, so the progress panel's
     seven steps are the same with the flag on or off. It only annotates:
     citations, risk level and confidence are untouched, and it never raises.
+
+    The question depends on the hazard and the AR6 area only, so the result
+    is cached per (hazard, area) and version (rag/answer_cache.py
+    GroundingCache): the second city in a region costs no retrieval and no
+    model call. A hit skips `answer_with_guard`'s scope guard, which is safe
+    because a derived question always names a supported hazard
+    (tests/test_graph.py pins that every one passes the guard). Only a
+    non-abstaining answer over a hybrid ranking is stored.
     """
-    question = _ipcc_question(state["hazard"], _ipcc_area(state))
-    try:
-        chunks = _ipcc_retriever().retrieve(question, top_k=_IPCC_TOP_K)
-        answer = answer_with_guard(question, chunks, cache=_answer_cache())
-    except (CorpusError, AnswerError, GeminiError) as exc:
-        _log.warning("IPCC grounding unavailable (%s) — report ships without citations", exc)
-        return {}
-    except ValidationError as exc:
-        # The model cited a chunk it was not given, or answered without citing.
-        # CitedAnswer rejects that by construction; here it costs the citations,
-        # not the report.
-        _log.warning(
-            "IPCC answer failed citation integrity (%s), report ships without citations",
-            exc,
-        )
-        return {}
+    hazard = state["hazard"]
+    area = _ipcc_area(state)
+    question = _ipcc_question(hazard, area)
+    cache = _grounding_cache()
+    key = cache.key(hazard=hazard.value, area=area, question=question, top_k=_IPCC_TOP_K)
+    grounded = cache.get(key)
+    if grounded is not None and grounded.question == question:
+        answer, chunks = grounded.answer, list(grounded.cited_chunks)
+    else:
+        try:
+            chunks, hybrid = _retrieve_traced(_ipcc_retriever(), question, _IPCC_TOP_K)
+            answer = answer_with_guard(question, chunks, cache=_answer_cache())
+        except (CorpusError, AnswerError, GeminiError) as exc:
+            _log.warning("IPCC grounding unavailable (%s) — report ships without citations", exc)
+            return {}
+        except ValidationError as exc:
+            # The model cited a chunk it was not given, or answered without citing.
+            # CitedAnswer rejects that by construction; here it costs the citations,
+            # not the report.
+            _log.warning(
+                "IPCC answer failed citation integrity (%s), report ships without citations",
+                exc,
+            )
+            return {}
+        if hybrid and not answer.abstain:
+            from rag.answer_cache import Grounding
+
+            cache.put(key, Grounding.from_research(
+                hazard=hazard.value, area=area, question=question, answer=answer, chunks=chunks,
+            ))
     out: dict = {"ipcc_answer": answer, "ipcc_chunks": chunks}
 
     from rag.jev_client import verify_enabled
@@ -272,11 +351,24 @@ def project(state: AgentState) -> dict:
     if region is None:
         _log.info("no AR6 land region for this point — skipping the Ch.12 projection")
         return {"projection_note": _NO_REGION_NOTE}
-    try:
-        change = projected_change_for(region, state["hazard"], retriever=_ipcc_retriever())
-    except (CorpusError, EmbeddingError, GeminiError) as exc:
-        _log.warning("AR6 Ch.12 projection unavailable (%s) — report ships without it", exc)
-        return {"projection_note": _NOT_FOUND_NOTE}
+    # Like research(), a function of (region, hazard) alone: cached per region
+    # and version, "not found" included, but only over a hybrid ranking.
+    cache = _projection_cache()
+    key = cache.key(region, state["hazard"])
+    cached = cache.get(key)
+    if cached is not None:
+        change = cached.change
+    else:
+        try:
+            tracer = _TracingRetriever(_ipcc_retriever())
+            change = projected_change_for(region, state["hazard"], retriever=tracer)
+        except (CorpusError, EmbeddingError, GeminiError) as exc:
+            _log.warning("AR6 Ch.12 projection unavailable (%s) — report ships without it", exc)
+            return {"projection_note": _NOT_FOUND_NOTE}
+        if tracer.hybrid:
+            from rag.answer_cache import ProjectionResult
+
+            cache.put(key, ProjectionResult(change=change))
     if change is None:
         return {"projection_note": _NOT_FOUND_NOTE}
     return {"projected_change": change}

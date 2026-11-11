@@ -116,13 +116,15 @@ _MEANINGS: dict[str, str] = {
     ),
 }
 
-# Which cache namespace each step reads, so a hit can be badged. The names are
+# Which cache namespaces each step reads, so a hit can be badged. The names are
 # the ones the JsonCache instances are constructed with, and telemetry records
-# them as op `cache:<namespace>` (tools/cache_backend.py:_record).
-STEP_CACHE_NAMESPACE: dict[str, str] = {
-    "call": "forecast",  # tools/forecast.py:_forecast_cache
-    CLIMATOLOGY: "hazard_fit",  # tools/climatology.py:_fit_cache
-    "research": "answers",  # rag/answer_cache.py
+# them as op `cache:<namespace>` (tools/cache_backend.py:_record). Research
+# reads two: the whole step per (hazard, area), then the answer per evidence.
+STEP_CACHE_NAMESPACE: dict[str, tuple[str, ...]] = {
+    "call": ("forecast",),  # tools/forecast.py:_forecast_cache
+    CLIMATOLOGY: ("hazard_fit",),  # tools/climatology.py:_fit_cache
+    "research": ("grounding", "answers"),  # rag/answer_cache.py
+    "project": ("projection",),  # rag/answer_cache.py
 }
 
 
@@ -149,12 +151,9 @@ def cache_badge(records: Sequence[Mapping[str, object]], node: str) -> str:
     ran. A cache MISS is recorded too, with `cached=False`, so the flag is what
     separates the two, not the presence of a record.
     """
-    namespace = STEP_CACHE_NAMESPACE.get(node)
-    if namespace is None:
-        return ""
-    op = f"cache:{namespace}"
+    ops = {f"cache:{namespace}" for namespace in STEP_CACHE_NAMESPACE.get(node, ())}
     for event in records:
-        if event.get("op") == op and event.get("cached"):
+        if event.get("op") in ops and event.get("cached"):
             return f"cached ({event.get('model') or 'unknown'})"
     return ""
 
