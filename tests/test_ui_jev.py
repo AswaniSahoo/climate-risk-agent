@@ -34,6 +34,8 @@ from tests.jev_fakes import enable_jev, triage_reply
 # file that calls AppTest.from_file()" (tests/), not the working directory.
 _APP = str(Path(__file__).resolve().parents[1] / "ui" / "app.py")
 STATEMENT = "Hot extremes have become more frequent. Heatwaves will stop by 2030."
+# A heat question no hazard word names, so with triage on only Jev can read it.
+SILENT_HEAT = "How high will temperatures climb in Delhi next week?"
 
 
 def _report(**overrides) -> RiskReport:
@@ -90,7 +92,7 @@ def calls(monkeypatch):
 
 
 def _fake_jev(request):
-    """A stand-in Jev: heat for a hot question, policy for a money question."""
+    """A stand-in Jev: heat for a weather question, policy for a money question."""
     question = json.loads(request.content)["state"]["question"].lower()
     if "gdp" in question:
         reply = triage_reply(topic={"policy_or_economics": 0.96, "climate_science": 0.04},
@@ -122,7 +124,7 @@ def _text(at: AppTest) -> str:
 
 
 def test_with_the_flag_off_nothing_of_jev_shows_or_runs(calls, httpx_mock):
-    at = _ask("How hot will it get in Delhi next week?")
+    at = _ask(SILENT_HEAT)
 
     assert not at.exception
     assert httpx_mock.get_requests() == []
@@ -135,7 +137,7 @@ def test_a_question_jev_reads_shows_the_reading_and_runs_it(calls, monkeypatch, 
     enable_jev(monkeypatch, "triage")
     httpx_mock.add_callback(_fake_jev, is_reusable=True)
 
-    at = _ask("How hot will it get in Delhi next week?")
+    at = _ask(SILENT_HEAT)
 
     assert not at.exception
     assert len(httpx_mock.get_requests()) == 1  # one reading, reused by the run
@@ -154,7 +156,7 @@ def test_a_question_jev_reads_shows_the_reading_and_runs_it(calls, monkeypatch, 
 def test_one_click_assesses_the_same_point_as_another_hazard(calls, monkeypatch, httpx_mock):
     enable_jev(monkeypatch, "triage")
     httpx_mock.add_callback(_fake_jev, is_reusable=True)
-    at = _ask("How hot will it get in Delhi next week?")
+    at = _ask(SILENT_HEAT)
 
     at.button(key="reassess_wind").click().run()
 
@@ -226,7 +228,7 @@ def test_no_button_carries_an_icon(calls, monkeypatch, httpx_mock):
     enable_jev(monkeypatch, "all")
     httpx_mock.add_callback(_fake_jev, is_reusable=True)
 
-    at = _ask("How hot will it get in Delhi next week?")
+    at = _ask(SILENT_HEAT)
 
     assert not at.exception
     assert at.button and all(not b.proto.icon for b in at.button)
@@ -241,7 +243,7 @@ def test_a_reading_is_never_shown_as_certain(calls, monkeypatch, httpx_mock):
         is_reusable=True,
     )
 
-    at = _ask("How hot will it get in Delhi next week?")
+    at = _ask(SILENT_HEAT)
 
     assert not at.exception
     assert "over 99% probability" in _text(at)

@@ -45,6 +45,27 @@ _HAZARD_PATTERNS: dict[Hazard, re.Pattern[str]] = {
     Hazard.WIND: re.compile(r"\bwinds?\b|\bgusts?\b", re.IGNORECASE),
 }
 
+# Everyday words for the same three hazards ("How windy will it get in Berlin?").
+# Weaker evidence than the words above: fire weather is "hot, dry and windy", so
+# these name a hazard only when the scope guard names no unsupported one, and only
+# when the words above named none. Every question those words named, or the guard
+# refused by name, keeps exactly the reading it had. Left out on purpose:
+# "storm" (storm surge, tropical storms, hail and snow storms are hazards we do not
+# assess), "warm"/"warming" (the background trend, not a hazard), "temperatures"
+# (hot or cold), and a "hot spot" (where climate changes most, not heat).
+_EVERYDAY_PATTERNS: dict[Hazard, re.Pattern[str]] = {
+    Hazard.HEATWAVE: re.compile(
+        r"\bhot\b(?![ -]spots?\b)|\bhott(?:er|est)\b|\bscorch(?:ing|ers?)\b"
+        r"|\bswelter(?:s|ed|ing)?\b",
+        re.IGNORECASE,
+    ),
+    Hazard.EXTREME_PRECIP: re.compile(r"\bdeluge[sd]?\b|\bcloud[ -]?bursts?\b", re.IGNORECASE),
+    Hazard.WIND: re.compile(
+        r"\bwind(?:y|ier|iest)\b|\bgust(?:y|ier|iest|ing)\b|\bgales?\b|\bwindstorms?\b",
+        re.IGNORECASE,
+    ),
+}
+
 # Scope stage 2 reports a hazard by its policy NAME; the front door needs the
 # enum. Only used when the lexical patterns above found nothing at all.
 _HINT_TO_HAZARD: dict[str, Hazard] = {
@@ -96,6 +117,26 @@ def _triage_info(
     )
 
 
+def lexical_hazard(text: str) -> Hazard | None:
+    """The hazard the words alone name, or None. No model, no network, no guess.
+
+    This is the whole front door with CRG_JEV off, and what the evals score as
+    "the lexical parser". A marine heatwave names none of ours, though it
+    contains "heatwave" (see `_extract_hazard`).
+    """
+    out_of_scope = out_of_scope_hazard(text)
+    if out_of_scope == "marine heatwave":
+        return None
+    for hazard, pattern in _HAZARD_PATTERNS.items():
+        if pattern.search(text):
+            return hazard
+    if out_of_scope is None:
+        for hazard, pattern in _EVERYDAY_PATTERNS.items():
+            if pattern.search(text):
+                return hazard
+    return None
+
+
 def _extract_hazard(text: str) -> tuple[Hazard | None, str | None, QueryTriage | None]:
     """(hazard, out_of_scope_name, triage): the lexical patterns first, then the guard.
 
@@ -113,9 +154,9 @@ def _extract_hazard(text: str) -> tuple[Hazard | None, str | None, QueryTriage |
     if out_of_scope_hazard(text) == "marine heatwave":
         info = _triage_info(source=None, decision=ScopeDecision(out_of_scope="marine heatwave"))
         return None, "marine heatwave", info if jev_on else None
-    for matched, pattern in _HAZARD_PATTERNS.items():
-        if pattern.search(text):
-            return matched, None, _triage_info(source="lexical", decision=None) if jev_on else None
+    matched = lexical_hazard(text)
+    if matched is not None:
+        return matched, None, _triage_info(source="lexical", decision=None) if jev_on else None
 
     decision = scope_verdict(text)
     if decision.out_of_scope:
