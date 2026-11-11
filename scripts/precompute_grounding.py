@@ -284,7 +284,7 @@ def run(
         elif need_projection and p_key in rows:
             summary.written.append(pair.label)
         save_rows(list(rows.values()), seed_path)  # after every pair: an interrupted run resumes
-    if prune_stale and not pairs:
+    if prune_stale:  # saved even when every pair was skipped or deferred
         save_rows(list(rows.values()), seed_path)
     return summary
 

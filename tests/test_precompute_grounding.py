@@ -215,6 +215,25 @@ def test_prune_stale_drops_rows_the_code_no_longer_builds(nodes, tmp_path):
     assert "crg:v1:grounding:retired" not in keys and len(keys) == 2
 
 
+
+def test_prune_stale_is_saved_even_when_every_pair_is_skipped_or_deferred(nodes, tmp_path):
+    # 2026-11-12: a prune-only run with all 138 pairs either shipped or deferred
+    # pruned 5 rows in memory, saved nothing, and the next check still saw them stale.
+    seed = tmp_path / "ipcc.json"
+    pre.run([_pair("WCE")], seed_path=seed, max_calls=30)
+    payload = json.loads(seed.read_text())
+    payload["entries"].append({"key": "crg:v1:grounding:retired", "namespace": "grounding",
+                               "hazard": "heatwave", "region": "WCE", "value": {}})
+    seed.write_text(json.dumps(payload))
+
+    summary = pre.run([_pair("WCE"), _pair("SAS")], seed_path=seed, prune_stale=True,
+                      max_calls=0)
+
+    keys = [r["key"] for r in json.loads(seed.read_text())["entries"]]
+    assert "crg:v1:grounding:retired" not in keys and len(keys) == 2
+    assert summary.skipped == ["heatwave/WCE"] and summary.deferred == ["heatwave/SAS"]
+    assert len(nodes["asked"]) == 1
+
 # --- a run computes into its own scratch cache, with no daily spend limit ------
 
 @pytest.fixture
