@@ -298,3 +298,41 @@ def test_each_client_gets_its_own_window(monkeypatch):
 def test_the_request_limit_can_be_turned_off(monkeypatch):
     monkeypatch.setenv("CRG_API_RATE_LIMIT", "off")
     assert all(sg.client_rate_limited("api", "x") is None for _ in range(100))
+
+
+# --- evals measure every question; the docs carry the code's defaults ------
+
+_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
+
+
+def test_an_eval_run_has_no_budget_unless_one_is_set():
+    """A refusal halfway through an eval would score as failed answers, and
+    scripts/eval_gate.py does not read `errors`; the eval's own cost is bounded
+    by its fixed question count."""
+    env: dict[str, str] = {}
+    assert sg.unlimited_unless_set(env) is True and env["CRG_DAILY_MODEL_BUDGET_USD"] == "off"
+
+    env = {"CRG_DAILY_MODEL_BUDGET_USD": "0.5"}
+    assert sg.unlimited_unless_set(env) is False and env["CRG_DAILY_MODEL_BUDGET_USD"] == "0.5"
+
+
+@pytest.mark.parametrize("runner", ["evals/run_e2e_eval.py", "evals/run_retrieval_eval.py"])
+def test_each_eval_runner_lifts_the_budget_first(runner):
+    main = (_ROOT / runner).read_text(encoding="utf-8").split("def main() -> None:", 1)[1]
+    head = main.split("configure()", 1)[0]  # before logging, so before any model call
+
+    assert "spend_guard.unlimited_unless_set()" in head
+
+
+def test_env_example_and_deploy_md_state_the_defaults_the_code_uses():
+    env_example = (_ROOT / ".env.example").read_text(encoding="utf-8")
+    deploy = (_ROOT / "DEPLOY.md").read_text(encoding="utf-8")
+    defaults = {
+        "CRG_DAILY_MODEL_BUDGET_USD": sg.DEFAULT_DAILY_BUDGET_USD,
+        "CRG_SESSION_FRESH_REPORTS": sg.DEFAULT_SESSION_FRESH_REPORTS,
+        "CRG_API_RATE_LIMIT": sg.DEFAULT_API_RATE_LIMIT,
+        "CRG_API_RATE_WINDOW_S": sg.DEFAULT_API_RATE_WINDOW_S,
+    }
+    for name, value in defaults.items():
+        assert f"# {name}={value}\n" in env_example, f".env.example lacks {name}={value}"
+        assert f"`{name}`" in deploy and f"`{value}`" in deploy, f"DEPLOY.md lacks {name}"

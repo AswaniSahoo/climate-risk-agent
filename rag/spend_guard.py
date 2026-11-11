@@ -44,7 +44,7 @@ import math
 import os
 import threading
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -169,6 +169,20 @@ def api_rate_limit(env: Mapping[str, str] = os.environ) -> tuple[int, int] | Non
         return None
     window = _int_setting(env, "CRG_API_RATE_WINDOW_S", DEFAULT_API_RATE_WINDOW_S, 1)
     return limit, window if window is not None else DEFAULT_API_RATE_WINDOW_S
+
+
+def unlimited_unless_set(env: MutableMapping[str, str] = os.environ) -> bool:
+    """For the eval runners: no daily budget unless one was set explicitly.
+
+    An eval measures every question, and a refusal halfway through would be
+    scored as answers the model got wrong (scripts/eval_gate.py does not read
+    `errors`). Its cost is bounded by its fixed question count instead. Returns
+    True when it turned the budget off.
+    """
+    if "CRG_DAILY_MODEL_BUDGET_USD" in env:
+        return False
+    env["CRG_DAILY_MODEL_BUDGET_USD"] = "off"
+    return True
 
 
 def session_limit_reason(limit: int) -> str:

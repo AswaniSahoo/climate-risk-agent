@@ -64,8 +64,12 @@ gcloud run deploy climate-risk-agent \
   UI boots without scipy, langgraph or google-genai, which are imported only
   when a report is actually requested.
 - `--port 7860` matches the container's `EXPOSE` / Streamlit port.
-- The Cloud Run service account needs the **Vertex AI User** role
-  (`roles/aiplatform.user`).
+- The command above sets no `--service-account`, so the service runs as the
+  Compute Engine default service account (it does today: checked read-only on
+  2026-11-11). The code needs one permission, `aiplatform.endpoints.predict`;
+  "Hardening the GCP side" below moves the service to a dedicated identity
+  that holds only that. `roles/aiplatform.user` also works, but it carries
+  464 permissions.
 - The startup self-test logs `DENSE DEGRADED` (and the UI shows a banner) if the
   embedding endpoint is unreachable: a misconfig is loud, never silent.
 - `CRG_BOOTSTRAP_N` (optional) sets the GEV bootstrap refits per fit for both the
@@ -78,7 +82,9 @@ gcloud run deploy climate-risk-agent \
   both to share one cache across replicas; with neither set every instance
   keeps its own disk cache and `tools/cache_backend.py` logs which backend it
   chose. On 2026-11-11 the live service carried neither name, so at
-  `--min-instances 0` its cache dies with every instance.
+  `--min-instances 0` its cache dies with every instance. They also give
+  the spend guard one budget for every instance (see "Spend guard"); the
+  token is a secret, so it never goes in `--set-env-vars`.
 - **Precomputed entries ship in the image** (`tools/cache_seed/*.json`, read
   before Redis or disk, so they survive scale to zero). Each entry sits under
   the exact cache key the live path builds, so it only answers the request and
@@ -183,6 +189,214 @@ figures already cover. Then set `--min-instances 0` once the two-stage image's
 cold start is measured under 30 s (`scripts/measure_coldstart.py` times it
 against a 1 vCPU / 2 GiB container), because below that a scale-to-zero demo
 still opens fast enough not to read as broken.
+
+## Spend guard
+
+Every Gemini call goes through `rag/gemini_client.py`, and `rag/spend_guard.py`
+holds a daily budget at that one seam for every caller: the UI, the API, the
+MCP server. The defaults, the same lines as `.env.example`:
+
+| setting | default | what it limits |
+| --- | --- | --- |
+| `CRG_DAILY_MODEL_BUDGET_USD` | `0.15` | US dollars of model calls per UTC day |
+| `CRG_SESSION_FRESH_REPORTS` | `5` | UI reports that need new model calls, per browser session |
+| `CRG_API_RATE_LIMIT` | `10` | API requests per client per window on `/report`, `/query`, `/triage` |
+| `CRG_API_RATE_WINDOW_S` | `60` | that window, in seconds |
+
+Each also takes `off`. A value that does not parse keeps the default, never
+"no limit".
+
+How it holds. Before a call is sent it reserves the most the call can cost:
+the prompt at two characters a token, plus the full default thinking budget
+(8,192 tokens) and 2,048 visible tokens at the output price. The call starts
+only if that fits in what is left of the day, and afterwards it is charged
+what its usage metadata says was billed. So the day's count stays under the
+budget with calls in flight; it can pass it only by the amount one answer's
+output exceeds 10,240 tokens. A refused call raises `ModelBudgetExceeded` (a
+`GeminiError`), the report ships without IPCC citations exactly as on any model
+failure, and its summary says why: "No new IPCC AR6 answer for this report:
+The daily model budget for this deployment is used up, so no new model call
+runs until it resets at 00:00 UTC. Answers already cached still carry their
+citations." A session over its cap gets the same with its own sentence; a
+reload starts a new session, so that cap stops one tab from spending the day
+by accident, and the daily budget is the hard stop. The startup embedding
+probe is exempt and cached per process (ten minutes when it passes, one minute
+when it fails), so a spent budget never shows up as the "embedding config"
+banner.
+
+Where the count lives. With `UPSTASH_REDIS_REST_URL` and
+`UPSTASH_REDIS_REST_TOKEN` set: in Upstash, one `INCRBY` + `EXPIRE` transaction
+per change, one budget for every instance. Without them, or for 60 s after an
+Upstash error: in each process, so every instance has a budget of its own and a
+restart resets it, and the bound below multiplies by the instances that run in
+a day. The live service has no `UPSTASH_*` variables (checked 2026-11-11), so
+set them, or keep `--max-instances` low, for the bound to mean what it says.
+
+Evals run with the budget off: `evals.yml` sets `CRG_DAILY_MODEL_BUDGET_USD:
+"off"`, and both eval runners default to off unless the variable is set. A
+refusal halfway through an eval would be scored as wrong answers, and
+`scripts/eval_gate.py` does not read `errors`.
+
+### The arithmetic behind the defaults
+
+Target: 30 days at the cap under about half of the INR 900 credit, so INR 450,
+about US$4.80.
+
+Prices, Vertex AI, Standard tier, at most 200K input tokens, read 2026-11-11 at
+https://cloud.google.com/vertex-ai/generative-ai/pricing:
+
+- `gemini-2.5-flash`: "Input (text, image, video) | $0.30" and "Text output
+  (response and reasoning) | $2.50" per 1M tokens. Thinking bills as output.
+- `gemini-embedding-2`: "Gemini Embedding 2 (Unified Multimodal, Preview) |
+  Input text | ... | Online requests | $0.20" per 1M tokens.
+
+What one answer call sends (`rag/answer.py`, `agent/graph.py`): the rules
+(1,111 characters), 8 excerpts (`_IPCC_TOP_K`) of at most 1,200 characters each
+(`rag/chunk.py`), and the question (166 characters at most for the templated
+one the app asks; up to 1,000 from the MCP tool). With full-size excerpts that
+is 11,815 characters, about 2,950 tokens at Google's "a token is equivalent to
+about 4 characters" (https://ai.google.dev/gemini-api/docs/tokens), so $0.00089
+of input. Output is the JSON answer plus thinking, which for `gemini-2.5-flash`
+on Vertex defaults to "Auto (up to 8,192 tokens)"
+(https://cloud.google.com/vertex-ai/generative-ai/docs/thinking).
+
+| one call | basis | US$ |
+| --- | --- | --- |
+| answer, measured mean | dev eval of 2026-09-02: $0.204382 over 55 calls, thinking counted | 0.0037 |
+| answer, worst case | 2,950 input + 8,192 thinking + 1,000 visible tokens | 0.024 |
+| query embedding | about 160 characters, 40 tokens | 0.000008 |
+
+At the cap:
+
+- per day: US$0.15 buys about 40 fresh answers at the measured mean, or 6 if
+  every call used its whole thinking budget. Embeddings are a rounding error
+  at either rate.
+- per 30 days: 30 x US$0.15 = US$4.50 = INR 422 at the RBI reference rate of
+  INR 93.8075 per US dollar (https://www.rbi.org.in, read 2026-11-11). Google
+  converts at its own rate, so the INR figure is an estimate, with about 6%
+  headroom to INR 450.
+- per session: 5 fresh reports, about US$0.019 at the measured mean, an
+  eighth of a day.
+
+The cap bounds model calls only. Cloud Run's own bill is separate and, with a
+minimum instance, larger: an idle minimum instance in us-central1 costs
+$0.0000025 per vCPU-second and $0.0000025 per GiB-second
+(https://cloud.google.com/run/pricing, read 2026-11-11), so 1 vCPU + 2 GiB is
+US$19.44 per 30 days (INR 1,824) and 2 vCPU + 4 GiB is US$38.88 (INR 3,647),
+before any free tier (not checked here). Either one alone is more than the INR
+900 credit, so while the credit pays, run `--min-instances 0`.
+
+## Hardening the GCP side (prepared, not run)
+
+`scripts/harden_gcp.sh` holds every command below. It changes the project and
+its billing account, so it refuses to start unless `HARDEN_GCP_CONFIRMED=yes`
+is set, and it must not run before Aswani has said yes to it. Nothing in it
+has been run.
+
+Read-only state on 2026-11-11 (`gcloud run services list` and two
+`gcloud run services describe --format` reads, names only):
+
+- service `climate-risk-agent` in `us-central1`, plus `vera-bot` in
+  `asia-south1` in the same project, which draws from the same credit;
+- runtime identity: `714882950125-compute@developer.gserviceaccount.com`, the
+  Compute Engine default service account. Cloud Run's own docs say to "avoid
+  the default service account": depending on organization policy it "might
+  automatically be granted the Editor role";
+- environment variable names: `GOOGLE_GENAI_USE_VERTEXAI`,
+  `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `CRG_GENERATE_MODEL`,
+  `CRG_EMBED_MODEL`. No `UPSTASH_*`, no API key, no secret.
+
+Least privilege, from the code. The runtime calls two Vertex methods,
+`generateContent` (answers) and `embedContent` (google-genai 2.11.0 sends
+`gemini-embedding-2` there), and the REST reference for each says it "Requires
+the following IAM permission on the `model` resource: `aiplatform.endpoints.predict`".
+That permission is `SUPPORTED` in custom roles
+(https://cloud.google.com/iam/docs/custom-roles-permissions-support), so the
+runtime gets a custom role holding it alone. A mounted secret needs "Secret
+Manager Secret Accessor (`roles/secretmanager.secretAccessor`)" on the service
+identity, granted per secret rather than on the project. Logs need nothing:
+stdout and stderr "will be picked up automatically by Cloud Logging". No other
+Google API is used (only `google.genai` and `google.auth` are imported).
+
+The commands, in the order the script runs them (flags checked against the
+help text of gcloud 593.0.0):
+
+```bash
+PROJECT=climate-risk-agent
+REGION=us-central1
+SERVICE=climate-risk-agent
+SA="climate-risk-runtime@${PROJECT}.iam.gserviceaccount.com"
+
+# 1. Secret Manager is not enabled on the project yet.
+gcloud services enable secretmanager.googleapis.com --project="$PROJECT"
+
+# 2. A dedicated runtime identity.
+gcloud iam service-accounts create climate-risk-runtime --project="$PROJECT" \
+  --display-name="climate-risk-agent runtime (Cloud Run)"
+
+# 3. A role with only the permission the code needs, bound to that identity.
+gcloud iam roles create crgModelInvoker --project="$PROJECT" \
+  --title="Climate risk agent model invoker" \
+  --description="generateContent and embedContent on Vertex AI publisher models, nothing else" \
+  --permissions=aiplatform.endpoints.predict --stage=GA
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:${SA}" \
+  --role="projects/${PROJECT}/roles/crgModelInvoker" --condition=None
+
+# 4. The Upstash token as a secret, typed at a hidden prompt so it never lands
+#    in shell history or a file, readable by the runtime identity only.
+read -rs -p "Upstash REST token: " UPSTASH_TOKEN; echo
+printf '%s' "$UPSTASH_TOKEN" | gcloud secrets create upstash-redis-rest-token \
+  --project="$PROJECT" --replication-policy=automatic --data-file=-
+unset UPSTASH_TOKEN
+gcloud secrets add-iam-policy-binding upstash-redis-rest-token --project="$PROJECT" \
+  --member="serviceAccount:${SA}" --role="roles/secretmanager.secretAccessor"
+
+# 5. Redeploy from a checkout that has rag/spend_guard.py, on the new identity,
+#    with the token mounted by version (env vars resolve at instance start, so
+#    Google recommends pinning a version over `latest`), the spend limits
+#    stated, no minimum instance, and at most two instances.
+#    The first line repeats the service's settings from the deploy command at
+#    the top of this file, so this command stands on its own.
+gcloud run deploy "$SERVICE" --source . --region="$REGION" --project="$PROJECT" \
+  --execution-environment=gen2 --port=7860 --allow-unauthenticated \
+  --memory=2Gi --cpu=1 --concurrency=8 \
+  --service-account="$SA" \
+  --update-secrets=UPSTASH_REDIS_REST_TOKEN=upstash-redis-rest-token:1 \
+  --update-env-vars=UPSTASH_REDIS_REST_URL="$UPSTASH_URL",CRG_DAILY_MODEL_BUDGET_USD=0.15,CRG_SESSION_FRESH_REPORTS=5 \
+  --min-instances=0 --max-instances=2
+
+# 6. A budget alert on the billing account behind the project: INR 900, at
+#    50, 90 and 100 percent. exclude-all-credits measures gross cost; with the
+#    default, which counts credits, spend paid by the credit nets to zero and
+#    no alert fires until the credit is gone.
+BILLING_ACCOUNT=$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)')
+gcloud billing budgets create --billing-account="$BILLING_ACCOUNT" \
+  --display-name="climate-risk-agent credit INR 900" \
+  --budget-amount=900INR --credit-types-treatment=exclude-all-credits \
+  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 \
+  --threshold-rule=percent=1.0
+```
+
+Notes on what the commands do and do not do:
+
+- `--budget-amount=900INR`: "If a currency type is included, it must be the
+  currency associated with the billing account", so the command fails rather
+  than set a 900 US dollar budget if the account is not billed in INR.
+- A budget sends notifications ("Default notifications are sent to those with
+  Billing Account Administrator and Billing Account User IAM roles"). It does
+  not stop any spending; the spend guard and `--max-instances` do the capping.
+- No project filter: the INR 900 credit sits on the billing account, so the
+  budget counts everything the account pays for, `vera-bot` included. Add
+  `--filter-projects=projects/climate-risk-agent` to watch this project alone.
+- Upstash is optional. Without it, drop the `--update-secrets` flag and the two
+  `UPSTASH_` steps: the spend guard then counts per instance, so the daily
+  bound is `CRG_DAILY_MODEL_BUDGET_USD` times the instances (at most 2 here).
+- Not done by the script: removing roles from the Compute Engine default
+  service account. Nothing here shows which roles it holds or what else uses
+  it (`vera-bot` may), so that stays a separate, checked step.
+- Fallback if the custom role misses a permission the SDK turns out to need:
+  bind `roles/aiplatform.user` instead of `crgModelInvoker` in step 3.
 
 ## Streamlit Community Cloud (free alternative)
 

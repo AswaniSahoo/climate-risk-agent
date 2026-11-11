@@ -229,6 +229,14 @@ def test_the_gemini_key_reaches_only_the_steps_that_call_gemini():
             assert "secrets." not in other, f"{name} reads a secret"
 
 
+def test_the_eval_job_runs_without_the_daily_spend_limit():
+    """rag/spend_guard.py would refuse calls partway through 165 questions, and
+    the refusals would score as answers the model got wrong."""
+    text = dict(_workflows())["evals.yml"]
+    head, _, _ = text.partition("    steps:")
+    assert 'CRG_DAILY_MODEL_BUDGET_USD: "off"' in head
+
+
 def test_dependency_audit_reads_the_lock_not_its_own_environment():
     """`uvx pip-audit` with no input audits the throwaway environment uvx built
     for pip-audit itself, so the job passed whatever the project locked. The

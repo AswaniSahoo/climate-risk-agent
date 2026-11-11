@@ -65,7 +65,11 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     from obs.log import configure
+    from rag import spend_guard
 
+    # Every question must reach the model: a spend-limit refusal mid-run would
+    # be scored as a wrong answer. Set CRG_DAILY_MODEL_BUDGET_USD to keep one.
+    spend_guard.unlimited_unless_set()
     args = _parse_args()
     if args.scope_stage2 is not None:
         _os.environ["CRG_SCOPE_STAGE2"] = args.scope_stage2

@@ -64,6 +64,11 @@ jobs:
     timeout-minutes: 45
     # GEMINI_API_KEY is handed to each step that calls the model, not set here:
     # job-level env reaches every step, third-party actions included.
+    env:
+      # No daily spend limit (rag/spend_guard.py): a refusal partway through
+      # would score as wrong answers. The run's cost is bounded by its fixed
+      # question count and the 45 minute timeout. Not a secret.
+      CRG_DAILY_MODEL_BUDGET_USD: "off"
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

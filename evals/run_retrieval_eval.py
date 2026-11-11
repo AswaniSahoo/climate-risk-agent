@@ -191,7 +191,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     from obs.log import configure
+    from rag import spend_guard
 
+    # Every query embedding must be live: a spend-limit refusal mid-run would
+    # fall back to BM25 and score as a retrieval miss. Set
+    # CRG_DAILY_MODEL_BUDGET_USD to keep a limit anyway.
+    spend_guard.unlimited_unless_set()
     configure()  # runner owns logging config
     args = parse_args()
     # EVAL_SET=test = the held-out v2 set: release gates ONLY (see DEPLOY.md).
