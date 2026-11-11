@@ -252,6 +252,21 @@ def test_every_listed_city_has_coordinates():
     assert len({(c.latitude, c.longitude) for c in cities}) == len(cities)  # no duplicates
 
 
+def test_each_preset_is_followed_by_the_name_a_person_types_for_it():
+    """A typed "Berlin" geocodes to 52.52437,13.41053, not the button's 52.52,13.4,
+    so its fits sit under another key. The six typed names come right after the
+    presets, in their order, so a paced run fills them next, not after 80 others."""
+    cities = pre.load_cities()
+    presets = [c for c in cities if c.preset]
+    typed = cities[len(presets): 2 * len(presets)]
+
+    assert cities[: len(presets)] == presets
+    assert [c.query for c in typed] == [p.name for p in presets]
+    assert all(c.country == p.country for c, p in zip(typed, presets))
+    assert all(round(c.latitude, 2) != round(p.latitude, 2)
+               or round(c.longitude, 2) != round(p.longitude, 2) for c, p in zip(typed, presets))
+
+
 def test_prune_stale_drops_only_the_rows_the_code_no_longer_builds(httpx_mock, tmp_path,
                                                                    monkeypatch):
     _archive(httpx_mock, {52.52: _series(1), 48.85341: _series(2)})
