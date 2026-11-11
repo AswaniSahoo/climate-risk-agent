@@ -342,7 +342,10 @@ with _ask_slot:
         on_change=_on_nl_query_submit,
     )
     ask = _ask_col.button("Ask", key="ask_btn", type="primary", width="stretch")
-nl_triggered = bool(ask or st.session_state.pop("_nl_submitted", False))
+# Popped before the `or`: typing a question and then clicking Ask lands in one rerun
+# with both set, and a flag left behind would rerun the question on the next click.
+_submitted = bool(st.session_state.pop("_nl_submitted", False))
+nl_triggered = bool(ask or _submitted)
 
 # A question points the sidebar (Place box, coordinates, map, hazard, horizon) at
 # what it asks about, before the sidebar is drawn, so the two never disagree.

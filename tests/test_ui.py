@@ -488,3 +488,22 @@ def test_a_place_name_cannot_inject_html_into_the_map_plate(stubbed):
     assert "&lt;script&gt;" in rendered
 
 
+def test_a_typed_then_asked_question_does_not_rerun_on_the_next_click(stubbed, monkeypatch):
+    """Typing and clicking Ask land in one rerun; the Enter flag must not outlive it."""
+    from agent.location import ResolvedPlace
+
+    runs = []
+    monkeypatch.setattr(nl_mod, "run_agent_nl", lambda *a, **k: runs.append(a) or _report())
+    monkeypatch.setattr(
+        location_mod, "resolve_place",
+        lambda query: ResolvedPlace(name="Berlin", country="Germany", latitude=52.52, longitude=13.40),
+    )
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.run()
+    at.text_input(key="nl_query").input("How risky are heatwaves in Berlin over the next 7 days?")
+    at.button(key="ask_btn").click().run()
+
+    at.sidebar.slider(key="horizon_input").set_value(5).run()  # any later interaction
+
+    assert not at.exception
+    assert len(runs) == 1
