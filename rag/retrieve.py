@@ -91,20 +91,30 @@ class HybridRetriever:
         RRF to `_RERANK_POOL`, rerank, keep `top_k`. Without one the fusion cuts
         straight to `top_k`, exactly as before.
         """
+        return self.retrieve_traced(question, top_k)[0]
+
+    def retrieve_traced(self, question: str, top_k: int = 5) -> tuple[list[Chunk], bool]:
+        """`retrieve`, plus whether the dense half actually ran for THIS question.
+
+        The BM25 fallback is decided per question (a failed query embedding),
+        not per index, so `dense_enabled` alone cannot say which ranking came
+        back. A caller that pins one result for many later requests (the
+        grounding cache in agent/graph.py) needs to know.
+        """
         query = self._rewriter(question) if self._rewriter else question
         pool = _RERANK_POOL if self._reranker else top_k
         lexical = [c for c, _ in self._bm25.query(query, top_k=_CANDIDATES)]
         if self._dense is None:
-            return self._narrow(query, lexical[:pool], top_k)
+            return self._narrow(query, lexical[:pool], top_k), False
         try:
             query_vector = self._embed_query(query)
         except EmbeddingError as exc:
             _log.warning(
                 "query embedding failed (%s) — falling back to BM25 for this question", exc
             )
-            return self._narrow(query, lexical[:pool], top_k)
+            return self._narrow(query, lexical[:pool], top_k), False
         semantic = [c for c, _ in self._dense.query(query_vector, top_k=_CANDIDATES)]
-        return self._narrow(query, rrf_fuse([lexical, semantic], top_k=pool), top_k)
+        return self._narrow(query, rrf_fuse([lexical, semantic], top_k=pool), top_k), True
 
     def _narrow(self, query: str, pool: list[Chunk], top_k: int) -> list[Chunk]:
         """Rerank the pool if a reranker is attached, else just cut to top_k.
