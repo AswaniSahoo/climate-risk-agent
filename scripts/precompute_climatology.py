@@ -64,6 +64,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from agent.contracts import Hazard
+from tools import archive_budget
 from tools import climatology as clim
 from tools.cache_backend import (
     CACHE_SCHEMA_VERSION,
@@ -134,9 +135,7 @@ def request_days(start_year: int, end_year: int) -> int:
     return (date(end_year, 12, 31) - date(start_year, 1, 1)).days + 1
 
 
-def weighted_calls(n_variables: int, days: int) -> float:
-    """Open-Meteo's count for one request (pricing page, quoted above)."""
-    return max(1.0, n_variables / 10.0) * max(1.0, days / 14.0)
+weighted_calls = archive_budget.weighted_calls  # one formula for the script and the live budget
 
 
 def _coords(city: City) -> tuple[float, float]:
