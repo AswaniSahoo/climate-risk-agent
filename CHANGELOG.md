@@ -46,6 +46,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Fixed three statements on the page: the ERA5 record is 1960 to 2022 (63 years), a first
   report for a new place takes about 1 to 2 minutes rather than about 3 seconds, and the
   degraded-mode banner's recall is the dev set's 76% (BM25 only) against 82% (hybrid).
+- Fixed the free-text front door refusing everyday hazard words ("How windy will it get in
+  Berlin over the next 7 days?"): it now reads windy, gusty, gale, windstorm, hot, scorching,
+  sweltering, deluge and cloudburst, only where the scope guard names no unsupported hazard,
+  and never "storm". Lexical hazard naming went from 57/77 to 63/77 on the held-out set, none
+  wrong (evals/results/hazard-words-2026-11-12.md).
 
 ## [1.0.0] - 2026-09-08
 

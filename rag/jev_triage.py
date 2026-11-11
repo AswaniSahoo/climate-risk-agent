@@ -6,10 +6,11 @@ Where this sits, which is the safety argument:
    never asked about a question stage 1 has already refused, and it can never
    un-refuse one.
 2. Jev reads only what stage 1 cannot see: a question with no hazard
-   vocabulary at all ("How hot will it get in Delhi next week?"), plus, in the
-   free-text front door, a question stage 1 ruled in scope whose hazard the
-   parser cannot name ("temperature extremes"). Everything else never leaves
-   this process, which is both cheaper and the privacy-minimal choice.
+   vocabulary at all ("How high will temperatures climb in Delhi next week?"),
+   plus, in the free-text front door, a question stage 1 ruled in scope whose
+   hazard the parser cannot name ("temperature extremes"). Everything else
+   never leaves this process, which is both cheaper and the privacy-minimal
+   choice.
 3. Jev's answer is a SIGNAL. The decision is made here, in code, by fixed
    thresholds, and on any doubt the answer is "defer": behaviour is then
    exactly what it is with Jev off. Any failure is also "defer" in effect
