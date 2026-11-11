@@ -366,3 +366,63 @@ def test_a_counter_can_be_deleted(bucket):
     counter.delete("crg:v1:budget:k")
 
     assert counter.add("crg:v1:budget:k", 1, ttl_s=60) == 1
+
+
+# --- credentials ---------------------------------------------------------------
+
+class _FakeCredentials:
+    def __init__(self) -> None:
+        self.valid = False
+        self.token = None
+        self.refreshed = 0
+
+    def refresh(self, request) -> None:
+        self.refreshed += 1
+        self.valid, self.token = True, "minted"
+
+
+def test_the_bucket_scope_is_a_default_so_user_adc_keeps_its_granted_scopes(tmp_path, monkeypatch):
+    """A user ADC refresh token keeps the scopes granted at `gcloud auth
+    application-default login`: asking it for another one fails with
+    invalid_scope (seen in the smoke test). As `default_scopes` the bucket scope
+    reaches service accounts and the metadata server, and user ADC is untouched."""
+    import google.auth
+
+    from tools.cache_backend import GCS_SCOPE, GoogleAuthToken
+
+    adc = tmp_path / "adc.json"
+    adc.write_text("{}")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(adc))
+    seen = {}
+    fake = _FakeCredentials()
+
+    def load(path, scopes=None, default_scopes=None, **kwargs):
+        seen.update(path=path, scopes=scopes, default_scopes=default_scopes)
+        return fake, None
+
+    monkeypatch.setattr(google.auth, "load_credentials_from_file", load)
+    token = GoogleAuthToken()
+
+    assert token() == {"Authorization": "Bearer minted"}
+    assert token() == {"Authorization": "Bearer minted"}
+    assert seen == {"path": str(adc), "scopes": None, "default_scopes": [GCS_SCOPE]}
+    assert fake.refreshed == 1  # refreshed once, reused while valid
+
+
+def test_without_an_adc_file_the_metadata_server_gets_the_bucket_scope(monkeypatch):
+    import google.auth
+
+    import tools.cache_backend as backend_mod
+    from tools.cache_backend import GCS_SCOPE, GoogleAuthToken
+
+    seen = {}
+    monkeypatch.setattr(backend_mod, "_adc_file", lambda: None)
+
+    def default(scopes=None, default_scopes=None, **kwargs):
+        seen.update(scopes=scopes, default_scopes=default_scopes)
+        return _FakeCredentials(), None
+
+    monkeypatch.setattr(google.auth, "default", default)
+
+    assert GoogleAuthToken()() == {"Authorization": "Bearer minted"}
+    assert seen == {"scopes": None, "default_scopes": [GCS_SCOPE]}

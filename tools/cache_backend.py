@@ -417,6 +417,13 @@ class GoogleAuthToken:
 
     The token goes into request headers only: it is never logged, and no error
     message here carries it.
+
+    The bucket scope is passed as `default_scopes`, not `scopes`. A user ADC
+    file (gcloud auth application-default login) keeps the scopes it was
+    granted, and google-auth hands user credentials only `scopes`
+    (_get_authorized_user_credentials), so asking it for this one failed with
+    invalid_scope in the smoke test. Service accounts, and the metadata server
+    on Cloud Run, take the default scope; the bucket's IAM role is the boundary.
     """
 
     def __init__(self, scopes: tuple[str, ...] = (GCS_SCOPE,)) -> None:
@@ -433,9 +440,9 @@ class GoogleAuthToken:
                 path = _adc_file()
                 if path:
                     self._credentials, _ = google.auth.load_credentials_from_file(
-                        path, scopes=self._scopes)
+                        path, default_scopes=self._scopes)
                 else:
-                    self._credentials, _ = google.auth.default(scopes=self._scopes)
+                    self._credentials, _ = google.auth.default(default_scopes=self._scopes)
             credentials = self._credentials
             if not credentials.valid:
                 credentials.refresh(Request())
