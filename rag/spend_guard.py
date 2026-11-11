@@ -22,11 +22,13 @@ request was built, gives its reservation back; any other failure keeps the
 prompt part, because the guard cannot see whether a failed call was billed.
 Embedding responses carry no usage, so their reservation is their charge.
 
-WHERE THE COUNTER LIVES. In Upstash Redis when UPSTASH_REDIS_REST_URL and
-UPSTASH_REDIS_REST_TOKEN are set (one INCRBY + EXPIRE transaction per change,
-contract quoted in tools/cache_backend.py), so every replica spends from one
-budget. Otherwise, and for 60 s after any Upstash failure, in this process:
-each instance then has a budget of its own, and a restart resets it.
+WHERE THE COUNTER LIVES. In the Cloud Storage bucket when CRG_CACHE_GCS_BUCKET
+is set (compare-and-swap on the object's generation, contract quoted in
+tools/cache_backend.py), else in Upstash Redis when UPSTASH_REDIS_REST_URL and
+UPSTASH_REDIS_REST_TOKEN are set (one INCRBY + EXPIRE transaction per change),
+so every replica spends from one budget and it survives scale to zero.
+Otherwise, and for 60 s after any failure of the shared counter, in this
+process: each instance then has a budget of its own, and a restart resets it.
 
 SCOPES. `call_scope()` marks a stretch of work (one report in the UI). A scope
 counts the calls reserved inside it, and a scope opened with `blocked=` refuses
@@ -282,6 +284,12 @@ _counter: Counter | None = None
 def _counter_from_env(env: Mapping[str, str]) -> Counter:
     if env.get("PYTEST_CURRENT_TEST"):
         return LocalCounter()  # hermetic tests: the shared counter is never touched
+    bucket = env.get("CRG_CACHE_GCS_BUCKET")
+    if bucket:
+        from tools.cache_backend import GcsCounter
+
+        _log.info("spend counter: Cloud Storage bucket %s, falling back to this process", bucket)
+        return FallbackCounter(GcsCounter(bucket), LocalCounter())
     url, token = env.get("UPSTASH_REDIS_REST_URL"), env.get("UPSTASH_REDIS_REST_TOKEN")
     if url and token:
         from tools.cache_backend import UpstashRedisCache

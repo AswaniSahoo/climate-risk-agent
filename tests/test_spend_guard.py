@@ -282,6 +282,43 @@ def test_a_discarded_transaction_is_an_unavailable_counter(httpx_mock):
         UpstashRedisCache("https://db.example", "tok").incrby_with_ttl("k", 1, 60)
 
 
+def test_with_the_bucket_set_the_spend_count_is_shared_through_it():
+    """CRG_CACHE_GCS_BUCKET makes the Cloud Storage counter (compare-and-swap on
+    the object's generation, tools/cache_backend.py) the shared count, with this
+    process as the fallback: the same contract as the Upstash counter."""
+    from tools.cache_backend import GcsCounter
+
+    counter = sg._counter_from_env({"CRG_CACHE_GCS_BUCKET": "climate-risk-agent-cache"})
+
+    assert isinstance(counter, sg.FallbackCounter)
+    assert isinstance(counter.primary, GcsCounter)
+    assert isinstance(counter.fallback, sg.LocalCounter)
+    assert counter.name == "gcs+local"
+
+
+def test_the_bucket_wins_over_upstash_when_both_are_set():
+    from tools.cache_backend import GcsCounter
+
+    counter = sg._counter_from_env({"CRG_CACHE_GCS_BUCKET": "climate-risk-agent-cache",
+                                    "UPSTASH_REDIS_REST_URL": "https://db.example",
+                                    "UPSTASH_REDIS_REST_TOKEN": "tok"})
+
+    assert isinstance(counter, sg.FallbackCounter) and isinstance(counter.primary, GcsCounter)
+
+
+def test_the_bucket_counter_falls_back_to_this_process_when_storage_is_down(httpx_mock, caplog):
+    from tools.cache_backend import GcsCounter
+
+    httpx_mock.add_response(status_code=503, is_optional=True, is_reusable=True)
+    counter = sg.FallbackCounter(GcsCounter("climate-risk-agent-cache",
+                                            token=lambda: {"Authorization": "Bearer tok"}),
+                                 sg.LocalCounter(), retry_after_s=60.0, clock=lambda: 0.0)
+
+    assert counter.add("crg:v1:spend:2026-11-11", 40, 172_800) == 40  # counted here meanwhile
+    assert "counting in this process" in caplog.text
+    assert "tok" not in caplog.text
+
+
 # --- the per-client request limit used by the API ---------------------------
 
 def test_each_client_gets_its_own_window(monkeypatch):

@@ -261,17 +261,17 @@ probe is exempt, and `embedding_available_once` shares one answer per process
 (ten minutes when it passes, one minute when it fails), so a spent budget
 never shows up as the "embedding config" banner.
 
-Where the count lives. With `UPSTASH_REDIS_REST_URL` and
+Where the count lives. With `CRG_CACHE_GCS_BUCKET` set: in that Cloud Storage
+bucket, one compare-and-swap on the counter object's generation per change
+(`tools/cache_backend.py` `GcsCounter`), one budget for every instance, and it
+survives scale to zero. Else, with `UPSTASH_REDIS_REST_URL` and
 `UPSTASH_REDIS_REST_TOKEN` set: in Upstash, one `INCRBY` + `EXPIRE` transaction
-per change, one budget for every instance. Without them, or for 60 s after an
-Upstash error: in each process, so every instance has a budget of its own and a
-restart resets it, and the bound below multiplies by the instances that run in
-a day. The deployment shares its cache through Cloud Storage, not Upstash
-("Hardening the GCP side"), so this counter is per process there, and the
-service runs at most one instance (`--max-instances=1`): the in-process
-count is the service's count, except that every cold start begins the day
-at zero again. Until the counter is shared, the daily bound holds per
-instance lifetime, not per calendar day.
+per change. Without either, or for 60 s after an error of the shared counter:
+in each process, so every instance has a budget of its own and a restart resets
+it, and the bound below multiplies by the instances that run in a day. The
+deployment sets the bucket ("Hardening the GCP side"), so its count is shared
+and a cold start no longer begins the day at zero: the daily bound holds per
+calendar day (UTC).
 
 The per-client API limit (`CRG_API_RATE_LIMIT`) counts by the connecting
 address uvicorn reports, and uvicorn trusts `X-Forwarded-For` only from
