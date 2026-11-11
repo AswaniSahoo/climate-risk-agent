@@ -1,0 +1,929 @@
+{
+ "_note": "Cities whose ERA5 hazard fits scripts/precompute_climatology.py ships in tools/cache_seed/climatology.json. Entries with preset=true are the UI preset buttons at the exact coordinates the button sends (ui/app.py LOCATIONS; tests/test_precompute_climatology.py keeps the two in step). Every other entry is a place name as a person would type it; `--resolve` pins the coordinates the Open-Meteo geocoder returns for that query, which is what the typed-place path then asks for, so the fit key matches. The six presets come first, then large Indian cities, then large world cities; order is the order a paced run fills them in. To extend: append {\"name\", \"country\", \"query\"} and run --resolve.",
+ "cities": [
+  {
+   "name": "Rourkela",
+   "country": "India",
+   "latitude": 22.26,
+   "longitude": 84.85,
+   "preset": true
+  },
+  {
+   "name": "Mumbai",
+   "country": "India",
+   "latitude": 19.08,
+   "longitude": 72.88,
+   "preset": true
+  },
+  {
+   "name": "Delhi",
+   "country": "India",
+   "latitude": 28.61,
+   "longitude": 77.21,
+   "preset": true
+  },
+  {
+   "name": "Chennai",
+   "country": "India",
+   "latitude": 13.08,
+   "longitude": 80.27,
+   "preset": true
+  },
+  {
+   "name": "Kolkata",
+   "country": "India",
+   "latitude": 22.57,
+   "longitude": 88.36,
+   "preset": true
+  },
+  {
+   "name": "Berlin",
+   "country": "Germany",
+   "latitude": 52.52,
+   "longitude": 13.4,
+   "preset": true
+  },
+  {
+   "name": "Rourkela",
+   "country": "India",
+   "query": "Rourkela",
+   "latitude": 22.22496,
+   "longitude": 84.86414
+  },
+  {
+   "name": "Mumbai",
+   "country": "India",
+   "query": "Mumbai",
+   "latitude": 19.07283,
+   "longitude": 72.88261
+  },
+  {
+   "name": "Delhi",
+   "country": "India",
+   "query": "Delhi",
+   "latitude": 28.65195,
+   "longitude": 77.23149
+  },
+  {
+   "name": "Chennai",
+   "country": "India",
+   "query": "Chennai",
+   "latitude": 13.08784,
+   "longitude": 80.27847
+  },
+  {
+   "name": "Kolkata",
+   "country": "India",
+   "query": "Kolkata",
+   "latitude": 22.56263,
+   "longitude": 88.36304
+  },
+  {
+   "name": "Bengaluru",
+   "country": "India",
+   "query": "Bengaluru",
+   "latitude": 12.97194,
+   "longitude": 77.59369
+  },
+  {
+   "name": "Hyderabad",
+   "country": "India",
+   "query": "Hyderabad",
+   "latitude": 17.38405,
+   "longitude": 78.45636
+  },
+  {
+   "name": "Ahmedabad",
+   "country": "India",
+   "query": "Ahmedabad",
+   "latitude": 23.02579,
+   "longitude": 72.58727
+  },
+  {
+   "name": "Surat",
+   "country": "India",
+   "query": "Surat",
+   "latitude": 21.19594,
+   "longitude": 72.83023
+  },
+  {
+   "name": "Pune",
+   "country": "India",
+   "query": "Pune",
+   "latitude": 18.51957,
+   "longitude": 73.85535
+  },
+  {
+   "name": "Jaipur",
+   "country": "India",
+   "query": "Jaipur",
+   "latitude": 26.91962,
+   "longitude": 75.78781
+  },
+  {
+   "name": "Lucknow",
+   "country": "India",
+   "query": "Lucknow",
+   "latitude": 26.83928,
+   "longitude": 80.92313
+  },
+  {
+   "name": "Kanpur",
+   "country": "India",
+   "query": "Kanpur",
+   "latitude": 26.46523,
+   "longitude": 80.34975
+  },
+  {
+   "name": "Nagpur",
+   "country": "India",
+   "query": "Nagpur",
+   "latitude": 21.14631,
+   "longitude": 79.08491
+  },
+  {
+   "name": "Indore",
+   "country": "India",
+   "query": "Indore",
+   "latitude": 22.71792,
+   "longitude": 75.8333
+  },
+  {
+   "name": "Thane",
+   "country": "India",
+   "query": "Thane",
+   "latitude": 19.19704,
+   "longitude": 72.96355
+  },
+  {
+   "name": "Bhopal",
+   "country": "India",
+   "query": "Bhopal",
+   "latitude": 23.25469,
+   "longitude": 77.40289
+  },
+  {
+   "name": "Visakhapatnam",
+   "country": "India",
+   "query": "Visakhapatnam",
+   "latitude": 17.68009,
+   "longitude": 83.20161
+  },
+  {
+   "name": "Patna",
+   "country": "India",
+   "query": "Patna",
+   "latitude": 25.59408,
+   "longitude": 85.13563
+  },
+  {
+   "name": "Vadodara",
+   "country": "India",
+   "query": "Vadodara",
+   "latitude": 22.29941,
+   "longitude": 73.20812
+  },
+  {
+   "name": "Ghaziabad",
+   "country": "India",
+   "query": "Ghaziabad",
+   "latitude": 28.66535,
+   "longitude": 77.43915
+  },
+  {
+   "name": "Ludhiana",
+   "country": "India",
+   "query": "Ludhiana",
+   "latitude": 30.91204,
+   "longitude": 75.85379
+  },
+  {
+   "name": "Agra",
+   "country": "India",
+   "query": "Agra",
+   "latitude": 27.18333,
+   "longitude": 78.01667
+  },
+  {
+   "name": "Bhubaneswar",
+   "country": "India",
+   "query": "Bhubaneswar",
+   "latitude": 20.27241,
+   "longitude": 85.83385
+  },
+  {
+   "name": "Guwahati",
+   "country": "India",
+   "query": "Guwahati",
+   "latitude": 26.1844,
+   "longitude": 91.7458
+  },
+  {
+   "name": "Coimbatore",
+   "country": "India",
+   "query": "Coimbatore",
+   "latitude": 11.00555,
+   "longitude": 76.96612
+  },
+  {
+   "name": "Tokyo",
+   "country": "Japan",
+   "query": "Tokyo",
+   "latitude": 35.6895,
+   "longitude": 139.69171
+  },
+  {
+   "name": "Shanghai",
+   "country": "China",
+   "query": "Shanghai",
+   "latitude": 31.22222,
+   "longitude": 121.45806
+  },
+  {
+   "name": "Beijing",
+   "country": "China",
+   "query": "Beijing",
+   "latitude": 39.9075,
+   "longitude": 116.39723
+  },
+  {
+   "name": "São Paulo",
+   "country": "Brazil",
+   "query": "Sao Paulo",
+   "latitude": -23.5475,
+   "longitude": -46.63611
+  },
+  {
+   "name": "Mexico City",
+   "country": "Mexico",
+   "query": "Mexico City",
+   "latitude": 19.42847,
+   "longitude": -99.12766
+  },
+  {
+   "name": "Cairo",
+   "country": "Egypt",
+   "query": "Cairo",
+   "latitude": 30.06263,
+   "longitude": 31.24967
+  },
+  {
+   "name": "Dhaka",
+   "country": "Bangladesh",
+   "query": "Dhaka",
+   "latitude": 23.7104,
+   "longitude": 90.40744
+  },
+  {
+   "name": "Osaka",
+   "country": "Japan",
+   "query": "Osaka",
+   "latitude": 34.69379,
+   "longitude": 135.50107
+  },
+  {
+   "name": "New York",
+   "country": "United States",
+   "query": "New York",
+   "latitude": 40.71427,
+   "longitude": -74.00597
+  },
+  {
+   "name": "Karachi",
+   "country": "Pakistan",
+   "query": "Karachi",
+   "latitude": 24.8608,
+   "longitude": 67.0104
+  },
+  {
+   "name": "Buenos Aires",
+   "country": "Argentina",
+   "query": "Buenos Aires",
+   "latitude": -34.61315,
+   "longitude": -58.37723
+  },
+  {
+   "name": "Chongqing",
+   "country": "China",
+   "query": "Chongqing",
+   "latitude": 29.56026,
+   "longitude": 106.55771
+  },
+  {
+   "name": "Istanbul",
+   "country": "Republic of Türkiye",
+   "query": "Istanbul",
+   "latitude": 41.01384,
+   "longitude": 28.94966
+  },
+  {
+   "name": "Kinshasa",
+   "country": "Democratic Republic of Congo",
+   "query": "Kinshasa",
+   "latitude": -4.32758,
+   "longitude": 15.31357
+  },
+  {
+   "name": "Lagos",
+   "country": "Nigeria",
+   "query": "Lagos",
+   "latitude": 6.45407,
+   "longitude": 3.39467
+  },
+  {
+   "name": "Manila",
+   "country": "Philippines",
+   "query": "Manila",
+   "latitude": 14.6042,
+   "longitude": 120.9822
+  },
+  {
+   "name": "Guangzhou",
+   "country": "China",
+   "query": "Guangzhou",
+   "latitude": 23.11667,
+   "longitude": 113.25
+  },
+  {
+   "name": "Lahore",
+   "country": "Pakistan",
+   "query": "Lahore",
+   "latitude": 31.558,
+   "longitude": 74.35071
+  },
+  {
+   "name": "Moscow",
+   "country": "Russia",
+   "query": "Moscow",
+   "latitude": 55.75204,
+   "longitude": 37.61781
+  },
+  {
+   "name": "Shenzhen",
+   "country": "China",
+   "query": "Shenzhen",
+   "latitude": 22.54554,
+   "longitude": 114.0683
+  },
+  {
+   "name": "Los Angeles",
+   "country": "United States",
+   "query": "Los Angeles",
+   "latitude": 34.05223,
+   "longitude": -118.24368
+  },
+  {
+   "name": "Paris",
+   "country": "France",
+   "query": "Paris",
+   "latitude": 48.85341,
+   "longitude": 2.3488
+  },
+  {
+   "name": "Bogotá",
+   "country": "Colombia",
+   "query": "Bogota",
+   "latitude": 4.60971,
+   "longitude": -74.08175
+  },
+  {
+   "name": "Jakarta",
+   "country": "Indonesia",
+   "query": "Jakarta",
+   "latitude": -6.21462,
+   "longitude": 106.84513
+  },
+  {
+   "name": "Lima",
+   "country": "Peru",
+   "query": "Lima",
+   "latitude": -12.04318,
+   "longitude": -77.02824
+  },
+  {
+   "name": "Bangkok",
+   "country": "Thailand",
+   "query": "Bangkok",
+   "latitude": 13.75398,
+   "longitude": 100.50144
+  },
+  {
+   "name": "Seoul",
+   "country": "South Korea",
+   "query": "Seoul",
+   "latitude": 37.566,
+   "longitude": 126.9784
+  },
+  {
+   "name": "London",
+   "country": "United Kingdom",
+   "query": "London",
+   "latitude": 51.50853,
+   "longitude": -0.12574
+  },
+  {
+   "name": "Tehran",
+   "country": "Iran",
+   "query": "Tehran",
+   "latitude": 35.69439,
+   "longitude": 51.42151
+  },
+  {
+   "name": "Chicago",
+   "country": "United States",
+   "query": "Chicago",
+   "latitude": 41.85003,
+   "longitude": -87.65005
+  },
+  {
+   "name": "Chengdu",
+   "country": "China",
+   "query": "Chengdu",
+   "latitude": 30.66667,
+   "longitude": 104.06667
+  },
+  {
+   "name": "Wuhan",
+   "country": "China",
+   "query": "Wuhan",
+   "latitude": 30.58333,
+   "longitude": 114.26667
+  },
+  {
+   "name": "Ho Chi Minh City",
+   "country": "Vietnam",
+   "query": "Ho Chi Minh City",
+   "latitude": 10.82302,
+   "longitude": 106.62965
+  },
+  {
+   "name": "Luanda",
+   "country": "Angola",
+   "query": "Luanda",
+   "latitude": -8.83682,
+   "longitude": 13.23432
+  },
+  {
+   "name": "Kuala Lumpur",
+   "country": "Malaysia",
+   "query": "Kuala Lumpur",
+   "latitude": 3.1412,
+   "longitude": 101.68653
+  },
+  {
+   "name": "Hong Kong",
+   "country": "",
+   "query": "Hong Kong",
+   "latitude": 22.27832,
+   "longitude": 114.17469
+  },
+  {
+   "name": "Riyadh",
+   "country": "Saudi Arabia",
+   "query": "Riyadh",
+   "latitude": 24.68773,
+   "longitude": 46.72185
+  },
+  {
+   "name": "Baghdad",
+   "country": "Iraq",
+   "query": "Baghdad",
+   "latitude": 33.34058,
+   "longitude": 44.40088
+  },
+  {
+   "name": "Santiago",
+   "country": "Chile",
+   "query": "Santiago",
+   "latitude": -33.45694,
+   "longitude": -70.64827
+  },
+  {
+   "name": "Madrid",
+   "country": "Spain",
+   "query": "Madrid",
+   "latitude": 40.4165,
+   "longitude": -3.70256
+  },
+  {
+   "name": "Toronto",
+   "country": "Canada",
+   "query": "Toronto",
+   "latitude": 43.70643,
+   "longitude": -79.39864
+  },
+  {
+   "name": "Houston",
+   "country": "United States",
+   "query": "Houston",
+   "latitude": 29.76328,
+   "longitude": -95.36327
+  },
+  {
+   "name": "Dar es Salaam",
+   "country": "Tanzania",
+   "query": "Dar es Salaam",
+   "latitude": -6.82349,
+   "longitude": 39.26951
+  },
+  {
+   "name": "Miami",
+   "country": "United States",
+   "query": "Miami",
+   "latitude": 25.77427,
+   "longitude": -80.19366
+  },
+  {
+   "name": "Singapore",
+   "country": "Singapore",
+   "query": "Singapore",
+   "latitude": 1.28967,
+   "longitude": 103.85007
+  },
+  {
+   "name": "Khartoum",
+   "country": "Sudan",
+   "query": "Khartoum",
+   "latitude": 15.55177,
+   "longitude": 32.53241
+  },
+  {
+   "name": "Barcelona",
+   "country": "Spain",
+   "query": "Barcelona",
+   "latitude": 41.38879,
+   "longitude": 2.15899
+  },
+  {
+   "name": "Johannesburg",
+   "country": "South Africa",
+   "query": "Johannesburg",
+   "latitude": -26.20227,
+   "longitude": 28.04363
+  },
+  {
+   "name": "St Petersburg",
+   "country": "Russia",
+   "query": "Saint Petersburg",
+   "latitude": 59.93863,
+   "longitude": 30.31413
+  },
+  {
+   "name": "Yangon",
+   "country": "Myanmar",
+   "query": "Yangon",
+   "latitude": 16.80528,
+   "longitude": 96.15611
+  },
+  {
+   "name": "Alexandria",
+   "country": "Egypt",
+   "query": "Alexandria",
+   "latitude": 31.20176,
+   "longitude": 29.91582
+  },
+  {
+   "name": "Guadalajara",
+   "country": "Mexico",
+   "query": "Guadalajara",
+   "latitude": 20.67738,
+   "longitude": -103.34749
+  },
+  {
+   "name": "Abidjan",
+   "country": "Ivory Coast",
+   "query": "Abidjan",
+   "latitude": 5.35444,
+   "longitude": -4.00167
+  },
+  {
+   "name": "Addis Ababa",
+   "country": "Ethiopia",
+   "query": "Addis Ababa",
+   "latitude": 9.02497,
+   "longitude": 38.74689
+  },
+  {
+   "name": "Nairobi",
+   "country": "Kenya",
+   "query": "Nairobi",
+   "latitude": -1.28333,
+   "longitude": 36.81667
+  },
+  {
+   "name": "Ankara",
+   "country": "Republic of Türkiye",
+   "query": "Ankara",
+   "latitude": 39.91987,
+   "longitude": 32.85427
+  },
+  {
+   "name": "Sydney",
+   "country": "Australia",
+   "query": "Sydney",
+   "latitude": -33.86785,
+   "longitude": 151.20732
+  },
+  {
+   "name": "Melbourne",
+   "country": "Australia",
+   "query": "Melbourne",
+   "latitude": -37.814,
+   "longitude": 144.96332
+  },
+  {
+   "name": "Berlin",
+   "country": "Germany",
+   "query": "Berlin",
+   "latitude": 52.52437,
+   "longitude": 13.41053
+  },
+  {
+   "name": "Rome",
+   "country": "Italy",
+   "query": "Rome",
+   "latitude": 41.89193,
+   "longitude": 12.51133
+  },
+  {
+   "name": "Athens",
+   "country": "Greece",
+   "query": "Athens",
+   "latitude": 37.98376,
+   "longitude": 23.72784
+  },
+  {
+   "name": "Cape Town",
+   "country": "South Africa",
+   "query": "Cape Town",
+   "latitude": -33.92584,
+   "longitude": 18.42322
+  },
+  {
+   "name": "Casablanca",
+   "country": "Morocco",
+   "query": "Casablanca",
+   "latitude": 33.58831,
+   "longitude": -7.61138
+  },
+  {
+   "name": "Algiers",
+   "country": "Algeria",
+   "query": "Algiers",
+   "latitude": 36.73225,
+   "longitude": 3.08746
+  },
+  {
+   "name": "Kabul",
+   "country": "Afghanistan",
+   "query": "Kabul",
+   "latitude": 34.52813,
+   "longitude": 69.17233
+  },
+  {
+   "name": "Kano",
+   "country": "Nigeria",
+   "query": "Kano",
+   "latitude": 12.00012,
+   "longitude": 8.51672
+  },
+  {
+   "name": "Accra",
+   "country": "Ghana",
+   "query": "Accra",
+   "latitude": 5.55602,
+   "longitude": -0.1969
+  },
+  {
+   "name": "Dakar",
+   "country": "Senegal",
+   "query": "Dakar",
+   "latitude": 14.6937,
+   "longitude": -17.44406
+  },
+  {
+   "name": "Hanoi",
+   "country": "Vietnam",
+   "query": "Hanoi",
+   "latitude": 21.0245,
+   "longitude": 105.84117
+  },
+  {
+   "name": "Taipei",
+   "country": "Taiwan",
+   "query": "Taipei",
+   "latitude": 25.05306,
+   "longitude": 121.52639
+  },
+  {
+   "name": "Busan",
+   "country": "South Korea",
+   "query": "Busan",
+   "latitude": 35.10168,
+   "longitude": 129.03004
+  },
+  {
+   "name": "Monterrey",
+   "country": "Mexico",
+   "query": "Monterrey",
+   "latitude": 25.68435,
+   "longitude": -100.31721
+  },
+  {
+   "name": "Phoenix",
+   "country": "United States",
+   "query": "Phoenix",
+   "latitude": 33.44838,
+   "longitude": -112.07404
+  },
+  {
+   "name": "Dallas",
+   "country": "United States",
+   "query": "Dallas",
+   "latitude": 32.78306,
+   "longitude": -96.80667
+  },
+  {
+   "name": "San Francisco",
+   "country": "United States",
+   "query": "San Francisco",
+   "latitude": 37.77493,
+   "longitude": -122.41942
+  },
+  {
+   "name": "Seattle",
+   "country": "United States",
+   "query": "Seattle",
+   "latitude": 47.60621,
+   "longitude": -122.33207
+  },
+  {
+   "name": "Montreal",
+   "country": "Canada",
+   "query": "Montreal",
+   "latitude": 45.50884,
+   "longitude": -73.58781
+  },
+  {
+   "name": "Caracas",
+   "country": "Venezuela",
+   "query": "Caracas",
+   "latitude": 10.48801,
+   "longitude": -66.87919
+  },
+  {
+   "name": "Havana",
+   "country": "Cuba",
+   "query": "Havana",
+   "latitude": 23.13302,
+   "longitude": -82.38304
+  },
+  {
+   "name": "Lisbon",
+   "country": "Portugal",
+   "query": "Lisbon",
+   "latitude": 38.72509,
+   "longitude": -9.1498
+  },
+  {
+   "name": "Warsaw",
+   "country": "Poland",
+   "query": "Warsaw",
+   "latitude": 52.22977,
+   "longitude": 21.01178
+  },
+  {
+   "name": "Vienna",
+   "country": "Austria",
+   "query": "Vienna",
+   "latitude": 48.20849,
+   "longitude": 16.37208
+  },
+  {
+   "name": "Kyiv",
+   "country": "Ukraine",
+   "query": "Kyiv",
+   "latitude": 50.45466,
+   "longitude": 30.5238
+  },
+  {
+   "name": "Bucharest",
+   "country": "Romania",
+   "query": "Bucharest",
+   "latitude": 44.43225,
+   "longitude": 26.10626
+  },
+  {
+   "name": "Budapest",
+   "country": "Hungary",
+   "query": "Budapest",
+   "latitude": 47.49835,
+   "longitude": 19.04045
+  },
+  {
+   "name": "Munich",
+   "country": "Germany",
+   "query": "Munich",
+   "latitude": 48.13743,
+   "longitude": 11.57549
+  },
+  {
+   "name": "Milan",
+   "country": "Italy",
+   "query": "Milan",
+   "latitude": 45.46427,
+   "longitude": 9.18951
+  },
+  {
+   "name": "Amsterdam",
+   "country": "The Netherlands",
+   "query": "Amsterdam",
+   "latitude": 52.37403,
+   "longitude": 4.88969
+  },
+  {
+   "name": "Brussels",
+   "country": "Belgium",
+   "query": "Brussels",
+   "latitude": 50.85045,
+   "longitude": 4.34878
+  },
+  {
+   "name": "Stockholm",
+   "country": "Sweden",
+   "query": "Stockholm",
+   "latitude": 59.32938,
+   "longitude": 18.06871
+  },
+  {
+   "name": "Dubai",
+   "country": "United Arab Emirates",
+   "query": "Dubai",
+   "latitude": 25.07725,
+   "longitude": 55.30927
+  },
+  {
+   "name": "Doha",
+   "country": "Qatar",
+   "query": "Doha",
+   "latitude": 25.28545,
+   "longitude": 51.53096
+  },
+  {
+   "name": "Jeddah",
+   "country": "Saudi Arabia",
+   "query": "Jeddah",
+   "latitude": 21.49012,
+   "longitude": 39.18624
+  },
+  {
+   "name": "Tashkent",
+   "country": "Uzbekistan",
+   "query": "Tashkent",
+   "latitude": 41.26465,
+   "longitude": 69.21627
+  },
+  {
+   "name": "Almaty",
+   "country": "Kazakhstan",
+   "query": "Almaty",
+   "latitude": 43.25249,
+   "longitude": 76.9115
+  },
+  {
+   "name": "Auckland",
+   "country": "New Zealand",
+   "query": "Auckland",
+   "latitude": -36.84853,
+   "longitude": 174.76349
+  },
+  {
+   "name": "Perth",
+   "country": "Australia",
+   "query": "Perth",
+   "latitude": -31.95224,
+   "longitude": 115.8614
+  },
+  {
+   "name": "Brisbane",
+   "country": "Australia",
+   "query": "Brisbane",
+   "latitude": -27.46794,
+   "longitude": 153.02809
+  },
+  {
+   "name": "Kathmandu",
+   "country": "Nepal",
+   "query": "Kathmandu",
+   "latitude": 27.70169,
+   "longitude": 85.3206
+  },
+  {
+   "name": "Colombo",
+   "country": "Sri Lanka",
+   "query": "Colombo",
+   "latitude": 6.93548,
+   "longitude": 79.84868
+  }
+ ]
+}
