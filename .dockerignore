@@ -1,7 +1,9 @@
-# Keep the image lean; data/ is INTENTIONALLY not ignored — a local build
-# ships the embedding cache (13 MB) so the container starts on hybrid
-# retrieval without re-embedding. Fresh clones simply have no data/ and the
-# Dockerfile downloads the corpus itself.
+# Keep the image lean. data/ is not ignored, only so that local IPCC PDFs save
+# the build a download (scripts/download_ipcc.py checks each one against its
+# pinned sha256 either way). No cache from the context reaches the image: the
+# Dockerfile wipes data/cache, bakes the corpus vectors from the eval-cache-v1
+# release asset pinned by sha256, and fails the build unless every chunk has
+# its vector. A fresh clone with no data/ builds the same image.
 .git
 .github
 .venv
