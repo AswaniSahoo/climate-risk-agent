@@ -6,16 +6,22 @@ chunks through the API, at 62 s per batch of 50. The image now takes them from
 the eval-cache-v1 release asset, pinned by sha256 (scripts/fetch_eval_cache.py),
 and refuses to build unless every chunk it will serve has its vector on disk
 (scripts/check_baked_index.py).
+
+The vectors are also packed into one file (scripts/pack_vectors.py), because a
+Cloud Run gen2 container spent 17.5 s reading them as 2,730 files. The check
+then holds the pack to the files, bit for bit.
 """
 import hashlib
 import json
 
 import httpx
+import numpy as np
 import pytest
 
-from rag.embed import DiskVectorCache, cache_key
+from rag.embed import DiskVectorCache, cache_key, pack_path, read_pack, vector_digest, write_pack
 from scripts import check_baked_index as check
 from scripts import fetch_eval_cache as fetch
+from scripts import pack_vectors
 
 URL = "https://github.com/AswaniSahoo/climate-risk-agent/releases/download/eval-cache-v1/eval-cache-v1.tar.gz"
 PAYLOAD = b"not really a tarball, just bytes to hash"
@@ -71,9 +77,13 @@ def _baked(tmp_path, texts, vectors_for):
         {"chunk_id": f"d.pdf#p{i}#0", "source": "d.pdf", "page": i, "text": text}
         for i, text in enumerate(texts, 1)]}))
     store = DiskVectorCache(tmp_path / "embeddings")
-    for text in vectors_for:
-        store.put(cache_key(text, "RETRIEVAL_DOCUMENT"), [0.1, 0.2])
+    for i, text in enumerate(vectors_for):  # distinct vectors, so a swapped row would show
+        store.put(cache_key(text, "RETRIEVAL_DOCUMENT"), [0.1 + i, 0.2, -0.0])
     return chunks, tmp_path / "embeddings"
+
+
+def _args(chunks, vectors):
+    return ["--chunks", str(chunks), "--vectors", str(vectors)]
 
 
 def test_a_complete_index_passes_and_counts_what_it_saw(tmp_path):
@@ -109,11 +119,87 @@ def test_a_query_vector_does_not_stand_in_for_a_document_vector(tmp_path):
     assert check.coverage(chunks, vectors).missing == ["d.pdf#p1#0"]
 
 
-def test_the_command_line_passes_on_a_complete_index(tmp_path, capsys):
+def test_the_command_line_passes_on_a_complete_index_and_its_pack(tmp_path, capsys):
     chunks, vectors = _baked(tmp_path, ["a", "b"], ["a", "b"])
 
-    assert check.main(["--chunks", str(chunks), "--vectors", str(vectors)]) == 0
-    assert "2 chunks, 2 document vectors" in capsys.readouterr().out
+    assert pack_vectors.main(_args(chunks, vectors)) == 0
+    assert check.main(_args(chunks, vectors)) == 0
+    out = capsys.readouterr().out
+    assert "2 chunks, 2 document vectors" in out
+    assert "2 in the pack" in out and "bit for bit" in out
+
+
+# --- the pack: every chunk's document vector in one file, exactly ------------
+
+def test_the_pack_holds_each_chunk_vector_bit_for_bit_and_no_query_vector(tmp_path, capsys):
+    chunks, vectors = _baked(tmp_path, ["a", "b", "c"], ["a", "b", "c"])
+    DiskVectorCache(vectors).put(cache_key("an eval question", "RETRIEVAL_QUERY"), [0.3, 0.4, 0.5])
+
+    assert pack_vectors.main(_args(chunks, vectors)) == 0
+
+    packed = read_pack(pack_path(vectors))
+    files = DiskVectorCache(vectors)
+    keys = [cache_key(text, "RETRIEVAL_DOCUMENT") for text in "abc"]
+    assert set(packed) == {vector_digest(key) for key in keys}
+    for key in keys:
+        assert packed[vector_digest(key)].tobytes() == files.file_vector(key).tobytes()
+    assert "3 chunks" in capsys.readouterr().out
+
+
+def test_two_chunks_with_one_text_share_one_row(tmp_path, capsys):
+    chunks, vectors = _baked(tmp_path, ["same", "same", "other"], ["same", "other"])
+
+    assert pack_vectors.main(_args(chunks, vectors)) == 0
+    assert len(read_pack(pack_path(vectors))) == 2
+    assert check.main(_args(chunks, vectors)) == 0
+    assert "3 in the pack" in capsys.readouterr().out
+
+
+def test_the_pack_step_refuses_an_incomplete_index_and_writes_no_pack(tmp_path, capsys):
+    chunks, vectors = _baked(tmp_path, ["a", "b"], ["a"])
+
+    assert pack_vectors.main(_args(chunks, vectors)) == 1
+    assert not pack_path(vectors).exists()
+    assert "would embed" in capsys.readouterr().err
+
+
+def test_the_check_fails_without_the_pack(tmp_path, capsys):
+    chunks, vectors = _baked(tmp_path, ["a", "b"], ["a", "b"])
+
+    assert check.main(_args(chunks, vectors)) == 1
+    err = capsys.readouterr().err
+    assert "VECTOR PACK MISSING" in err and "scripts/pack_vectors.py" in err
+
+
+def test_the_check_fails_when_the_pack_lacks_a_chunk(tmp_path, capsys):
+    chunks, vectors = _baked(tmp_path, ["a", "b"], ["a", "b"])
+    key = cache_key("a", "RETRIEVAL_DOCUMENT")
+    write_pack(pack_path(vectors), {vector_digest(key): DiskVectorCache(vectors).file_vector(key)})
+
+    assert check.main(_args(chunks, vectors)) == 1
+    err = capsys.readouterr().err
+    assert "VECTOR PACK WRONG" in err and "d.pdf#p2#0" in err
+
+
+def test_the_check_fails_when_a_packed_vector_is_one_bit_off_its_file(tmp_path, capsys):
+    chunks, vectors = _baked(tmp_path, ["a", "b"], ["a", "b"])
+    assert pack_vectors.main(_args(chunks, vectors)) == 0
+    key = cache_key("b", "RETRIEVAL_DOCUMENT")
+    vector = DiskVectorCache(vectors).file_vector(key)
+    vector[0] = np.nextafter(vector[0], np.float32(2.0))  # the next float32 up: one ulp
+    np.save(vectors / f"{vector_digest(key)}.npy", vector)
+
+    assert check.main(_args(chunks, vectors)) == 1
+    err = capsys.readouterr().err
+    assert "VECTOR PACK WRONG" in err and "d.pdf#p2#0" in err and "1 differ" in err
+
+
+def test_the_check_fails_on_an_unreadable_pack(tmp_path, capsys):
+    chunks, vectors = _baked(tmp_path, ["a"], ["a"])
+    pack_path(vectors).write_bytes(b"not a numpy file")
+
+    assert check.main(_args(chunks, vectors)) == 1
+    assert "VECTOR PACK WRONG" in capsys.readouterr().err
 
 
 def test_an_http_error_type_is_what_the_fetch_wraps():
