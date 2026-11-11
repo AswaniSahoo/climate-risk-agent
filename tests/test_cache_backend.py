@@ -503,6 +503,7 @@ def test_every_committed_seed_file_loads_cleanly(caplog):
     with caplog.at_level(logging.WARNING):
         entries = load_seed_entries(SEED_DIR)
 
+    assert files, "tools/cache_seed/ should hold the committed precomputed entries"
     assert "unreadable" not in caplog.text and "malformed" not in caplog.text
     total = sum(len(json.loads(f.read_text(encoding="utf-8"))["entries"]) for f in files)
     assert len(entries) == total
