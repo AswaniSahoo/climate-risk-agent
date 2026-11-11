@@ -6,6 +6,7 @@ suite goes red — security by regression pin, not by policy document.
 import json
 import re
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -121,32 +122,119 @@ def test_no_api_key_committed_to_repo():
     assert not offenders, f"Google API key pattern found in: {offenders}"
 
 
-# --- supply chain: the two workflows pin the same action majors -------------
+# --- supply chain: workflows run reviewed code with the least token ---------
 
-def test_both_workflows_pin_the_same_action_majors():
-    """A GitHub Action major IS the supply-chain pin. ci.yml and evals.yml sat on
-    different majors of the same actions (checkout v4/v7, setup-uv v5/v10), so a
-    breaking change would land in one pipeline and not the other, and only one of
-    them would get debugged.
+_WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 
-    Majors verified against the GitHub releases API on 2026-09-02:
-    actions/checkout v7.0.1, astral-sh/setup-uv v10.0.1,
-    actions/upload-artifact v7.0.1.
-    """
-    from pathlib import Path
+# A tag such as `v4` is a pointer the action's owner can move, so every action
+# is pinned to a full commit SHA, with the release it came from in a comment.
+# Resolved with `gh api repos/<repo>/git/ref/tags/<tag>` on 2026-11-11 (all
+# three are lightweight tags on commits). Each SHA is the commit the floating
+# major tag (`v4`, `v5`) pointed at that day, so the pin changed no behaviour.
+# Newer majors exist (checkout v7.0.1, setup-uv v10.3.3, upload-artifact
+# v7.0.2); moving to one is a deliberate upgrade, not part of a pin.
+PINNED_ACTIONS = {
+    "actions/checkout": ("11d5960a326750d5838078e36cf38b85af677262", "v4.4.0"),
+    "astral-sh/setup-uv": ("d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86", "v5.4.2"),
+    "actions/upload-artifact": ("ea165f8d65b6e75b540449e92b4886f43607fa02", "v4.6.2"),
+}
 
-    workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
-    pins: dict[str, set[str]] = {}
-    for path in sorted(workflows.glob("*.yml")):
-        for action, major in re.findall(
-            r"uses:\s*([\w.-]+/[\w.-]+)@v(\d+)", path.read_text(encoding="utf-8")
-        ):
-            pins.setdefault(action, set()).add(major)
+# setup-uv otherwise downloads whatever uv is newest, unverified: v5.4.2 checks
+# a checksum it is given, or one from its own list, which predates this uv.
+# 0.13.7 is what the last green CI run installed; the checksum is the release's
+# own uv-x86_64-unknown-linux-gnu.tar.gz.sha256, which matches the digest
+# GitHub reports for that asset.
+UV_VERSION = "0.13.7"
+UV_LINUX_X86_64_SHA256 = "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
 
-    assert pins, "no pinned actions found — did the workflows move?"
-    split = {a: v for a, v in pins.items() if len(v) > 1}
-    assert not split, f"the same action pinned at two majors: {split}"
-    assert pins["actions/checkout"] == {"4"}
-    assert pins["astral-sh/setup-uv"] == {"5"}
-    assert pins["actions/upload-artifact"] == {"4"}
+
+def _workflows() -> list[tuple[str, str]]:
+    found = [(p.name, p.read_text(encoding="utf-8")) for p in sorted(_WORKFLOWS.glob("*.yml"))]
+    assert found, "no workflows found: did .github/workflows move?"
+    return found
+
+
+def _steps(text: str) -> list[str]:
+    """Each step of a workflow as its own block of text (steps sit at six spaces)."""
+    return re.split(r"\n(?=      - )", text)[1:]
+
+
+def _step_name(step: str) -> str:
+    match = re.match(r"      - name: ([^\n]+)", step)
+    return match.group(1) if match else step.splitlines()[0].strip()
+
+
+def test_every_action_is_pinned_to_a_full_commit_sha():
+    uses = [
+        (name, ref, tail)
+        for name, text in _workflows()
+        for ref, tail in re.findall(r"uses:\s*(\S+)([^\n]*)", text)
+    ]
+    assert uses, "no actions found"
+    for name, ref, tail in uses:
+        action, _, sha = ref.partition("@")
+        assert action in PINNED_ACTIONS, f"{name}: {action} is not a reviewed action"
+        want_sha, want_tag = PINNED_ACTIONS[action]
+        assert sha == want_sha, f"{name}: {ref} is not pinned to {want_sha}"
+        assert tail.strip() == f"# {want_tag}", f"{name}: {ref} lacks the '# {want_tag}' comment"
+
+
+def test_every_workflow_defaults_the_token_to_read_only():
+    """A job that needs more asks at job level, with its reason, or it reads only."""
+    for name, text in _workflows():
+        assert re.search(r"^permissions:\n  contents: read\n", text, re.MULTILINE), (
+            f"{name} has no top-level `permissions: contents: read`"
+        )
+
+
+def test_checkout_never_leaves_the_token_in_git_config():
+    """No job pushes, so none needs the token persisted into .git/config."""
+    for name, text in _workflows():
+        checkouts = [s for s in _steps(text) if "uses: actions/checkout@" in s]
+        assert checkouts, f"{name} has no checkout step"
+        for step in checkouts:
+            assert "persist-credentials: false" in step, f"{name}: checkout keeps the token"
+
+
+def test_setup_uv_installs_a_pinned_and_verified_uv():
+    for name, text in _workflows():
+        for step in (s for s in _steps(text) if "uses: astral-sh/setup-uv@" in s):
+            assert f'version: "{UV_VERSION}"' in step, f"{name}: uv version is not pinned"
+            assert f'checksum: "{UV_LINUX_X86_64_SHA256}"' in step, f"{name}: uv is not verified"
+
+
+def test_ci_installs_exactly_the_lock():
+    """`--locked` fails the job when uv.lock no longer matches pyproject.toml."""
+    syncs = re.findall(r"uv sync[^\n]*", dict(_workflows())["ci.yml"])
+    assert syncs and all("--locked" in s for s in syncs), syncs
+
+
+def test_the_gemini_key_reaches_only_the_steps_that_call_gemini():
+    """Job-level env hands a secret to every step, third-party actions included.
+    Only the presence check and the four eval steps that call the model get it."""
+    workflows = dict(_workflows())
+    text = workflows["evals.yml"]
+    head, _, _ = text.partition("    steps:")
+    assert "secrets.GEMINI_API_KEY" not in head, "GEMINI_API_KEY is set above step level"
+    holders = {_step_name(s) for s in _steps(text) if "secrets.GEMINI_API_KEY" in s}
+    assert holders == {
+        "Require the GEMINI_API_KEY secret",
+        "Retrieval eval (dev)",
+        "End-to-end eval (dev)",
+        "Retrieval eval (held-out test set)",
+        "End-to-end eval (held-out test set)",
+    }
+    for name, other in workflows.items():
+        if name != "evals.yml":
+            assert "secrets." not in other, f"{name} reads a secret"
+
+
+def test_no_workflow_can_reach_vertex():
+    """rag/gemini_client.py goes to Vertex only when GOOGLE_GENAI_USE_VERTEXAI is
+    true and Google credentials exist. No workflow sets either."""
+    for name, text in _workflows():
+        for marker in ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_CLOUD_PROJECT",
+                       "GOOGLE_APPLICATION_CREDENTIALS", "google-github-actions/auth",
+                       "workload_identity_provider"):
+            assert marker not in text, f"{name} mentions {marker}"
 
