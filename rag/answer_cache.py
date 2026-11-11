@@ -42,7 +42,7 @@ from rag.embed import DIMS
 from rag.embed import MODEL as EMBED_MODEL
 from rag.gemini_client import GENERATE_MODEL
 from tools.ar6_regions import AR6Region
-from tools.cache_backend import CacheBackend, DiskCache, JsonCache
+from tools.cache_backend import CacheBackend, DiskCache, JsonCache, source_bytes
 
 _log = logging.getLogger(__name__)
 
@@ -68,9 +68,10 @@ _SOURCE_DIR = Path(__file__).resolve().parent
 
 @lru_cache(maxsize=8)
 def _source_digest(names: tuple[str, ...]) -> str:
+    """Hash of these rag/ sources, read with LF line endings (a CRLF checkout agrees)."""
     digest = hashlib.sha256()
     for name in names:
-        digest.update((_SOURCE_DIR / name).read_bytes())
+        digest.update(source_bytes(_SOURCE_DIR / name))
     return digest.hexdigest()[:16]
 
 

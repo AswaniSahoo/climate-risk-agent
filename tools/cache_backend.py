@@ -306,6 +306,17 @@ class FallbackCache:
 SEED_DIR = Path(__file__).resolve().parent / "cache_seed"
 
 
+def source_bytes(path: Path | str) -> bytes:
+    """A source file's bytes with CRLF line endings read as LF.
+
+    Cache keys hash source code so that an edit retires what the old code
+    computed. A Windows checkout (core.autocrlf) holds the same code with CRLF
+    endings; hashed raw, it would build other keys than a Linux checkout and
+    every shipped entry would miss there. Line endings are not code.
+    """
+    return Path(path).read_bytes().replace(b"\r\n", b"\n")
+
+
 class PrecomputedCache:
     """Read-only entries loaded from the seed files. Writes are ignored."""
 

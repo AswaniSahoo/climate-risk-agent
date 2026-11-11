@@ -9,11 +9,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 
 from rag.chunk import Chunk, chunk_pages
 from rag.parse import extract_pages
+from tools.cache_backend import source_bytes
 
 _log = logging.getLogger(__name__)
 
@@ -31,19 +33,41 @@ CORPUS_FILES = (
 CHUNK_CACHE = Path("data/cache/chunks.json")
 
 
+_CHUNKER_SOURCE = Path(__file__).parent / "chunk.py"  # module attr so tests can redirect it
+
+
+def corpus_file_sizes() -> dict[str, int | None]:
+    """Each corpus PDF's size in bytes, or None when it is not on disk."""
+    sizes: dict[str, int | None] = {}
+    for name in CORPUS_FILES:
+        path = CORPUS_DIR / name
+        sizes[name] = path.stat().st_size if path.exists() else None
+    return sizes
+
+
+def fingerprint_for(sizes: Mapping[str, int | None]) -> str:
+    """The fingerprint `_fingerprint` returns for these PDF sizes.
+
+    Pure in `sizes`, so a check that runs without the PDFs (CI) can rebuild
+    the corpus version a shipped cache entry was keyed with. The chunker's
+    source is read with LF line endings, so a CRLF checkout agrees.
+    """
+    h = hashlib.sha256()
+    for name in CORPUS_FILES:
+        size = sizes.get(name)
+        h.update(name.encode())
+        h.update(str(size).encode() if size is not None else b"missing")
+    h.update(source_bytes(_CHUNKER_SOURCE))
+    return h.hexdigest()[:16]
+
+
 def _fingerprint() -> str:
     """Identity of a chunking result: the PDFs plus the code that chunks them.
 
     Hashing rag/chunk.py's source means a re-chunk invalidates the cache
-    automatically — no version constant anyone can forget to bump.
+    automatically, with no version constant anyone can forget to bump.
     """
-    h = hashlib.sha256()
-    for name in CORPUS_FILES:
-        path = CORPUS_DIR / name
-        h.update(name.encode())
-        h.update(str(path.stat().st_size).encode() if path.exists() else b"missing")
-    h.update((Path(__file__).parent / "chunk.py").read_bytes())
-    return h.hexdigest()[:16]
+    return fingerprint_for(corpus_file_sizes())
 
 
 class CorpusError(RuntimeError):

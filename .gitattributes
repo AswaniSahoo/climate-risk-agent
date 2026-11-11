@@ -1,0 +1,5 @@
+# Python sources are hashed into cache keys (tools/climatology.py, rag/corpus.py,
+# rag/answer_cache.py) and the shipped entries in tools/cache_seed/ carry those
+# keys. Keep .py files LF on every checkout, Windows core.autocrlf included, so
+# every clone builds the same keys. rag/ also reads sources as LF when hashing.
+*.py text eol=lf
