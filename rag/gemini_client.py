@@ -10,12 +10,22 @@ Auth is env-driven, explicit, and fails loudly:
 
 Everything above this seam (caching, batching, schema validation, scope guard)
 is SDK-agnostic; tests monkeypatch these two functions instead of mocking HTTP.
+
+Spend: every call is reserved against the daily budget before it is sent and
+settled after (rag/spend_guard.py). A refusal raises ModelBudgetExceeded, a
+GeminiError, so callers degrade exactly as they do for any failed call.
 """
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
+from collections.abc import Callable
+
+from rag import spend_guard
+
+_log = logging.getLogger(__name__)
 
 # Model IDs are env-overridable so a deploy can pin/upgrade without a code change
 # (a real production knob); the defaults are the deliberately-chosen GA models.
@@ -77,6 +87,41 @@ class GeminiError(RuntimeError):
     """Raised when a Gemini call fails (auth, quota exhausted after retries, API)."""
 
 
+class GeminiAuthError(GeminiError):
+    """No usable credentials: raised before any request exists, so nothing was billed."""
+
+
+class ModelBudgetExceeded(GeminiError):
+    """A model call was refused before it was sent: the daily spend limit is
+    reached, or the caller's scope is paused (rag/spend_guard.py).
+
+    A GeminiError on purpose, so every caller's existing degraded path takes it.
+    The message is a sentence for a person; the numbers go to the log.
+    """
+
+
+def _hold(reserve: Callable[[], spend_guard.Reservation]) -> spend_guard.Reservation:
+    """Reserve a call's worst case, or raise ModelBudgetExceeded."""
+    try:
+        return reserve()
+    except spend_guard.BudgetRefused as exc:
+        _log.warning("model call refused before it was sent: %s", exc.detail)
+        raise ModelBudgetExceeded(str(exc)) from None
+
+
+def _release_failed(reservation: spend_guard.Reservation, exc: GeminiError) -> None:
+    """Give back a failed call's reservation unless the call may have been billed.
+
+    A rate limit generated nothing, and an auth failure never built a request;
+    anything else may have reached the model, so its prompt stays counted.
+    """
+    cause = exc.__cause__
+    not_billed = isinstance(cause, GeminiAuthError) or (
+        cause is not None and _is_rate_limit(cause)
+    )
+    spend_guard.release(reservation, keep_prompt=not not_billed)
+
+
 def _new_client():
     from google import genai
     from google.genai import types
@@ -88,7 +133,7 @@ def _new_client():
     if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true":
         project = os.environ.get("GOOGLE_CLOUD_PROJECT")
         if not project:
-            raise GeminiError("GOOGLE_GENAI_USE_VERTEXAI is set but GOOGLE_CLOUD_PROJECT is not")
+            raise GeminiAuthError("GOOGLE_GENAI_USE_VERTEXAI is set but GOOGLE_CLOUD_PROJECT is not")
         return genai.Client(
             vertexai=True,
             project=project,
@@ -100,7 +145,7 @@ def _new_client():
         )
     if os.environ.get("GEMINI_API_KEY"):
         return genai.Client(api_key=os.environ["GEMINI_API_KEY"], http_options=http_options)
-    raise GeminiError(
+    raise GeminiAuthError(
         "no Gemini auth configured: set GOOGLE_GENAI_USE_VERTEXAI=true (+ project) or GEMINI_API_KEY"
     )
 
@@ -118,9 +163,10 @@ def _reset_clients() -> None:
     _local.__dict__.clear()
     with _auth_lock:
         _vertex_creds = None
+    _reset_probe()
 
 
-def _is_rate_limit(exc: Exception) -> bool:
+def _is_rate_limit(exc: BaseException) -> bool:
     return getattr(exc, "code", None) == 429 or "RESOURCE_EXHAUSTED" in str(exc)
 
 
@@ -161,7 +207,21 @@ def embed_batch(texts: list[str], *, task_type: str, dims: int) -> list[list[flo
     Per-text calls with retry, threaded for speed, order preserved.
 
     task_type: RETRIEVAL_DOCUMENT | RETRIEVAL_QUERY.
+
+    The whole batch is reserved against the daily budget first, in the calling
+    thread (the pool's threads would not see the caller's scope), and embedding
+    responses carry no usage, so the reservation is the charge.
     """
+    reservation = _hold(lambda: spend_guard.reserve_embed(EMBED_MODEL, texts))
+    try:
+        return _embed_texts(texts, task_type=task_type, dims=dims)
+    except GeminiError as exc:
+        _release_failed(reservation, exc)
+        raise
+
+
+def _embed_texts(texts: list[str], *, task_type: str, dims: int) -> list[list[float]]:
+    """embed_batch without the spend guard: the startup probe only."""
     from concurrent.futures import ThreadPoolExecutor
 
     from google.genai import types
@@ -196,12 +256,40 @@ def embedding_available(*, dims: int = 768) -> tuple[bool, str]:
     citation-less report while every live query silently 404s to BM25-only.
 
     Returns (ok, human-readable detail); never raises.
+
+    It answers whether embeddings WORK, not whether today's budget has room, so
+    it skips the spend guard: a spent budget must not read as a misconfigured
+    model in the UI's degraded banner. What bounds its cost instead is the
+    process-wide cache below. The UI probes once per browser session, and a
+    stream of new sessions now costs one 1-token call per ten minutes at most.
     """
+    now = time.monotonic()
+    with _probe_lock:
+        cached = _probe_results.get(dims)
+        if cached is not None and now < cached[0]:
+            return cached[1]
     try:
-        embed_batch(["healthcheck"], task_type="RETRIEVAL_QUERY", dims=dims)
-    except Exception as exc:  # noqa: BLE001 — a probe must classify, never crash the app
-        return False, f"dense embeddings unavailable [{EMBED_MODEL}]: {exc}"
-    return True, f"dense OK [{EMBED_MODEL}]"
+        _embed_texts(["healthcheck"], task_type="RETRIEVAL_QUERY", dims=dims)
+    except Exception as exc:  # noqa: BLE001 (a probe must classify, never crash the app)
+        result, ttl = (False, f"dense embeddings unavailable [{EMBED_MODEL}]: {exc}"), _PROBE_FAILED_TTL_S
+    else:
+        result, ttl = (True, f"dense OK [{EMBED_MODEL}]"), _PROBE_OK_TTL_S
+    with _probe_lock:
+        _probe_results[dims] = (time.monotonic() + ttl, result)
+    return result
+
+
+# A working endpoint is re-checked every ten minutes, a failing one every minute,
+# so a fix shows up quickly and a healthy service is not probed per session.
+_PROBE_OK_TTL_S = 600.0
+_PROBE_FAILED_TTL_S = 60.0
+_probe_lock = threading.Lock()
+_probe_results: dict[int, tuple[float, tuple[bool, str]]] = {}
+
+
+def _reset_probe() -> None:
+    with _probe_lock:
+        _probe_results.clear()
 
 
 _probe_lock = threading.Lock()
@@ -228,8 +316,14 @@ def embedding_available_once(*, dims: int = 768) -> tuple[bool, str]:
 
 
 def generate_json(prompt: str, *, schema: dict) -> str:
-    """One generation call, forced to the JSON response schema, temperature 0."""
+    """One generation call, forced to the JSON response schema, temperature 0.
+
+    Reserved against the daily budget at its worst case before it is sent, then
+    settled to the tokens the response says were billed (rag/spend_guard.py).
+    """
     from google.genai import types
+
+    reservation = _hold(lambda: spend_guard.reserve_generate(GENERATE_MODEL, prompt))
 
     def call():
         return _client().models.generate_content(
@@ -256,5 +350,11 @@ def generate_json(prompt: str, *, schema: dict) -> str:
             visible_out + thoughts,
         )
 
-    response = _with_retry(call, op="generate", model=GENERATE_MODEL, extract_tokens=usage)
+    try:
+        response = _with_retry(call, op="generate", model=GENERATE_MODEL, extract_tokens=usage)
+    except GeminiError as exc:
+        _release_failed(reservation, exc)
+        raise
+    tokens_in, tokens_out = usage(response)
+    spend_guard.settle(reservation, tokens_in=tokens_in, tokens_out=tokens_out)
     return response.text

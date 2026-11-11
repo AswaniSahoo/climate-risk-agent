@@ -48,6 +48,19 @@ https://upstash.com/docs/redis/features/restapi (quoted, not remembered):
   {"error":...}]`, explicitly "not atomic") exists and would batch a prewarm
   run; unused for now because every call site here reads or writes exactly one
   key, and a batch API with one item is just a slower single call.
+
+COUNTERS (rag/spend_guard.py), verified 2026-11-11 against the same REST page
+and the Upstash command pages for INCRBY and EXPIRE (quoted, not remembered):
+- `/multi-exec`: "Upstash REST API supports transactions to execute multiple
+  commands atomically", sent "as a two dimensional JSON array"; a successful
+  transaction answers `[{"result":"RESPONSE_A"},{"result":"RESPONSE_B"}, ...]`
+  and a discarded one "a single error ... `{ "error": "ERR ..." }`".
+- INCRBY: "A missing key counts as `0`", and "the update is atomic, so it is
+  safe for counters that several clients update at once".
+- EXPIRE: "give a key a lifetime in seconds, after which the key is deleted
+  automatically", and commands "that modify a value in place, such as
+  [`INCR`] ... leave it untouched".
+So one INCRBY + EXPIRE transaction is an atomic counter that cleans itself up.
 """
 from __future__ import annotations
 
@@ -245,6 +258,44 @@ class UpstashRedisCache:
         if ttl_s is not None:
             command += ["EX", int(ttl_s)]
         self._command(command)
+
+    def _transaction(self, commands: list[list[str | int]]) -> list[object]:
+        """Run `commands` atomically (`/multi-exec`); one result per command."""
+        try:
+            response = httpx.post(
+                f"{self._url}/multi-exec",
+                json=commands,
+                headers={"Authorization": f"Bearer {self._token}"},
+                timeout=self._timeout_s,
+            )
+        except httpx.HTTPError as exc:
+            raise CacheUnavailable(f"Upstash request failed: {exc}") from exc
+        if response.status_code != 200:
+            raise CacheUnavailable(f"Upstash returned HTTP {response.status_code}")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise CacheUnavailable(f"Upstash returned a non-JSON body: {exc}") from exc
+        if isinstance(payload, dict):  # the whole transaction was discarded
+            raise CacheUnavailable(f"Upstash discarded the transaction: {payload.get('error')}")
+        if not isinstance(payload, list) or len(payload) != len(commands):
+            raise CacheUnavailable("Upstash returned an unexpected transaction body")
+        results: list[object] = []
+        for item in payload:
+            if not isinstance(item, dict) or "error" in item:
+                raise CacheUnavailable(f"Upstash error in a transaction: {item}")
+            results.append(item.get("result"))
+        return results
+
+    def incrby_with_ttl(self, key: str, amount: int, ttl_s: int) -> int:
+        """Add `amount` to the integer at `key` and (re)set its lifetime, as one
+        transaction; returns the value after the increment."""
+        value, _ = self._transaction(
+            [["INCRBY", key, int(amount)], ["EXPIRE", key, int(ttl_s)]]
+        )
+        if not isinstance(value, int):
+            raise CacheUnavailable(f"Upstash INCRBY returned {type(value).__name__}")
+        return value
 
 
 class FallbackCache:

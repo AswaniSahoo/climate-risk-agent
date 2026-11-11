@@ -94,3 +94,25 @@ def _jev_off_and_offline(monkeypatch):
     jev_client.reset_client()
     yield
     jev_client.reset_client()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_spend_guard(monkeypatch):
+    """Every test starts on an empty in-process spend counter, the default
+    limits and a fresh embedding-probe result (rag/spend_guard.py).
+
+    A developer's shell may export a limit, and one test's spending must not
+    refuse the next test's call. The shared Upstash counter is never used under
+    pytest; tests of it hand in their own.
+    """
+    import rag.gemini_client as gc
+    from rag import spend_guard
+
+    for name in ("CRG_DAILY_MODEL_BUDGET_USD", "CRG_SESSION_FRESH_REPORTS",
+                 "CRG_API_RATE_LIMIT", "CRG_API_RATE_WINDOW_S"):
+        monkeypatch.delenv(name, raising=False)
+    spend_guard.reset()
+    gc._reset_probe()
+    yield
+    spend_guard.reset()
+    gc._reset_probe()

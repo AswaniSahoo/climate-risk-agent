@@ -50,12 +50,21 @@ _PRICE_PER_MTOK = {
     # The ACTIVE generation model: rag/gemini_client.py defaults CRG_GENERATE_MODEL
     # to gemini-2.5-flash. Prices are ESTIMATES — verify against the current
     # Google price sheet and override via PRICE_FLASH_IN / PRICE_FLASH_OUT.
+    # Checked 2026-11-11 at https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # (Standard, <= 200K input tokens): "Gemini 2.5 Flash | Input (text, image,
+    # video) | $0.30" and "Text output (response and reasoning) | $2.50", so
+    # thinking tokens bill at the output price. rag/spend_guard.py charges model
+    # calls against the daily budget at these same prices.
     "gemini-2.5-flash": (
         float(os.environ.get("PRICE_FLASH_IN", "0.30")),
         float(os.environ.get("PRICE_FLASH_OUT", "2.50")),
     ),
+    # Same page, same day: "Gemini Embedding 2 (Unified Multimodal, Preview) |
+    # Input text | ... | Online requests | $0.20" per 1M tokens. (This table
+    # said 0.15; the page's row at $0.15 per million, "$0.00015" per 1,000, is
+    # "Gemini Embedding", a different model.)
     "gemini-embedding-2": (
-        float(os.environ.get("PRICE_EMBED_IN", "0.15")),
+        float(os.environ.get("PRICE_EMBED_IN", "0.20")),
         0.0,
     ),
     # TypeSafe Jev (rag/jev_client.py): $0.042 per million input tokens and
@@ -133,6 +142,12 @@ def record(
         logging.getLogger(__name__).warning(
             "disk sink unavailable (%s) — keeping in-memory only", exc
         )
+
+
+def price_per_mtok(model: str) -> tuple[float, float] | None:
+    """(input, output) US dollars per million tokens for `model`, or None when
+    the table has no price for it (rag/spend_guard.py refuses such calls)."""
+    return _PRICE_PER_MTOK.get(model)
 
 
 def snapshot() -> list[dict]:
