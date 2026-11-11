@@ -90,6 +90,33 @@ def test_every_premise_and_cid_item_parses_into_a_claim():
     assert all(ev._CID_NOTE.search(q.notes) and ev._CID_CHUNK.search(q.notes) for q in cids)
 
 
+def test_the_corrected_cid_labels_build_the_claims_their_chunks_state():
+    """CID-06's sentence states river flooding, and CID-11's ESAF clause states cyclone
+    landfalls, not mean wind speed (evidence in their notes in evals/gold_set.json)."""
+    from rag.chunk import Chunk
+
+    chunks = []
+    for q in load_gold_set().questions:
+        if q.slice.value == "cid-table":
+            chunk_id = ev._CID_CHUNK.search(q.notes).group("chunk")
+            source, page, _ = chunk_id.split("#")
+            chunks.append(Chunk(chunk_id=chunk_id, source=source, page=int(page[1:]),
+                                text=q.supporting_quote))
+
+    pairs, skipped = ev.verify_pairs(chunks)
+
+    claims = {(p["id"], p["kind"]): p["claim"] for p in pairs if p["kind"].startswith("cid")}
+    assert claims[("CID-06", "cid_true")] == (
+        "River flooding is projected to increase in New Zealand (NZ).")
+    assert claims[("CID-06", "cid_flipped")] == (
+        "River flooding is projected to decrease in New Zealand (NZ).")
+    assert ("CID-11", "cid_true") not in claims and ("CID-11", "cid_flipped") not in claims
+    assert skipped["cid_no_statement"] == 1
+    assert claims[("CID-04", "cid_true")] == (
+        "Heavy precipitation is projected to increase in Northern Australia (NAU).")
+    assert sum(kind == "cid_true" for _, kind in claims) == 14
+
+
 def test_a_dry_run_writes_both_artifacts_without_any_request(tmp_path, monkeypatch, httpx_mock):
     for name in ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_CLOUD_PROJECT", "GEMINI_API_KEY",
                  "GOOGLE_API_KEY"):

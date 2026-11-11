@@ -22,7 +22,10 @@ scope reached the answering model, which still refuses it on its own today
 Citation-support pairs are derived mechanically from the dev set:
 - `cid_true`: each `cid-table` item's recorded parse ("Parsed direction:
   increase; high confidence") written as a claim against its recorded source
-  chunk. Expected: supports.
+  chunk, about the driver the parse recorded ("Parsed CID: river flooding")
+  or, when it recorded none, the one the question names. Expected: supports.
+  An item whose recorded parse is "Parsed direction: none" (the chunk states
+  no change for that driver) gives no pair, and is counted as skipped.
 - `cid_flipped`: the same claim with the direction reversed. Expected: contradicts.
 - `premise`: each `premise_injection` item's false premise against the gold
   chunk that refutes it. Expected: contradicts.
@@ -140,6 +143,7 @@ _PREMISE = re.compile(
     r"^Given that the IPCC says (?P<premise>.+?), (?:how|what|why|is|are|should|does|do|can|will)\b",
     re.IGNORECASE)
 _CID_NOTE = re.compile(r"Parsed direction: (?P<direction>\w+)")
+_CID_SUBJECT = re.compile(r"Parsed CID: (?P<subject>[^.;]+)")
 _CID_CHUNK = re.compile(r"Source chunk (?P<chunk>\S+?#p\d+#\d+)")
 _CID_QUESTION = re.compile(
     r"^How is (?P<hazard>.+?) projected to change in (?P<region>.+?) under AR6\?$")
@@ -168,7 +172,8 @@ def verify_pairs(chunks: list) -> tuple[list[dict[str, Any]], dict[str, int]]:
     by_id = {c.chunk_id: c for c in chunks}
     questions = load_gold_set().questions
     pairs: list[dict[str, Any]] = []
-    skipped = {"cid_chunk_missing": 0, "quote_not_found": 0, "premise_unparsed": 0}
+    skipped = {"cid_chunk_missing": 0, "cid_no_statement": 0, "quote_not_found": 0,
+               "premise_unparsed": 0}
 
     for q in questions:
         if q.slice.value != "cid-table":
@@ -180,9 +185,14 @@ def verify_pairs(chunks: list) -> tuple[list[dict[str, Any]], dict[str, int]]:
         if not (direction and asked and chunk):
             skipped["cid_chunk_missing"] += 1
             continue
-        hazard, region = asked.group("hazard"), asked.group("region")
         verb = direction.group("direction")
-        claim = f"{hazard[0].upper()}{hazard[1:]} is projected to {verb} in {region}."
+        if verb == "none":  # the chunk states no change for the driver asked about
+            skipped["cid_no_statement"] += 1
+            continue
+        recorded = _CID_SUBJECT.search(q.notes)
+        subject = recorded.group("subject").strip() if recorded else asked.group("hazard")
+        region = asked.group("region")
+        claim = f"{subject[0].upper()}{subject[1:]} is projected to {verb} in {region}."
         pairs.append({"id": q.id, "kind": "cid_true", "expected": "supports",
                       "claim": claim, "chunk": chunk})
         if verb in _FLIP:
@@ -567,6 +577,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=600_000,
                         help="hard stop on input plus output tokens (default 600,000: the "
                              "gateway's free plan allows 1M a day)")
+    parser.add_argument("--tag", default="", type=lambda s: re.sub(r"[^a-z0-9-]", "", s.lower()),
+                        help="suffix for the artifact names, so a second run on one day "
+                             "does not overwrite the first (letters, digits, hyphens)")
     return parser.parse_args(argv)
 
 
@@ -772,9 +785,17 @@ def _run(args: argparse.Namespace) -> int:
         artifact["verify"] = None
         artifact["verify_skipped"] = skipped
 
+    corrected = [q.id for q in gold.questions if "Corrected " in q.notes]
+    if corrected:
+        artifact["caveats"].append(
+            f"Dev labels corrected after the first Jev run, each with its evidence in its notes "
+            f"in evals/gold_set.json: {', '.join(corrected)}. Jev's disagreement prompted the "
+            "check, so the figures above carry a selection effect; adr/0002 says how the other "
+            "cid-table labels were re-read.")
+    stem = f"jev-dev-{artifact['date']}" + (f"-{args.tag}" if args.tag else "")
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    json_path = RESULTS_DIR / f"jev-dev-{artifact['date']}.json"
-    md_path = RESULTS_DIR / f"jev-dev-{artifact['date']}.md"
+    json_path = RESULTS_DIR / f"{stem}.json"
+    md_path = RESULTS_DIR / f"{stem}.md"
     json_path.write_text(json.dumps(artifact, indent=2, default=str), encoding="utf-8")
     if artifact.get("verify") is None:
         artifact.pop("verify", None)

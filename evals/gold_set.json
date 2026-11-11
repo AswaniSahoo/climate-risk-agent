@@ -590,7 +590,7 @@
       "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 44}],
       "supporting_quote": "There is medium confidence that river flooding will increase in New Zealand and Australia, with higher increases in Northern Australia.",
       "hazard": "extreme_precip",
-      "notes": "Ch.12 climatic impact-driver assessment for NZ, summarised in Table 12.5 (Australasia). Parsed direction: increase; medium confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p44#0."
+      "notes": "Ch.12 climatic impact-driver assessment for NZ, summarised in Table 12.5 (Australasia). Parsed CID: river flooding. Parsed direction: increase; medium confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p44#0. Corrected 2026-11-11: the parsed sentence (the supporting quote) states river flooding, AR6's separate River flood driver, which rag/cid.py counts toward heavy precipitation; the claim had named heavy precipitation. No Ch.12 sentence in the corpus names New Zealand together with heavy or extreme precipitation: on this page heavy precipitation and pluvial flooding are projected to increase in Northern and Central Australia only."
     },
     {
       "id": "CID-07",
@@ -645,7 +645,7 @@
       "gold_pages": [{"source": "IPCC_AR6_WGI_Chapter12.pdf", "page": 29}],
       "supporting_quote": "equal or superior to 2°C, high confidence of a decrease in frequency of cyclones landing in SEAF, ESAF and MDG, and low confidence of a general increase in wind storms in most African regions located south of the Sahel.",
       "hazard": "wind",
-      "notes": "Ch.12 climatic impact-driver assessment for ESAF, summarised in Table 12.3 (Africa). Parsed direction: decrease; high confidence. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p29#5."
+      "notes": "Ch.12 climatic impact-driver assessment for ESAF, summarised in Table 12.3 (Africa). Parsed direction: none. Source chunk IPCC_AR6_WGI_Chapter12.pdf#p29#5. Corrected 2026-11-11: the recorded parse was decrease; high confidence, read off the clause that names ESAF, which states \"a decrease in frequency of cyclones landing in SEAF, ESAF and MDG\", a tropical cyclone statement. The wind term that let the sentence through (\"wind storms\") is in another clause, about most African regions south of the Sahel (low confidence), and the mean wind speed clause of the same sentence (chunk #p29#4) names North Africa, and Southern and Western Africa, not ESAF. No Ch.12 sentence in the corpus states a mean wind speed change for ESAF by name."
     },
     {
       "id": "CID-12",
