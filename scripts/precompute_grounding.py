@@ -313,6 +313,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="recompute one namespace (after a rag/cid.py change: projection)")
     parser.add_argument("--prune-stale", action="store_true",
                         help="drop shipped rows the current code no longer builds a key for")
+    parser.add_argument("--reuse-cache", action="store_true",
+                        help="keep CRG_CACHE_DIR as configured instead of a fresh scratch directory")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--plan", action="store_true", help="list the pairs and the worst-case cost")
     mode.add_argument("--check", action="store_true",
@@ -321,8 +323,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Before anything touches the cache: compute live (seed off) into a scratch
     # disk tier, so what gets copied into the seed is what THIS run computed.
+    # Assigned, not defaulted: a CRG_CACHE_DIR left from a local run can hold
+    # answers an older prompt or model wrote, which would ship as if computed
+    # now. --reuse-cache keeps it on purpose.
     os.environ["CRG_CACHE_SEED_DIR"] = ""
-    os.environ.setdefault("CRG_CACHE_DIR", tempfile.mkdtemp(prefix="crg-precompute-grounding-"))
+    if not args.reuse_cache:
+        os.environ["CRG_CACHE_DIR"] = tempfile.mkdtemp(prefix="crg-precompute-grounding-")
+    # --max-calls bounds the run, so the daily spend limit (rag/spend_guard.py)
+    # stays off unless set explicitly: a refusal partway would leave pairs
+    # reported as not cached for want of budget, not for want of an answer.
+    from rag import spend_guard
+
+    spend_guard.unlimited_unless_set()
     from obs.log import configure
 
     configure()

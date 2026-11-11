@@ -213,3 +213,50 @@ def test_prune_stale_drops_rows_the_code_no_longer_builds(nodes, tmp_path):
 
     keys = [r["key"] for r in json.loads(seed.read_text())["entries"]]
     assert "crg:v1:grounding:retired" not in keys and len(keys) == 2
+
+
+# --- a run computes into its own scratch cache, with no daily spend limit ------
+
+@pytest.fixture
+def plan_env(tmp_path, monkeypatch):
+    """A configured cache directory a run must not inherit, and a seed setting
+    the run turns off; mkdtemp lands under tmp_path so nothing outlives the test."""
+    import tempfile
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    configured = tmp_path / "an-older-cache"
+    monkeypatch.setenv("CRG_CACHE_DIR", str(configured))
+    monkeypatch.setenv("CRG_CACHE_SEED_DIR", "tools/cache_seed")
+    return configured
+
+
+def test_a_run_never_inherits_a_configured_cache_directory(plan_env):
+    """A CRG_CACHE_DIR left from a local run can hold answers an older prompt or
+    model wrote, and they would be copied into the seed as if computed now."""
+    import os
+    from pathlib import Path
+
+    assert pre.main(["--plan", "--presets"]) == 0
+
+    used = Path(os.environ["CRG_CACHE_DIR"])
+    assert used != plan_env and used.name.startswith("crg-precompute-grounding-")
+    assert used.is_dir() and not any(used.iterdir())
+    assert os.environ["CRG_CACHE_SEED_DIR"] == ""
+
+
+def test_reuse_cache_keeps_the_configured_directory(plan_env):
+    import os
+
+    assert pre.main(["--plan", "--presets", "--reuse-cache"]) == 0
+
+    assert os.environ["CRG_CACHE_DIR"] == str(plan_env)
+
+
+def test_a_run_is_bounded_by_its_own_max_calls_not_the_daily_spend_limit(plan_env, monkeypatch):
+    """A refusal partway through would leave pairs not cached; --max-calls caps it."""
+    import os
+
+    monkeypatch.delenv("CRG_DAILY_MODEL_BUDGET_USD", raising=False)
+    assert pre.main(["--plan", "--presets"]) == 0
+
+    assert os.environ["CRG_DAILY_MODEL_BUDGET_USD"] == "off"
