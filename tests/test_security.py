@@ -128,16 +128,13 @@ _WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 
 # A tag such as `v4` is a pointer the action's owner can move, so every action
 # is pinned to a full commit SHA, with the release it came from in a comment.
-# Resolved with `gh api repos/<repo>/git/ref/tags/<tag>` on 2026-11-11 (all
-# three are lightweight tags on commits). Each SHA is the commit the floating
-# major tag (`v4`, `v5`) pointed at that day, so the pin changed no behaviour.
-# Newer majors exist (checkout v7.0.1, setup-uv v10.3.3, upload-artifact
-# v7.0.2); moving to one is a deliberate upgrade, not part of a pin.
-PINNED_ACTIONS = {
-    "actions/checkout": ("11d5960a326750d5838078e36cf38b85af677262", "v4.4.0"),
-    "astral-sh/setup-uv": ("d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86", "v5.4.2"),
-    "actions/upload-artifact": ("ea165f8d65b6e75b540449e92b4886f43607fa02", "v4.6.2"),
-}
+# The first pins (2026-11-11, `gh api repos/<repo>/git/ref/tags/<tag>`) were the
+# commits the floating majors pointed at that day: checkout v4.4.0, setup-uv
+# v5.4.2, upload-artifact v4.6.2. Dependabot (.github/dependabot.yml) moves the
+# SHA and its comment together, so this checks the shape of a pin and that one
+# action has one pin everywhere, not a particular release. A new action has to
+# be added here, which is the review step.
+REVIEWED_ACTIONS = {"actions/checkout", "astral-sh/setup-uv", "actions/upload-artifact"}
 
 # setup-uv otherwise downloads whatever uv is newest, unverified: v5.4.2 checks
 # a checksum it is given, or one from its own list, which predates this uv.
@@ -171,12 +168,29 @@ def test_every_action_is_pinned_to_a_full_commit_sha():
         for ref, tail in re.findall(r"uses:\s*(\S+)([^\n]*)", text)
     ]
     assert uses, "no actions found"
+    pins: dict[str, set[str]] = {}
     for name, ref, tail in uses:
         action, _, sha = ref.partition("@")
-        assert action in PINNED_ACTIONS, f"{name}: {action} is not a reviewed action"
-        want_sha, want_tag = PINNED_ACTIONS[action]
-        assert sha == want_sha, f"{name}: {ref} is not pinned to {want_sha}"
-        assert tail.strip() == f"# {want_tag}", f"{name}: {ref} lacks the '# {want_tag}' comment"
+        assert action in REVIEWED_ACTIONS, f"{name}: {action} is not a reviewed action"
+        assert re.fullmatch(r"[0-9a-f]{40}", sha), f"{name}: {ref} is not a full commit SHA"
+        assert re.fullmatch(r"#\s*v\d+\.\d+\.\d+", tail.strip()), (
+            f"{name}: {ref} lacks its '# vX.Y.Z' release comment"
+        )
+        pins.setdefault(action, set()).add(f"{sha} {tail.strip()}")
+    split = {action: found for action, found in pins.items() if len(found) > 1}
+    assert not split, f"one action pinned to two commits: {split}"
+
+
+def test_dependabot_keeps_the_action_pins_and_the_lock_current():
+    """Weekly version updates for the SHA-pinned actions and for uv.lock."""
+    config = (_WORKFLOWS.parent / "dependabot.yml").read_text(encoding="utf-8")
+    assert re.search(r"^version: 2$", config, re.MULTILINE)
+    entries = re.split(r"\n(?=  - package-ecosystem:)", config)[1:]
+    ecosystems = {re.search(r'package-ecosystem: "([^"]+)"', e).group(1): e for e in entries}
+    assert set(ecosystems) == {"github-actions", "uv"}
+    for name, entry in ecosystems.items():
+        assert 'directory: "/"' in entry, name
+        assert 'interval: "weekly"' in entry, name
 
 
 def test_every_workflow_defaults_the_token_to_read_only():

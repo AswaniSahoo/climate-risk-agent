@@ -1,0 +1,24 @@
+# Weekly version updates, so the pins in this repository stay current.
+#
+# github-actions: every workflow pins its actions to a full commit SHA with the
+#   release in a comment (`@<sha> # vX.Y.Z`), and Dependabot moves the SHA and
+#   the comment together. Before merging, check the new SHA is the one the
+#   release tag points at: gh api repos/<owner>/<repo>/git/ref/tags/<tag>
+#   (dependabot-core#13466: an older Dependabot could move a pin to a
+#   non-release commit and leave the comment stale; it was closed as fixed).
+#
+# uv: pyproject.toml and uv.lock. After merging one, regenerate the pins that
+#   Streamlit Community Cloud and the devcontainer install, from the lock:
+#   uv export --frozen --no-dev --no-emit-project --no-hashes --no-annotate \
+#     --no-header --format requirements.txt -o requirements.txt
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
