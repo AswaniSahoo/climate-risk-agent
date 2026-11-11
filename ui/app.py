@@ -204,14 +204,15 @@ if not _os.environ.get("PYTEST_CURRENT_TEST") and not corpus_present():
 
         _download_corpus()
 
-# Dense-retrieval self-test (once per session). A wrong embedding region/model
+# Dense-retrieval self-test (once per process while it passes, see
+# rag/gemini_client.embedding_available_once). A wrong embedding region/model
 # must surface LOUDLY here: not hide behind a citation-less report while every
 # query silently 404s to BM25-only. Skipped under pytest (hermetic UI tests).
 if not _os.environ.get("PYTEST_CURRENT_TEST"):
     if "dense_ok" not in st.session_state:
-        from rag.gemini_client import embedding_available  # noqa: E402
+        from rag.gemini_client import embedding_available_once  # noqa: E402
 
-        st.session_state.dense_ok, st.session_state.dense_detail = embedding_available()
+        st.session_state.dense_ok, st.session_state.dense_detail = embedding_available_once()
     if not st.session_state.dense_ok:
         with _lead:
             st.error(

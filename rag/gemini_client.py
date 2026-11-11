@@ -204,6 +204,29 @@ def embedding_available(*, dims: int = 768) -> tuple[bool, str]:
     return True, f"dense OK [{EMBED_MODEL}]"
 
 
+_probe_lock = threading.Lock()
+_probe_passed: tuple[bool, str] | None = None
+
+
+def embedding_available_once(*, dims: int = 768) -> tuple[bool, str]:
+    """`embedding_available`, asked once per process for as long as it passes.
+
+    The UI calls this for every new Streamlit session. The endpoint and the
+    model are fixed for the life of a deploy, so a passing answer is kept and
+    later sessions pay no embedding call. A failing answer is NOT kept: a blip
+    at boot must not mark every later visitor degraded, and the next session
+    probes again. The lock makes concurrent first sessions share one probe.
+    """
+    global _probe_passed
+    with _probe_lock:
+        if _probe_passed is not None:
+            return _probe_passed
+        ok, detail = embedding_available(dims=dims)
+        if ok:
+            _probe_passed = (ok, detail)
+        return ok, detail
+
+
 def generate_json(prompt: str, *, schema: dict) -> str:
     """One generation call, forced to the JSON response schema, temperature 0."""
     from google.genai import types
