@@ -779,6 +779,18 @@ if report is not None:
                     metric_cols[2].metric(
                         "Record max (series)", f"{round(stat.record_max, 1)} {stat.unit}",
                     )
+                # Credit beside the numbers it covers: Open-Meteo is CC BY 4.0 (credit, a
+                # link to the licence, say what changed), and the Copernicus licence asks
+                # modified ERA5 for its notice (rev. 12, 5.1.2).
+                st.caption(
+                    "Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed "
+                    "[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)."
+                    + (" ERA5 reanalysis, served through the Open-Meteo archive under the same "
+                       "licence. The return levels and trend are fitted here from that ERA5 "
+                       "series, not published by Open-Meteo. Contains modified Copernicus "
+                       "Climate Change Service information 2026."
+                       if report.hazard_stats else "")
+                )
             if _plot_html:
                 with _verdict_cols[1]:
                     st.markdown(_plot_html, unsafe_allow_html=True)

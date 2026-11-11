@@ -507,3 +507,38 @@ def test_a_typed_then_asked_question_does_not_rerun_on_the_next_click(stubbed, m
 
     assert not at.exception
     assert len(runs) == 1
+
+
+# --- data credit next to the numbers (CC BY 4.0 and the Copernicus licence) --
+#
+# Open-Meteo's licence page: "You must give appropriate credit, provide a link
+# to the licence, and indicate if changes were made." The Copernicus licence
+# (rev. 12, 5.1.2) asks a publication of modified products for "Contains
+# modified Copernicus Climate Change Service information [Year]".
+
+def _captions(at: AppTest) -> str:
+    return " ".join(c.value for c in at.caption)
+
+
+def test_a_report_credits_open_meteo_and_links_its_licence(stubbed):
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception
+    credit = _captions(at)
+    assert "[Open-Meteo.com](https://open-meteo.com/)" in credit
+    assert "[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)" in credit
+    assert "Copernicus" not in credit  # no ERA5 numbers on this report, so no ERA5 credit
+
+
+def test_a_report_with_era5_numbers_says_they_are_fitted_and_credits_copernicus(
+    stubbed, monkeypatch
+):
+    monkeypatch.setattr(graph_mod, "run_agent", lambda **kwargs: _report(hazard_stats=[_stat()]))
+
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception
+    credit = _captions(at)
+    assert "ERA5 reanalysis, served through the Open-Meteo archive under the same licence." in credit
+    assert "fitted here from that ERA5 series" in credit  # the change, said out loud
+    assert "Contains modified Copernicus Climate Change Service information" in credit
