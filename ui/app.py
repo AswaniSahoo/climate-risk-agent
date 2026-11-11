@@ -55,7 +55,7 @@ from agent.progress import (  # noqa: E402
 # The CRG_JEV flag only (adr/0002): reading it builds no client and makes no call.
 from rag.jev_client import triage_enabled, verify_enabled  # noqa: E402
 from tools import climatology  # noqa: E402
-from tools.climatology import ClimatologyError  # noqa: E402
+from tools.climatology import ArchiveBudgetExceeded, ClimatologyError  # noqa: E402
 from tools.geocode import GeocodeError  # noqa: E402
 from ui.report_plot import return_level_plot, specimen_plot  # noqa: E402
 from ui.session_budget import fresh_report_scope  # noqa: E402
@@ -629,12 +629,15 @@ def _run_point(sel: Any, haz: Hazard, horizon_days: int) -> tuple[Any, str | Non
         # Reporting it anyway keeps both entry points showing the same steps.
         emit_step(on_step, LOCATE, StepStatus.FINISHED, detail="resolved in the sidebar")
         hazard_stat = None
+        climatology_note = None
         if use_climatology:
             try:
                 with track(on_step, CLIMATOLOGY):
                     hazard_stat = climatology.climatology_hazard_stat(
                         sel.latitude, sel.longitude, haz
                     )
+            except ArchiveBudgetExceeded as exc:
+                climatology_note = str(exc)  # the report says it once, beside the band
             except ClimatologyError as exc:
                 # Loud but non-fatal, exactly as before: the band falls back to
                 # absolute cutoffs and the report states which basis it used.
@@ -645,7 +648,7 @@ def _run_point(sel: Any, haz: Hazard, horizon_days: int) -> tuple[Any, str | Non
             location=sel.label,
             latitude=sel.latitude, longitude=sel.longitude,
             hazard=haz, horizon_days=horizon_days, hazard_stat=hazard_stat,
-            on_step=on_step,
+            on_step=on_step, climatology_note=climatology_note,
         )
 
     with Span("report") as point_span, fresh_report_scope(st.session_state):

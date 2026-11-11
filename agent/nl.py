@@ -26,7 +26,7 @@ from agent.progress import CLIMATOLOGY, LOCATE, OnStep, StepStatus, emit_step, t
 from rag.jev_client import triage_enabled
 from rag.scope import ScopeDecision, has_supported_signal, out_of_scope_hazard, scope_verdict
 from tools.ar6_regions import region_for
-from tools.climatology import ClimatologyError, climatology_hazard_stat
+from tools.climatology import ArchiveBudgetExceeded, ClimatologyError, climatology_hazard_stat
 from tools.geocode import GeocodeError, geocode
 
 _log = logging.getLogger(__name__)
@@ -286,12 +286,15 @@ def run_agent_nl(
         location_label = f"{located.name}, {located.country}".rstrip(", ")
 
     hazard_stat = None
+    climatology_note = None
     if use_climatology:
         try:
             with track(on_step, CLIMATOLOGY):
                 hazard_stat = climatology_hazard_stat(
                     located.latitude, located.longitude, parsed.hazard
                 )
+        except ArchiveBudgetExceeded as exc:
+            climatology_note = str(exc)  # the report says why, in the reader's words
         except ClimatologyError as exc:
             _log.warning("climatology unavailable (%s) — proceeding without it", exc)
     else:
@@ -305,6 +308,7 @@ def run_agent_nl(
         horizon_days=parsed.horizon_days,
         hazard_stat=hazard_stat,
         on_step=on_step,
+        climatology_note=climatology_note,
     )
     if parsed.triage is not None:
         report = report.model_copy(update={"triage": parsed.triage})

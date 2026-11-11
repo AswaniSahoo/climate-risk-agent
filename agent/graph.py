@@ -104,6 +104,7 @@ class AgentState(TypedDict, total=False):
     evidence: Optional[EvidenceCheck]  # Jev citation support (CRG_JEV=verify|all only)
     projected_change: Optional[ProjectedChange]  # project node output (None if nothing found)
     projection_note: str  # why there is no projection, when there is none
+    climatology_note: str  # why there is no ERA5 climatology, when the caller knows
     report: Optional[RiskReport]
 
 
@@ -465,6 +466,9 @@ def synthesize(state: AgentState) -> dict:
                 clim_detail += f", no significant trend (p={trend.p_value:.2f})"
             summary += f" ERA5 return levels ({levels_txt})."
         drivers.append(RiskDriver(factor="climatology", detail=clim_detail))
+    elif state.get("climatology_note"):
+        # Why there are no return levels, in the reader's words, where they would be.
+        summary += f" {state['climatology_note']}"
 
     # Severity = where the forecast peak lands on THIS location's return-level
     # curve. The absolute cutoffs only survive as the fallback, and the
@@ -660,11 +664,14 @@ def run_agent(
     horizon_days: int = 7,
     hazard_stat: Optional[HazardStat] = None,
     on_step: OnStep = None,
+    climatology_note: Optional[str] = None,
 ) -> RiskReport:
     """Run the agent end-to-end and return the RiskReport.
 
     Pass `hazard_stat` (from tools.climatology.climatology_hazard_stat) to ground
-    the report in ERA5 GEV climatology and raise its confidence.
+    the report in ERA5 GEV climatology and raise its confidence. Without one,
+    `climatology_note` is the sentence the report gives for its absence (the
+    archive budget's refusal, tools/archive_budget.py).
 
     Pass `on_step` to be told what the agent is doing while it does it: it is
     called with one `agent.progress.StepEvent` per node start / finish / skip /
@@ -684,6 +691,8 @@ def run_agent(
     }
     if hazard_stat is not None:
         state["hazard_stat"] = hazard_stat
+    if climatology_note:
+        state["climatology_note"] = climatology_note
     if on_step is None:
         final = _GRAPH.invoke(state)
     else:
