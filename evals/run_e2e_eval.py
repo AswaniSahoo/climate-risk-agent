@@ -75,8 +75,18 @@ def main() -> None:
 
     reset_stats()
     arm = stage2_mode()
+    # scope_verdict consults Jev when CRG_JEV is on (adr/0002). A held-out run
+    # must never send its questions to a third party or mix an unmeasured
+    # reader into gate numbers, so it refuses to start; a dev run records the
+    # mode in the artifact and its filename, like the stage-2 arm.
+    from rag.jev_client import jev_mode
+
+    jev = jev_mode()
+    if jev != "off" and _EVAL_SET == "test":
+        raise SystemExit(f"CRG_JEV={jev}: unset it for a held-out run (EVAL_SET=test)")
     gold = load_test_set() if _EVAL_SET == "test" else load_gold_set()
-    print(f"eval set: {_EVAL_SET} ({len(gold.questions)} questions) | scope stage 2: {arm}")
+    print(f"eval set: {_EVAL_SET} ({len(gold.questions)} questions) | scope stage 2: {arm}"
+          f" | jev: {jev}")
     chunks = build_chunks()
     retriever = HybridRetriever.build(chunks)  # the measured 91% path; loud BM25 fallback
     print(f"retriever: dense_enabled={retriever.dense_enabled}")
@@ -213,6 +223,7 @@ def main() -> None:
             "evals/gold_set_v2.sha256" if _EVAL_SET == "test" else "evals/gold_set.sha256"
         ),
         "top_k": _TOP_K,
+        "jev_mode": jev,
         "scope_stage2": {
             "arm": arm,
             "questions": len(gold.questions),
@@ -253,6 +264,8 @@ def main() -> None:
     # The guard arm goes in the filename for the same reason the model does: a
     # bake-off across arms must not overwrite its own evidence.
     arm_slug = "" if arm == "off" else f"-stage2-{arm}"
+    if jev != "off":
+        arm_slug += f"-jev-{jev}"
     slug = GENERATE_MODEL.replace("/", "-")
     out_path = (
         out_dir / f"e2e{suffix}-{slug}{arm_slug}-{datetime.now(timezone.utc):%Y-%m-%d}.json"

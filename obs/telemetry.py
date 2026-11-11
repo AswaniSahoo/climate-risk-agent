@@ -58,6 +58,12 @@ _PRICE_PER_MTOK = {
         float(os.environ.get("PRICE_EMBED_IN", "0.15")),
         0.0,
     ),
+    # TypeSafe Jev (rag/jev_client.py): $0.042 per million input tokens and
+    # output tokens free, for both versions (docs.typesafe.ai/models, read
+    # 2026-11-11). Keyed by the versioned ID the API reports back; a new
+    # release that answers under another name shows up as unpriced, loudly.
+    "jev-1.14.0": (float(os.environ.get("PRICE_JEV_IN", "0.042")), 0.0),
+    "jev-1.13.0": (float(os.environ.get("PRICE_JEV_IN", "0.042")), 0.0),
 }
 
 
@@ -78,6 +84,8 @@ def record(
     ok: bool,
     cached: bool = False,
     persist: bool = True,
+    detail: str = "",
+    cost_usd: float | None = None,
 ) -> None:
     """Record one model call (or cache hit). Never raises — observability must
     not be able to take down the observed system.
@@ -86,8 +94,16 @@ def record(
     sample what reaches the JSONL sink (tools/cache_backend.py explains the
     rate): a durable line per cache GET costs a file append for information the
     in-memory rollup already carries.
+
+    `detail` is a short machine-written reason, such as why a Jev call failed.
+    It is left out when empty, so every existing event keeps its exact shape.
+    Callers must never put user text or a secret in it.
+
+    `cost_usd` is what the provider itself reported charging (the Experiential
+    Labs gateway sends one). When present it is the event's cost, ahead of the
+    price table; when absent, nothing changes.
     """
-    event = {
+    event: dict = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "op": op,
         "model": model,
@@ -98,6 +114,10 @@ def record(
         "ok": ok,
         "cached": cached,
     }
+    if detail:
+        event["detail"] = detail[:200]
+    if cost_usd is not None:
+        event["cost_usd"] = cost_usd
     global _recorded
     with _LOCK:
         _EVENTS.append(event)
@@ -147,9 +167,11 @@ def _bills_tokens(event: dict) -> bool:
 
 
 def unpriced_models(events: list[dict]) -> list[str]:
-    """Models that burned tokens with no entry in the price table (cost UNKNOWN)."""
+    """Models that burned tokens with no price at all: no entry in the price
+    table and no cost reported by the provider (cost UNKNOWN)."""
     return sorted(
-        {e["model"] for e in events if _bills_tokens(e) and e["model"] not in _PRICE_PER_MTOK}
+        {e["model"] for e in events
+         if _bills_tokens(e) and "cost_usd" not in e and e["model"] not in _PRICE_PER_MTOK}
     )
 
 
@@ -165,6 +187,9 @@ def estimate_cost_usd(events: list[dict]) -> float:
     for e in events:
         if not _bills_tokens(e):
             continue  # cache hit or zero-token event: nothing was billed
+        if "cost_usd" in e:  # the provider's own figure beats our price table
+            total += float(e["cost_usd"])
+            continue
         if e["model"] not in _PRICE_PER_MTOK:
             _log.warning(
                 "no price for model %r — its cost is UNKNOWN, not zero; "

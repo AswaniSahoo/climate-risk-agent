@@ -146,6 +146,79 @@ possible, so a downstream consumer can check it programmatically.
   but generation is not fully deterministic across model updates; the frozen
   benchmark exists to detect regressions when the pin changes.
 
+## Jev (TypeSafe), optional and off by default
+
+- **Measured on the dev set only, through one route, and kept off.** Question
+  triage and the citation support check (`CRG_JEV=triage|verify|all`,
+  [adr/0002](adr/0002-jev-question-triage-and-citation-support.md)) were
+  measured on 2026-11-11 on the 60 dev questions and 14 authored paraphrase
+  probes, through the Experiential Labs gateway. Triage met every quality gate
+  (60/60 and 14/14 on scope, no false refusal, no wrong hazard) but not the
+  latency gate (p95 2,055 ms against 1,000 ms). The citation check missed one
+  accuracy gate (11 of 15 true Chapter 12 claims read as strong, against 80%).
+  These are small sets that steered development, the held-out set has not been
+  run, and TypeSafe direct is unmeasured. Leave the flag off until the ADR's
+  criteria are met.
+- **What leaves this system.** With triage on, the first 1,000 characters of a
+  question that names no hazard word are sent out; questions the lexical stage
+  settles are not. With verify on, the IPCC statement Gemini wrote, which can
+  name the queried place, is sent with the public IPCC passages it cites.
+- **Where it goes depends on `JEV_BASE_URL`.** Unset, requests go straight to
+  TypeSafe and only TypeSafe's terms apply. Set to
+  `https://api.experientiallabs.ai`, they go to the Experiential Labs gateway,
+  which relays them to TypeSafe (its replies carry `"provider": "typesafe"`),
+  so the gateway's terms apply first and TypeSafe's then apply to what it
+  receives. A deployment that cannot send user text to a US processor must
+  keep `CRG_JEV=off` on either route.
+- **TypeSafe's wording** (both routes). Its privacy policy (last updated Nov
+  19, 2025, read 2026-11-11 at https://typesafe.ai/legal/privacy-policy) says:
+  "We will not train or fine tune any artificial intelligence or machine
+  learning models on your prompts or other Input." and "The Services are hosted
+  in the United States (“U.S.”). If you choose to use the Services from the
+  EEA, the UK or other regions of the world with laws governing data collection
+  and use that may differ from U.S. law, then please note that you are
+  transferring your personal data outside of those regions to the U.S. for
+  storage and processing." The docs say "Jev is not trained on customer
+  requests or responses." (https://docs.typesafe.ai/models). The customer
+  agreement (last updated Sep 23, 2026, https://typesafe.ai/legal/mca) also
+  says: "“Telemetry” means information generated in connection with the
+  Services, such as technical logs, hashes, summary statistics and
+  classifications, metrics, and learnings related to Customer’s use of the
+  Services. TypeSafe may Process Telemetry without restriction, including to
+  improve the Services or TypeSafe’s other products and services." Zero data
+  retention is offered to enterprise customers only
+  (https://typesafe.ai/enterprise).
+- **The gateway's wording** (gateway route only). Its privacy notice (last
+  updated September 16, 2026, read 2026-11-11 at
+  https://www.experientiallabs.ai/privacy) says: "The standard hosted service
+  records prompts, responses and related activity." and "Stored prompts and
+  responses in the primary capture table are automatically removed after 30
+  days. That period does not describe every trace, file, backup or
+  provider-held copy." It adds: "A provider's zero-retention or no-training
+  setting covers that provider's specified handling; it does not describe all
+  processing by Experiential.", "Our Terms do not authorize using Customer
+  Content or datasets derived from it to train shared models or other
+  customers' models, or selling those datasets." and "Experiential operates in
+  the United States." Its model list (`GET /v1/models`, 2026-11-11) reports
+  `jev-latest` with `zdr: false` and `no_training: false`, for the gateway and
+  for its `typesafe` upstream alike; the meaning of those flags was not checked
+  beyond their names.
+- **A signal, never a gate the system relies on.** The lexical scope stage
+  stays first and final, and the citation check only annotates. TypeSafe
+  documents that content written to steer the model "can move the answer", so
+  a question crafted against Jev can at worst get its own question refused, or
+  get a question with no hazard words routed to a report for one of the three
+  supported hazards, which then says Jev chose it and with what probability.
+- **Readings are pinned, not guaranteed.** An identical request is not
+  promised the same answer, so the client keeps one reading per identical
+  request for an hour, as the answer cache does for answers; `--repeats` in the
+  eval measures how often a decision changes. Dates, numbers and horizons are
+  never asked of Jev (a documented weakness). TypeSafe direct is pinned to the
+  version `jev-1.14.0`; the gateway grants only the alias `jev-latest` (it
+  refuses `jev-1.14.0` with HTTP 403 `model_not_granted`) and its replies name
+  the alias, not the version that answered, so a TypeSafe release can move its
+  readings, and the thresholds measured against it, without any change here.
+
 ## Risk bands
 
 - **The band is local rarity, and the report says which numbers produced it.**

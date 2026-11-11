@@ -21,3 +21,23 @@ def _isolated_telemetry(tmp_path, monkeypatch):
     telemetry.reset()
     yield
     telemetry.reset()
+
+
+@pytest.fixture(autouse=True)
+def _jev_off_and_offline(monkeypatch):
+    """No test reaches a Jev provider unless it opts in, and none reaches one for real.
+
+    A developer's shell may export a key, a provider or the flag; every Jev
+    variable is removed for every test, and the shared client (with its cache,
+    circuit and pacing) is dropped on both sides, so one test's Jev state cannot
+    leak into the next. Tests that exercise Jev set the flag and a fake key
+    themselves and answer every request with pytest-httpx.
+    """
+    from rag import jev_client
+
+    for name in ("TYPESAFE_API_KEY", "JEV_API_KEY", "JEV_BASE_URL", "CRG_JEV",
+                 "CRG_JEV_MODEL", "CRG_JEV_MIN_INTERVAL_S"):
+        monkeypatch.delenv(name, raising=False)
+    jev_client.reset_client()
+    yield
+    jev_client.reset_client()

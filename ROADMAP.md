@@ -36,6 +36,7 @@
 
 - [ ] Refresh the two UI screenshots and record a demo video against the current UI
 - [ ] Promote the semantic scope guard's `embed` arm, once a held-out run confirms the refusal matrix holds
+- [ ] Jev (adr/0002), measured on the dev set through the Experiential Labs gateway on 2026-11-11, with quality gates met and the latency gate missed (triage p95 2,055 ms): decide whether that latency is acceptable or measure TypeSafe direct with a TypeSafe key; check the CID-06 and CID-11 Chapter 12 parses (`rag/cid.py`), then re-measure the citation check; run the held-out confirmation; wire `/triage` and per-citation evidence into the redesigned UI (`docs/jev-ui-integration.md`)
 - [ ] Gemini-vision read of the Ch.12 glyph tables, validated against the chapter prose before any of it is published
 - [x] Measure Docker cold start on Cloud Run, then move to `--min-instances 0` (Completed: idle cost scaled to ₹0.00)
 - [ ] Cross-post the build-in-public series to dev.to

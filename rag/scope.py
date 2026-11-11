@@ -15,13 +15,22 @@ bucket this lexical stage is blind to: questions that name no hazard vocabulary
 at all. `scope_verdict()` is the combined entry point; stage 1 still runs first
 and its verdict is final, so the deterministic, injection-proof guarantee above
 is unchanged. See rag/scope_semantic.py.
+
+v3 (2026-11) lets TypeSafe's Jev read that same silent bucket first, behind
+CRG_JEV=triage|all (rag/jev_triage.py, adr/0002). Same contract as stage 2: it
+can add a refusal or a hazard hint it is confident about, never remove a
+refusal, and on doubt or failure it defers. `ScopeDecision.stage` is then "jev".
 """
 from __future__ import annotations
 
 import os
 import re
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rag.jev_triage import JevTriage
 
 # A marine heatwave is an oceanic extreme-heat EVENT — a hazard, not background
 # earth-system science — but the phrase contains "heatwave" (a supported term),
@@ -88,13 +97,18 @@ class ScopeDecision:
     `out_of_scope` is the lexical stage's contract, unchanged: the named
     unsupported hazard, or None. `hazard_hint` is new and additive — a supported
     hazard recovered from a paraphrase the regex misses, which callers may use
-    to route instead of refusing.
+    to route instead of refusing. `stage` is "lexical", "jev", "embed" or "llm".
+
+    `jev` carries Jev's full reading whenever Jev was consulted, including when
+    it deferred, so a caller can show what it saw without asking twice. It is
+    left out of equality: two decisions with the same verdict are the same.
     """
 
     out_of_scope: str | None = None
     hazard_hint: str | None = None
     stage: str = "lexical"
     detail: str = ""
+    jev: "JevTriage | None" = field(default=None, compare=False, repr=False)
 
 
 def stage2_mode() -> str:
@@ -136,16 +150,18 @@ def _remember_stage2(key: tuple[str, str], decision: "ScopeDecision") -> None:
 
 
 def scope_verdict(question: str) -> ScopeDecision:
-    """Stage 1, then stage 2 only where stage 1 is blind.
+    """Stage 1, then the optional readers only where stage 1 is blind.
 
     Order is the safety argument, not an implementation detail:
     1. a lexical out-of-scope verdict STANDS — deterministic and unforgeable;
     2. a lexical supported-hazard signal means in scope — no model call needed;
-    3. only the silent bucket (neither signal) reaches stage 2, and stage 2 may
-       return no verdict, in which case behaviour is exactly what it is today.
+    3. only the silent bucket (neither signal) goes further: first to Jev when
+       CRG_JEV is `triage` or `all` (rag/jev_triage.py), then to stage 2 as
+       CRG_SCOPE_STAGE2 configures it. Either may return no verdict, and Jev
+       deferring or failing is exactly the behaviour with Jev off.
 
-    With CRG_SCOPE_STAGE2=off (the default) this is `out_of_scope_hazard` plus a
-    wrapper — no extra call, no behaviour change.
+    With CRG_JEV and CRG_SCOPE_STAGE2 both off (the defaults) this is
+    `out_of_scope_hazard` plus a wrapper: no extra call, no behaviour change.
     """
     lexical = out_of_scope_hazard(question)
     if lexical is not None:
@@ -153,6 +169,30 @@ def scope_verdict(question: str) -> ScopeDecision:
     if has_supported_signal(question):
         return ScopeDecision(stage="lexical")
 
+    from rag.jev_client import triage_enabled
+
+    if not triage_enabled():
+        return _stage2_verdict(question)
+
+    from rag.jev_triage import triage
+
+    # Memoised by the client (identical request bytes), and a failure is never
+    # memoised, so a transient outage cannot pin a question to "no verdict"
+    # for the life of the process.
+    reading = triage(question)
+    if reading.decision in ("refuse", "hint"):
+        return ScopeDecision(
+            out_of_scope=reading.out_of_scope,
+            hazard_hint=reading.hazard_hint,
+            stage="jev",
+            detail=reading.detail,
+            jev=reading,
+        )
+    return replace(_stage2_verdict(question), jev=reading)
+
+
+def _stage2_verdict(question: str) -> ScopeDecision:
+    """The silent bucket, as CRG_SCOPE_STAGE2 configures it (off: no verdict)."""
     mode = stage2_mode()
     if mode == "off":
         return ScopeDecision(stage="lexical")

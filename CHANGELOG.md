@@ -11,6 +11,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Enhanced dark mode styling and brand logo in Streamlit navigation header.
 - Synchronized location search and suggestion chips with interactive deck.gl map markers.
 - Added automated offline testing stubs for natural language queries.
+- Added optional TypeSafe Jev integration behind `CRG_JEV=off|triage|verify|all`, default
+  off (adr/0002): `rag/jev_client.py` (typed httpx client with retries, a time budget, a
+  circuit breaker, a cache and telemetry), question triage for the questions the lexical
+  scope stage cannot read (`rag/jev_triage.py`), a per-citation support check
+  (`rag/jev_verify.py`), `POST /triage`, and `RiskReport.triage` / `RiskReport.evidence`.
+- Added a second vetted Jev provider: `JEV_BASE_URL=https://api.experientiallabs.ai`
+  selects the Experiential Labs gateway (model `jev-latest`, 32k-token requests, its own
+  timeouts); `JEV_API_KEY` holds the key, with `TYPESAFE_API_KEY` as the fallback; a
+  provider-reported `usage.cost` is used as the call's cost in telemetry.
+- Added `evals/run_jev_eval.py`, a dev-set-only eval of Jev triage against the stage-1
+  scope guard and of the citation check, with a $2 spend cap, a token cap, client-side
+  pacing for per-minute plans and a generated dated report. First run, 2026-11-11, through
+  the gateway: scope 60/60 dev and 14/14 probes with Jev against 58/60 and 7/14 today, at
+  a triage p95 of 2,055 ms; both features stay off (adr/0002).
+- Fixed the free-text front door reading "marine heatwave" as the supported heat hazard;
+  it now refuses, as the scope guard already did.
 
 ## [1.0.0] - 2026-09-08
 
