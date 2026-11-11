@@ -6,6 +6,8 @@ puts it in the report's numbers line, and the UI shows that line beside the
 band, so a reader on either path learns that ERA5 was skipped and when it
 comes back, instead of a generic failure.
 """
+from pathlib import Path
+
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -14,6 +16,10 @@ import agent.nl as nl_mod
 import tools.climatology as climatology_mod
 from agent.contracts import Hazard, RiskLevel
 from tools.geocode import GeoLocation
+
+# Streamlit 1.66 resolves a relative AppTest path against the calling file (tests/),
+# so the app is named absolutely, as tests/test_ui.py does.
+_APP = str(Path(__file__).resolve().parents[1] / "ui" / "app.py")
 
 SENTENCE = ("ERA5 history skipped for this place: today's free data allowance for new places "
             "is used up. It resets at 00:00 UTC.")
@@ -98,7 +104,7 @@ def test_the_manual_path_renders_the_sentence_beside_the_band(monkeypatch):
     monkeypatch.setattr(graph_mod, "run_agent", fake_run_agent)
     monkeypatch.setattr(st, "map", lambda *a, **k: None)
 
-    at = AppTest.from_file("ui/app.py", default_timeout=30)
+    at = AppTest.from_file(_APP, default_timeout=30)
     at.run()
     at.sidebar.button(key="assess").set_value(True)
     at.run()
