@@ -167,10 +167,12 @@ def test_requests_are_spaced_by_the_minimum_interval(httpx_mock, tmp_path):
     _archive(httpx_mock, {52.52: _series(1), 48.85341: _series(2)})
     slept: list[float] = []
 
+    # A clock that never moves makes the gap exact. With the real clock the fit
+    # between the two requests took about 11 s on a CI runner, and 589.15 failed "> 590".
     pre.run([BERLIN, PARIS], [Hazard.HEATWAVE], budget_calls=10_000, min_interval_s=600,
-            live=None, seed_path=tmp_path / "seed.json", sleep=slept.append)
+            live=None, seed_path=tmp_path / "seed.json", sleep=slept.append, clock=lambda: 0.0)
 
-    assert len(slept) == 1 and slept[0] > 590  # nothing before the first, a full gap before the second
+    assert slept == [600]  # nothing before the first, a full gap before the second
 
 
 def test_a_rate_limit_answer_stops_the_run(httpx_mock, tmp_path):
