@@ -26,6 +26,19 @@ CORPUS_FILES = (
     "IPCC_AR6_WGI_Chapter12.pdf",
 )
 
+# The SHA-256 of each PDF. These files are pypdf's entire input, so they are
+# pinned: scripts/download_ipcc.py checks a download, or a copy it finds on
+# disk, before keeping it, and _parse_corpus checks again right before pypdf
+# runs, since the runtime parses data/ipcc on its own when the chunk cache is
+# missing or stale. Pinned 2026-11-11: the copies this project has been parsing
+# and a fresh download from ipcc.ch that day hashed the same. If the IPCC
+# republishes a file, re-download it, re-run the eval, then change the hash.
+CORPUS_SHA256 = {
+    "IPCC_AR6_WGI_SPM.pdf": "37c9fa760757524c8d69630a89cecab9ebcacb66786970a3439da0619875e446",
+    "IPCC_AR6_WGI_Chapter11.pdf": "d0dc4fae531a7b6a76a456cb12db9c7d68099265e377973d508484c3289ddce1",
+    "IPCC_AR6_WGI_Chapter12.pdf": "4f1bb6b1ecce77b7a0f7f2322a2ba34e53c1a1e5bcb48d5db7f6a2d80b0fd4a0",
+}
+
 # Parsing 439 PDF pages into 2730 chunks costs ~70 s (measured), and it is pure
 # function of (the PDFs, the chunking code). On Cloud Run that ran on EVERY cold
 # container and dominated the 219 s first response. So the result is cached to
@@ -99,11 +112,32 @@ def build_chunk_cache() -> int:
     return len(chunks)
 
 
+def file_sha256(path: Path) -> str:
+    """Hex SHA-256 of a file, read in 1 MiB blocks."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _check_pins() -> None:
+    """Refuse to parse any corpus PDF whose bytes are not the pinned ones."""
+    for name in CORPUS_FILES:
+        actual = file_sha256(CORPUS_DIR / name)
+        if actual != CORPUS_SHA256[name]:
+            raise CorpusError(
+                f"{name} does not match its pinned sha256 (expected {CORPUS_SHA256[name]}, "
+                f"got {actual}); refusing to parse it. Delete it and run scripts/download_ipcc.py"
+            )
+
+
 def _parse_corpus() -> tuple[Chunk, ...]:
     """The expensive path: extract every page, then chunk it (~70 s)."""
     missing = [name for name in CORPUS_FILES if not (CORPUS_DIR / name).exists()]
     if missing:
         raise CorpusError(f"corpus PDFs missing: {missing} — run scripts/download_ipcc.py")
+    _check_pins()  # before pypdf reads a byte
     pages = []
     for name in CORPUS_FILES:
         pages.extend(extract_pages(CORPUS_DIR / name))
