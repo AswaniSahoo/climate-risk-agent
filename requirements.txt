@@ -33,7 +33,7 @@ langgraph-checkpoint==4.1.1
 langgraph-prebuilt==1.1.0
 langgraph-sdk==0.4.6
 langsmith==0.8.18
-markupsafe==3.0.3
+markupsafe==3.0.4
 mcp==2.2.0
 mcp-types==2.2.0
 narwhals==2.23.0
