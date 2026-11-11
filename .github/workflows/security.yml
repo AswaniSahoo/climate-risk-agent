@@ -30,5 +30,12 @@ jobs:
           checksum: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
           enable-cache: true
 
-      - name: Run pip-audit
-        run: uvx pip-audit
+      # A bare `uvx pip-audit` audits the environment uvx built for pip-audit
+      # itself, not this project. Export the lock instead (every group, with
+      # hashes, without the local project) and audit exactly those pins:
+      # --require-hashes needs no resolver, so --disable-pip keeps pip out.
+      - name: Export the locked dependencies
+        run: uv export --frozen --all-groups --no-emit-project --format requirements.txt -o requirements-audit.txt
+
+      - name: Run pip-audit on the lock
+        run: uvx --from pip-audit==2.10.1 pip-audit --strict --require-hashes --disable-pip -r requirements-audit.txt

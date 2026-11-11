@@ -229,6 +229,23 @@ def test_the_gemini_key_reaches_only_the_steps_that_call_gemini():
             assert "secrets." not in other, f"{name} reads a secret"
 
 
+def test_dependency_audit_reads_the_lock_not_its_own_environment():
+    """`uvx pip-audit` with no input audits the throwaway environment uvx built
+    for pip-audit itself, so the job passed whatever the project locked. The
+    audit has to read uv.lock: exported with every group and its hashes, then
+    checked as pinned, hashed requirements with no resolver in the loop."""
+    text = dict(_workflows())["security.yml"]
+    export = re.search(r"uv export [^\n]*", text)
+    assert export, "the lock is never exported"
+    for flag in ("--frozen", "--all-groups", "--no-emit-project",
+                 "--format requirements.txt", "-o requirements-audit.txt"):
+        assert flag in export.group(0), f"uv export lacks {flag}"
+    audit = re.search(r"run: uvx --from pip-audit==\d+\.\d+\.\d+ pip-audit [^\n]*", text)
+    assert audit, "pip-audit does not run from a pinned version"
+    for flag in ("--strict", "--require-hashes", "--disable-pip", "-r requirements-audit.txt"):
+        assert flag in audit.group(0), f"pip-audit lacks {flag}"
+
+
 def test_no_workflow_can_reach_vertex():
     """rag/gemini_client.py goes to Vertex only when GOOGLE_GENAI_USE_VERTEXAI is
     true and Google credentials exist. No workflow sets either."""
