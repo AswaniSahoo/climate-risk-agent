@@ -12,8 +12,9 @@ loop may not exist). Here they run via `asyncio.to_thread`, so one slow
 Open-Meteo or Gemini call never blocks the event loop — the server keeps
 serving /healthz and other requests while a report is being built.
 
-Access control: set env API_KEY -> POST /report and GET /metrics require a
-matching `x-api-key` header. Unset -> open, with a loud dev-mode warning.
+Access control: set env API_KEY -> POST /report, /query, /triage and GET
+/metrics require a matching `x-api-key` header. Unset -> open, with a loud
+dev-mode warning.
 
 Run:  uv run uvicorn api.app:app --port 8000
 """
@@ -29,7 +30,7 @@ from pydantic import BaseModel, Field
 
 from agent.contracts import Hazard, RiskReport
 from agent.graph import run_agent
-from agent.nl import run_agent_nl
+from agent.nl import TriageOutcome, run_agent_nl, triage_query
 from obs.telemetry import Span, snapshot, summarize
 from tools.climatology import ClimatologyError, climatology_hazard_stat
 
@@ -139,6 +140,27 @@ async def create_report_from_query(request: QueryRequest) -> ReportResponse:
     with Span("api-query") as span:
         report = await asyncio.to_thread(run_agent_nl, request.query)
     return ReportResponse(report=report, telemetry=span.summary())
+
+
+class TriageResponse(BaseModel):
+    triage: TriageOutcome
+    telemetry: dict
+
+
+@app.post("/triage", response_model=TriageResponse, dependencies=[Depends(_require_api_key)])
+async def triage_question(request: QueryRequest) -> TriageResponse:
+    """Read a question without answering it: hazard, horizon, place, and the
+    refusal `/query` would give, in well under a second.
+
+    For a client to pre-fill its controls while the person is still looking at
+    the question, and to show an out-of-scope refusal without starting the
+    pipeline. No geocoding, forecast or Gemini call happens here; with
+    CRG_JEV=triage|all at most one Jev request does, and none when the lexical
+    parser settles the question. Gated like `/query` because Jev bills per token.
+    """
+    with Span("api-triage") as span:
+        outcome = await asyncio.to_thread(triage_query, request.query)
+    return TriageResponse(triage=outcome, telemetry=span.summary())
 
 
 @app.get("/healthz")

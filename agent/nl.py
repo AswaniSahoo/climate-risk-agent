@@ -2,8 +2,16 @@
 
 Lexical by design, like the scope guard: classification that runs before any
 LLM cannot be prompt-injected, costs zero tokens, and fails TYPED (hazard=None)
-instead of guessing. An LLM classifier can be added behind this later; the
-deterministic layer stays first.
+instead of guessing. The deterministic layer stays first.
+
+With CRG_JEV=triage|all, TypeSafe's Jev reads what the lexical layer cannot
+(adr/0002): a question with no hazard words at all goes through the scope
+guard's Jev stage, and a question the guard ruled in scope whose hazard these
+patterns cannot name ("temperature extremes") gets one Jev reading that may
+only name one of our three hazards. The parse then carries a `QueryTriage`
+saying who named the hazard and how firmly, so the reader sees that a report
+answers an interpretation. The horizon and the place stay lexical: dates and
+numbers are a documented Jev weakness, and a place string goes to the geocoder.
 """
 from __future__ import annotations
 
@@ -12,10 +20,11 @@ import re
 
 from pydantic import BaseModel
 
-from agent.contracts import Hazard, RiskReport
+from agent.contracts import Hazard, QueryTriage, RiskReport
 from agent.graph import run_agent
 from agent.progress import CLIMATOLOGY, LOCATE, OnStep, StepStatus, emit_step, track
-from rag.scope import scope_verdict
+from rag.jev_client import triage_enabled
+from rag.scope import ScopeDecision, has_supported_signal, out_of_scope_hazard, scope_verdict
 from tools.ar6_regions import region_for
 from tools.climatology import ClimatologyError, climatology_hazard_stat
 from tools.geocode import GeocodeError, geocode
@@ -65,23 +74,72 @@ class ParsedQuery(BaseModel):
     out_of_scope: str | None = None  # named unsupported hazard, for the refusal text
     place: str | None = None
     horizon_days: int = 7
+    # How the hazard or the refusal was decided. None unless CRG_JEV includes
+    # triage, so with the flag off the parse is exactly what it always was.
+    triage: QueryTriage | None = None
 
 
-def _extract_hazard(text: str) -> tuple[Hazard | None, str | None]:
-    """(hazard, out_of_scope_name) — the lexical patterns first, then the guard.
+def _triage_info(
+    *, source: str | None, decision: ScopeDecision | None, reading=None
+) -> QueryTriage:
+    """The reader-facing account of one parse. `reading` is a rag.jev_triage.JevTriage."""
+    stage = decision.stage if decision is not None else "lexical"
+    if reading is None:
+        return QueryTriage(hazard_source=source, scope_stage=stage)  # type: ignore[arg-type]
+    return QueryTriage(
+        hazard_source=source,  # type: ignore[arg-type]
+        hazard_probability=reading.hazard_probability if source == "jev" else None,
+        scope_stage=stage,
+        jev_status=reading.status,
+        jev_model=reading.model,
+        detail=reading.detail,
+    )
 
-    When stage 2 is on and recovers a hazard from a paraphrase the patterns miss
-    ("storms getting stronger" -> wind), that hint becomes the parsed hazard
-    instead of a "could not identify a supported hazard" refusal. With stage 2
-    off there is no hint, so this is the same two-line function as before.
+
+def _extract_hazard(text: str) -> tuple[Hazard | None, str | None, QueryTriage | None]:
+    """(hazard, out_of_scope_name, triage): the lexical patterns first, then the guard.
+
+    When a second reader is on (Jev, or scope stage 2) and recovers a hazard
+    from a paraphrase the patterns miss ("storms getting stronger" -> wind),
+    that hint becomes the parsed hazard instead of a "could not identify a
+    supported hazard" refusal. With both off there is no hint and no triage
+    record, so this is the same function as before.
     """
-    for hazard, pattern in _HAZARD_PATTERNS.items():
+    jev_on = triage_enabled()
+    # A marine heatwave contains "heatwave", which the heat pattern below would
+    # read as OUR hazard and send to a land heat report. rag/scope.py tests it
+    # first for exactly this reason (a false answer the held-out set caught);
+    # the front door has to honour the same rule before its own patterns run.
+    if out_of_scope_hazard(text) == "marine heatwave":
+        info = _triage_info(source=None, decision=ScopeDecision(out_of_scope="marine heatwave"))
+        return None, "marine heatwave", info if jev_on else None
+    for matched, pattern in _HAZARD_PATTERNS.items():
         if pattern.search(text):
-            return hazard, None
+            return matched, None, _triage_info(source="lexical", decision=None) if jev_on else None
+
     decision = scope_verdict(text)
     if decision.out_of_scope:
-        return None, decision.out_of_scope
-    return _HINT_TO_HAZARD.get(decision.hazard_hint or ""), None
+        info = _triage_info(source=None, decision=decision, reading=decision.jev)
+        return None, decision.out_of_scope, info if jev_on else None
+    hazard = _HINT_TO_HAZARD.get(decision.hazard_hint or "")
+    if hazard is not None:
+        info = _triage_info(source=decision.stage, decision=decision, reading=decision.jev)
+        return hazard, None, info if jev_on else None
+    if not jev_on:
+        return None, None, None
+
+    reading = decision.jev
+    if reading is None and has_supported_signal(text):
+        # Stage 1 ruled the question in scope by its own vocabulary, but these
+        # patterns cannot say WHICH hazard ("temperature extremes"). Jev may name
+        # one of our three; it may not refuse what stage 1 has let in.
+        from rag.jev_triage import HAZARD_HINT_NAME, triage
+
+        reading = triage(text, may_refuse=False)
+        if reading.decision == "hint" and reading.hazard is not None:
+            hazard = _HINT_TO_HAZARD[HAZARD_HINT_NAME[reading.hazard]]
+            return hazard, None, _triage_info(source="jev", decision=decision, reading=reading)
+    return None, None, _triage_info(source=None, decision=decision, reading=reading)
 
 
 def _extract_horizon(text: str) -> int:
@@ -116,19 +174,70 @@ def _extract_place(text: str) -> str | None:
 
 def parse_query(text: str) -> ParsedQuery:
     """Parse free text into typed parts; every miss is a None, never a guess."""
-    hazard, out_of_scope = _extract_hazard(text)
+    hazard, out_of_scope, triage = _extract_hazard(text)
     return ParsedQuery(
         hazard=hazard,
         out_of_scope=out_of_scope,
         place=_extract_place(text),
         horizon_days=_extract_horizon(text),
+        triage=triage,
     )
 
 
-def _nl_refusal(query: str, reason: str, *, horizon_days: int = 7) -> RiskReport:
+_SUPPORTED_TEXT = "(supported: heatwave, extreme precipitation, wind)"
+
+
+def refusal_reason(parsed: ParsedQuery) -> str | None:
+    """What the front door refuses with, decided from the parse alone, or None.
+
+    One function so that `/triage` shows the user exactly the sentence `/query`
+    would refuse with, before any geocoding or forecast has run.
+    """
+    if parsed.out_of_scope:
+        return f"{parsed.out_of_scope} is not a supported hazard {_SUPPORTED_TEXT}."
+    if parsed.hazard is None:
+        return f"could not identify a supported hazard in the question {_SUPPORTED_TEXT}."
+    if parsed.place is None:
+        return "could not identify a location in the question."
+    return None
+
+
+class TriageOutcome(BaseModel):
+    """The front door's reading of a question, without running the report.
+
+    What a client can show the moment a question is typed: the parsed hazard,
+    horizon and place to pre-fill its controls, and either the refusal the
+    full run would give or `None`. Costs no geocoding, forecast or Gemini call;
+    at most one Jev request, and none when the lexical parser settles it.
+    """
+
+    query: str
+    hazard: Hazard | None = None
+    horizon_days: int = 7
+    place: str | None = None
+    refusal: str | None = None
+    triage: QueryTriage | None = None
+
+
+def triage_query(text: str) -> TriageOutcome:
+    """Parse `text` and say what `/query` would do with it, before doing any of it."""
+    parsed = parse_query(text)
+    return TriageOutcome(
+        query=text,
+        hazard=parsed.hazard,
+        horizon_days=parsed.horizon_days,
+        place=parsed.place,
+        refusal=refusal_reason(parsed),
+        triage=parsed.triage,
+    )
+
+
+def _nl_refusal(
+    query: str, reason: str, *, horizon_days: int = 7, triage: QueryTriage | None = None
+) -> RiskReport:
     return RiskReport(
         location=query, hazard=None, horizon_days=horizon_days,
-        confidence=0.0, refusal=reason,
+        confidence=0.0, refusal=reason, triage=triage,
     )
 
 
@@ -147,25 +256,12 @@ def run_agent_nl(
     nodes are reported by `run_agent`, into the same callback.
     """
     parsed = parse_query(query)
-    if parsed.out_of_scope:
+    reason = refusal_reason(parsed)
+    if reason is not None:
         return _nl_refusal(
-            query,
-            f"{parsed.out_of_scope} is not a supported hazard "
-            f"(supported: heatwave, extreme precipitation, wind).",
-            horizon_days=parsed.horizon_days,
+            query, reason, horizon_days=parsed.horizon_days, triage=parsed.triage
         )
-    if parsed.hazard is None:
-        return _nl_refusal(
-            query,
-            "could not identify a supported hazard in the question "
-            "(supported: heatwave, extreme precipitation, wind).",
-            horizon_days=parsed.horizon_days,
-        )
-    if parsed.place is None:
-        return _nl_refusal(
-            query, "could not identify a location in the question.",
-            horizon_days=parsed.horizon_days,
-        )
+    assert parsed.hazard is not None and parsed.place is not None  # refusal_reason checked both
 
     try:
         with track(on_step, LOCATE):
@@ -173,7 +269,7 @@ def run_agent_nl(
             region = region_for(located.latitude, located.longitude)
     except GeocodeError as exc:
         return _nl_refusal(query, f"could not resolve the location: {exc}",
-                           horizon_days=parsed.horizon_days)
+                           horizon_days=parsed.horizon_days, triage=parsed.triage)
 
     if region is not None:
         # the corpus's own region vocabulary -> deterministic table-row retrieval
@@ -193,7 +289,7 @@ def run_agent_nl(
     else:
         emit_step(on_step, CLIMATOLOGY, StepStatus.SKIPPED, detail="ERA5 grounding off")
 
-    return run_agent(
+    report = run_agent(
         location=location_label,
         latitude=located.latitude,
         longitude=located.longitude,
@@ -202,3 +298,6 @@ def run_agent_nl(
         hazard_stat=hazard_stat,
         on_step=on_step,
     )
+    if parsed.triage is not None:
+        report = report.model_copy(update={"triage": parsed.triage})
+    return report

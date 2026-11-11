@@ -72,6 +72,56 @@ gcloud run deploy climate-risk-agent \
   both to share one cache across replicas; with neither set every instance
   keeps its own disk cache and `tools/cache_backend.py` logs which backend it
   chose.
+- `CRG_JEV`, `JEV_BASE_URL` and `JEV_API_KEY` are **optional** and Jev is off
+  by default ([adr/0002](adr/0002-jev-question-triage-and-citation-support.md)).
+  Turn Jev on only after `evals/run_jev_eval.py` meets that ADR's criteria.
+  Two providers are vetted, and `JEV_BASE_URL` can only pick one of them (any
+  other value is refused and Jev stays off):
+
+  | `JEV_BASE_URL` | provider | model sent | context limit |
+  | --- | --- | --- | --- |
+  | unset, or `https://api.typesafe.ai` | TypeSafe direct | `jev-1.14.0` (pinned version) | 64k tokens a request |
+  | `https://api.experientiallabs.ai` | Experiential Labs gateway, relaying to TypeSafe | `jev-latest` (the only Jev name it grants) | 32k tokens a request |
+
+  The key for the chosen provider goes in `JEV_API_KEY` (`TYPESAFE_API_KEY` is
+  still read as a fallback). It is a secret, so it goes through Secret Manager,
+  never `--set-env-vars` (documented here, not run):
+
+  ```bash
+  # 1. Store the key, typed at a prompt so it never lands in shell history.
+  read -rs KEY && printf '%s' "$KEY" | gcloud secrets create jev-api-key \
+    --replication-policy=automatic --data-file=- && unset KEY
+
+  # 2. Let the service's identity read it (the Compute Engine default service
+  #    account, unless the service was deployed with --service-account).
+  PROJECT_NUMBER=$(gcloud projects describe climate-risk-agent --format='value(projectNumber)')
+  gcloud secrets add-iam-policy-binding jev-api-key \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+  # 3. Expose it as JEV_API_KEY: add this flag to the deploy command above.
+  #    Pin a version number: env vars are resolved at instance start.
+  #      --update-secrets=JEV_API_KEY=jev-api-key:1
+
+  # 4. Choose the provider and the mode without touching the other variables.
+  #    Leave out JEV_BASE_URL for TypeSafe direct.
+  gcloud run services update climate-risk-agent --region us-central1 \
+    --update-env-vars JEV_BASE_URL=https://api.experientiallabs.ai,CRG_JEV=triage
+  ```
+
+  To rotate, add a secret version and redeploy with its number. A refused key
+  never breaks a request: the first 401, 402 or 403 pauses Jev calls for five
+  minutes at a time, every caller falls back to its non-Jev behaviour, and the
+  logs say so once. The gateway's free plan allows 10 requests and 250K tokens
+  a minute and 1M tokens a day, shared with other models
+  (https://www.experientiallabs.ai/pricing, read 2026-11-11); production does
+  not pace requests, so past that rate it answers 429 and callers fall back.
+  Optional tuning: `CRG_JEV_MODEL` (the provider's model by default),
+  `CRG_JEV_TRIAGE_BUDGET_S` (2.5 direct, 4 through the gateway),
+  `CRG_JEV_VERIFY_BUDGET_S` (6 direct, 8 through the gateway),
+  `CRG_JEV_MIN_INTERVAL_S` (pacing between requests, default off), and the
+  thresholds `CRG_JEV_REFUSE_P`, `CRG_JEV_HINT_P`, `CRG_JEV_NOUL_YES`,
+  `CRG_JEV_NOUL_NO`, which should only move with a re-run of the eval.
 
 ## Cost
 

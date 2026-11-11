@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -166,6 +166,55 @@ class DataProvenance(BaseModel):
     params: dict = Field(default_factory=dict)
 
 
+class QueryTriage(BaseModel):
+    """How the free-text front door read the question, for the reader to check.
+
+    Present only when CRG_JEV includes triage (agent/nl.py). `hazard_source`
+    says who named the hazard: the lexical parser, Jev, or scope stage 2. When
+    Jev named it, `hazard_probability` is Jev's probability for that hazard, so
+    a person can see the report answers an interpretation, and how firm it was.
+    `jev_status` is "not called" when the lexical parser settled everything,
+    and "unavailable: <reason>" when Jev failed and the front door fell back.
+    """
+
+    hazard_source: Literal["lexical", "jev", "embed", "llm"] | None = None
+    hazard_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    scope_stage: str = "lexical"
+    jev_status: str = "not called"
+    jev_model: str | None = None
+    detail: str = ""
+
+
+class CitationEvidence(BaseModel):
+    """How strongly one cited page backs the IPCC statement it is attached to.
+
+    One entry per (source, locator), matching a `Citation` one to one. The
+    numbers are Jev's probabilities that the passage supports, or contradicts,
+    the statement's best-matching sentence (rag/jev_verify.py). A signal for
+    the reader: the citation itself is still validated structurally, and this
+    never adds or removes one.
+    """
+
+    source: str
+    locator: str
+    chunk_id: str
+    supports: float = Field(ge=0.0, le=1.0)
+    contradicts: float = Field(ge=0.0, le=1.0)
+    strength: Literal["strong", "moderate", "weak", "contradicted", "unchecked"]
+
+
+class EvidenceCheck(BaseModel):
+    """Per-citation evidence strength for a report's IPCC statement (CRG_JEV=verify|all)."""
+
+    status: Literal["ok", "partial", "unavailable"]
+    method: str = "jev: supports / contradicts / says_nothing per (sentence, passage)"
+    model: str | None = None
+    detail: str = ""
+    citations: list[CitationEvidence] = Field(default_factory=list)
+    # Sentences of the statement that no cited passage supports at 0.5 or more.
+    unsupported_statements: list[str] = Field(default_factory=list)
+
+
 class RiskReport(BaseModel):
     """The agent's structured output contract.
 
@@ -191,6 +240,11 @@ class RiskReport(BaseModel):
     # this region/hazard — the report then says so rather than guessing.
     projected_change: ProjectedChange | None = None
     refusal: str | None = None
+    # Both optional and absent unless CRG_JEV turns them on (adr/0002): how the
+    # front door read a free-text question, and how strongly each cited page
+    # backs the IPCC statement. Signals for the reader, never part of a verdict.
+    triage: QueryTriage | None = None
+    evidence: EvidenceCheck | None = None
 
     @model_validator(mode="after")
     def _check_refusal_consistency(self) -> "RiskReport":

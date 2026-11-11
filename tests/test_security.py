@@ -26,6 +26,33 @@ def test_outbound_targets_are_pinned():
     assert GENERATE_MODEL == "gemini-2.5-flash"
 
 
+def test_jev_targets_and_models_are_pinned():
+    """A Jev provider receives user questions when CRG_JEV is on, so where they
+    can go is a reviewed list of two HTTPS hosts, not a config value. TypeSafe
+    direct is the default and pins a version; the gateway grants only the
+    alias (HTTP 403 model_not_granted for jev-1.14.0, probed 2026-11-11)."""
+    from rag.jev_client import DEFAULT_MODEL, JEV_BASE_URL, PROVIDERS, JevClient
+
+    assert JEV_BASE_URL == "https://api.typesafe.ai"
+    assert set(PROVIDERS) == {"https://api.typesafe.ai", "https://api.experientiallabs.ai"}
+    assert all(url.startswith("https://") and p.base_url == url for url, p in PROVIDERS.items())
+    assert DEFAULT_MODEL == "jev-1.14.0"
+    assert PROVIDERS["https://api.typesafe.ai"].default_model == "jev-1.14.0"
+    assert PROVIDERS["https://api.experientiallabs.ai"].default_model == "jev-latest"
+    client = JevClient("sentinel-key")
+    try:
+        assert str(client._http.base_url).rstrip("/") == JEV_BASE_URL
+    finally:
+        client.close()
+
+
+def test_jev_is_off_unless_asked_for(monkeypatch):
+    from rag.jev_client import jev_mode
+
+    monkeypatch.delenv("CRG_JEV", raising=False)
+    assert jev_mode() == "off"
+
+
 def test_gemini_auth_is_explicit_never_a_silent_fallback(monkeypatch):
     import rag.gemini_client as gc
 

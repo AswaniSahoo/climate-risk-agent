@@ -39,6 +39,7 @@ from langgraph.graph import END, START, StateGraph
 from agent.contracts import (
     Citation,
     DataProvenance,
+    EvidenceCheck,
     Hazard,
     ProjectedChange,
     RiskDriver,
@@ -98,6 +99,7 @@ class AgentState(TypedDict, total=False):
     hazard_stat: Optional[HazardStat]  # optional ERA5 climatology, injected by caller
     ipcc_answer: Optional[CitedAnswer]  # research node output (None if degraded)
     ipcc_chunks: list[Chunk]  # what research retrieved — needed to map chunk_id -> page
+    evidence: Optional[EvidenceCheck]  # Jev citation support (CRG_JEV=verify|all only)
     projected_change: Optional[ProjectedChange]  # project node output (None if nothing found)
     projection_note: str  # why there is no projection, when there is none
     report: Optional[RiskReport]
@@ -199,6 +201,12 @@ def research(state: AgentState) -> dict:
     Loud, non-fatal by design: no corpus / no LLM auth / answer failure prints
     a warning and the report ships without citations — degraded, never silent,
     never fabricated.
+
+    With CRG_JEV=verify|all, each cited page is then checked for whether it
+    actually supports the answer (rag/jev_verify.py). That runs here, inside
+    this step, rather than as a graph node of its own, so the progress panel's
+    seven steps are the same with the flag on or off. It only annotates:
+    citations, risk level and confidence are untouched, and it never raises.
     """
     question = _ipcc_question(state["hazard"], state["location"])
     try:
@@ -207,7 +215,16 @@ def research(state: AgentState) -> dict:
     except (CorpusError, AnswerError, GeminiError) as exc:
         _log.warning("IPCC grounding unavailable (%s) — report ships without citations", exc)
         return {}
-    return {"ipcc_answer": answer, "ipcc_chunks": chunks}
+    out: dict = {"ipcc_answer": answer, "ipcc_chunks": chunks}
+
+    from rag.jev_client import verify_enabled
+
+    if verify_enabled() and not answer.abstain and answer.citations:
+        from rag.jev_verify import verify_answer
+
+        by_id = {c.chunk_id: c for c in chunks}
+        out["evidence"] = verify_answer(answer.answer, [by_id[cid] for cid in answer.citations])
+    return out
 
 
 _NO_REGION_NOTE = (
@@ -392,6 +409,9 @@ def synthesize(state: AgentState) -> dict:
         hazard_stats=hazard_stats,
         projected_change=projected,
         confidence=confidence,
+        # Annotation only, and only beside the citations it describes: the
+        # check never feeds the band or the confidence above.
+        evidence=state.get("evidence") if citations else None,
     )
     return {"report": report}
 

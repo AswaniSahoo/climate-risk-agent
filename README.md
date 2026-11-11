@@ -124,6 +124,17 @@ No arm beat the baseline at any k, and the cheapest of them costs about 100 time
 
 Zero false answers in every arm, and no arm gained anything, so the default stays off. The embed arm's one false refusal carries lexical hazard vocabulary and never reached stage 2. `embed` is the arm to promote, once a held-out run confirms the matrix holds. The full reasoning is in [LIMITATIONS.md](LIMITATIONS.md).
 
+**Jev question triage and citation check: measured, kept off.** `CRG_JEV=off|triage|verify|all` (default `off`) lets TypeSafe's Jev, a model that answers typed questions with probabilities instead of text, do two jobs. Triage reads the questions stage 1 cannot see: it can refuse a confident off-topic one before retrieval, or name the hazard in a paraphrase such as "How hot will it get in Delhi next week?", which the front door refuses today. The citation check asks, for each cited page, whether it supports the IPCC statement, and annotates the report with a strength per citation. Stage 1 stays first and final, code decides on fixed thresholds, and any Jev failure falls back to today's behaviour ([adr/0002](adr/0002-jev-question-triage-and-citation-support.md)). Measured on 2026-11-11 on the dev set and the 14 stage-2 paraphrase probes, through the Experiential Labs gateway (`JEV_BASE_URL=https://api.experientiallabs.ai`, model `jev-latest`; [report](evals/results/jev-dev-2026-11-11.md)):
+
+| measure | today, lexical only | with Jev |
+| --- | --- | --- |
+| scope decided right, dev set | 58/60, no false refusals | 60/60, no false refusals |
+| scope decided right, the 14 paraphrase probes | 7/14 | 14/14 |
+| hazard named by the front door, dev questions with one | 39/42 | 41/42, none wrong |
+| hazard named, in-scope paraphrase probes | 1/7 | 6/7, none wrong |
+
+The two policy questions that only Gemini refused today (an NDC pledge and GDP lost to warming) are now refused before retrieval, and no decision changed with the option order reversed or across two uncached runs. Each triage call added a median 640 ms and a p95 of 2,055 ms, and only for questions with no hazard word. On 110 mechanically labelled citation pairs, Jev's top answer matched the label on 105 and its strength label on 101 (AUC 0.9955); two of the misses point at what look like wrong Chapter 12 labels in the dev set rather than at Jev. 244 calls cost $0.009 at the list price, and the gateway's free plan reported $0. Both stay off: triage misses the ADR's pre-set 1,000 ms p95 latency gate, and the citation check misses one of its accuracy gates. Re-run with `uv run python -m evals.run_jev_eval --task all --order-check --repeats 2` (dev set only, $2 and token caps, paced for the gateway's 10-a-minute plan). With the flag on, `POST /triage` reads a question (hazard, horizon, place, and the refusal `/query` would give) without running the report.
+
 Every eval artifact records the model that produced it, because a model swap is
 invisible to a test suite. When the answering model was changed without
 re-running these evals, the benchmark caught a usefulness regression that the
@@ -155,7 +166,7 @@ Three caveats travel with these numbers. The reference series is the model's own
 - One shared cache sits behind the climatology fit, the forecast and the answer cache: Upstash Redis over REST when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set, disk otherwise. `tools/cache_backend.py` logs the backend it chose, and `scripts/prewarm.py` fills it before a demo.
 - Structured logging and per-request telemetry, measured at the single SDK seam every model call passes through: latency, tokens, retries and cost. Reasoning tokens are counted as billed output, and a model with no price entry reports its cost as unknown rather than as zero. The in-memory event ring is bounded; the JSONL sink keeps the long history.
 - Cloud Run idle cost per min-instance shape, the measured 30-day load and the resize plan are in [DEPLOY.md](DEPLOY.md).
-- Async FastAPI service (`POST /report`) with per-request API-key access control and a `/metrics` endpoint.
+- Async FastAPI service (`POST /report`, `POST /query`, and `POST /triage` for reading a question without running it) with per-request API-key access control and a `/metrics` endpoint.
 - Two MCP servers (weather, IPCC RAG) exposing the same tools over the Model Context Protocol.
 - `CRG_BOOTSTRAP_N` sets the GEV bootstrap refits per fit (defaults: 300 stationary, 200 trend-adjusted); it is read at import, is part of the hazard-fit cache key, and trades confidence-interval precision for fit time.
 - Docker image measured at 0.31 GB locally. `ci.yml` runs ruff, mypy and pytest on every push and pull request; `evals.yml` runs both evals on a `v*` tag push or on demand, against a pre-built embedding cache downloaded as a release asset, so cutting a release never re-embeds the corpus.
@@ -256,7 +267,7 @@ A wrong return level, a wrong page citation, or a wrong region mapping is a firs
 
 ## Tech stack
 
-Python, LangGraph, Google Gemini (generation) + gemini-embedding-2 (dense) on Vertex AI (global endpoint), BM25 + dense hybrid retrieval (RRF fusion), Pydantic, FastAPI, Streamlit, MCP Python SDK, scipy, Docker, GitHub Actions.
+Python, LangGraph, Google Gemini (generation) + gemini-embedding-2 (dense) on Vertex AI (global endpoint), BM25 + dense hybrid retrieval (RRF fusion), TypeSafe Jev (optional triage and citation check, off by default), Pydantic, FastAPI, Streamlit, MCP Python SDK, scipy, Docker, GitHub Actions.
 
 ## Limitations
 
