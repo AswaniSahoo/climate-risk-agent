@@ -21,7 +21,8 @@ from pathlib import Path
 import httpx
 
 from agent.contracts import Hazard
-from tools.cache_backend import JsonCache
+from tools import archive_budget
+from tools.cache_backend import JsonCache, source_bytes
 from tools.gev_trend import GevTrendFit, fit_gev_trend, trend_return_levels
 from tools.hazard_stats import (
     HazardStat,
@@ -37,6 +38,11 @@ _ERA5_RESOLUTION_DEG = 0.25
 
 class ClimatologyError(RuntimeError):
     """Raised when the Open-Meteo Archive request fails."""
+
+
+class ArchiveBudgetExceeded(ClimatologyError):
+    """The archive budget or its rate-limit breaker refused the request before it
+    was sent (tools/archive_budget.py). The message is the sentence for the reader."""
 
 
 @dataclass(frozen=True)
@@ -231,7 +237,7 @@ def _code_fingerprint() -> str:
     """
     digest = hashlib.sha256()
     for name in _FINGERPRINT_SOURCES:
-        digest.update((_SOURCE_DIR / name).read_bytes())
+        digest.update(source_bytes(_SOURCE_DIR / name))  # LF: a CRLF checkout agrees
     return digest.hexdigest()[:16]
 
 
@@ -303,8 +309,15 @@ def climatology_hazard_stat(
         "models": "era5",
         "timezone": "auto",  # local-day boundaries (matters for daily precip totals)
     }
+    # One new place weighs about 1,644 Open-Meteo calls of a free 10,000 a day,
+    # from egress addresses Cloud Run shares: budget it, and stop at a 429.
+    refusal = archive_budget.reserve(archive_budget.request_weight(params))
+    if refusal is not None:
+        raise ArchiveBudgetExceeded(refusal)
     try:
         response = httpx.get(ARCHIVE_URL, params=params, timeout=60)
+        if response.status_code == 429:
+            archive_budget.trip_breaker()
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise ClimatologyError(f"Open-Meteo Archive request failed: {exc}") from exc

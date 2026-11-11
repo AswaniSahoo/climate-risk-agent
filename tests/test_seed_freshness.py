@@ -83,13 +83,20 @@ def test_a_local_corpus_unlike_the_recorded_one_is_flagged(tmp_path, monkeypatch
 
 
 def test_another_bootstrap_count_retires_every_fit(tmp_path, monkeypatch):
-    seed = _copy(clim_pre.SEED_FILE, tmp_path)
+    """Built here rather than read from the shipped file, which may hold no fit."""
+    from agent.contracts import Hazard
+
+    city = clim_pre.City(name="Berlin", country="DE", latitude=52.52, longitude=13.40)
+    seed = tmp_path / "climatology.json"
+    seed.write_text(json.dumps({"entries": [{
+        "key": clim_pre.entry_key(city, Hazard.HEATWAVE), "city": "Berlin", "country": "DE",
+        "latitude": 52.52, "longitude": 13.40, "hazard": "heatwave", "value": {}}]}))
+    assert clim_pre.stale_rows(seed) == []
+
     monkeypatch.setattr(clim, "_N_BOOT", 150)
     monkeypatch.setattr(clim, "_TREND_N_BOOT", 150)
 
-    stale = clim_pre.stale_rows(seed)
-
-    assert len(stale) == len(json.loads(seed.read_text())["entries"]) > 0
+    assert len(clim_pre.stale_rows(seed)) == 1
 
 
 def test_a_seed_without_recorded_corpus_sizes_cannot_pass(tmp_path):

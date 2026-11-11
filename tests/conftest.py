@@ -67,6 +67,20 @@ def _no_network(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _archive_budget_fresh(monkeypatch):
+    """Each test starts with an empty Open-Meteo Archive budget and no breaker,
+    at the default limits, whatever the shell exports."""
+    from tools import archive_budget
+    from tools.cache_backend import LocalCounter
+
+    for name in ("CRG_ARCHIVE_DAILY_CALLS", "CRG_ARCHIVE_HOURLY_CALLS"):
+        monkeypatch.delenv(name, raising=False)
+    archive_budget.reset(LocalCounter())
+    yield
+    archive_budget.reset(LocalCounter())
+
+
+@pytest.fixture(autouse=True)
 def _isolated_telemetry(tmp_path, monkeypatch):
     from obs import telemetry
 
