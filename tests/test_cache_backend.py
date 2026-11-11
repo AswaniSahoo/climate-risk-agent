@@ -390,3 +390,120 @@ def test_cache_misses_always_reach_the_disk_sink(tmp_path, monkeypatch):
     persisted = [json.loads(line) for line in lines if '"cache:demo"' in line]
     assert len(persisted) == 3 and not any(e["cached"] for e in persisted)
 
+
+
+# --- precomputed entries: committed files read before the live backend ----
+#
+# With min-instances 0 and no Redis, the live tier is a per-instance disk that
+# dies at every scale to zero, so a value computed once has to ship WITH the
+# image to help the next cold visitor. The seed files hold such values under
+# the exact namespaced keys JsonCache builds: an entry can only answer the
+# request (and the code version inside that key) it was computed for.
+
+def _seed_file(path, entries):
+    path.write_text(json.dumps({"schema_version": 1, "entries": entries}), encoding="utf-8")
+
+
+def test_a_precomputed_entry_is_served_first_and_says_where_it_came_from(tmp_path):
+    from tools.cache_backend import _with_seed
+
+    key = JsonCache("hazard_fit").key("abc")
+    _seed_file(tmp_path / "fits.json", [{"key": key, "value": {"name": "seeded", "value": 1}}])
+    live = _StubBackend("disk")
+    live.store[key] = _Thing(name="live", value=2).model_dump_json()
+    cache = JsonCache("hazard_fit", backend=_with_seed(live, {"CRG_CACHE_SEED_DIR": str(tmp_path)}))
+
+    assert cache.get_model("abc", _Thing) == _Thing(name="seeded", value=1)
+    event = [e for e in snapshot() if e["op"] == "cache:hazard_fit"][-1]
+    assert (event["model"], event["cached"]) == ("precomputed", True)
+
+
+def test_a_key_the_seed_lacks_falls_through_to_the_live_backend(tmp_path):
+    from tools.cache_backend import _with_seed
+
+    _seed_file(tmp_path / "fits.json", [{"key": "crg:v1:hazard_fit:other", "value": {"x": 1}}])
+    live = _StubBackend("disk")
+    cache = JsonCache("hazard_fit", backend=_with_seed(live, {"CRG_CACHE_SEED_DIR": str(tmp_path)}))
+    live.store[cache.key("abc")] = _Thing(name="live", value=2).model_dump_json()
+
+    assert cache.get_model("abc", _Thing) == _Thing(name="live", value=2)
+    assert cache.get_model("absent", _Thing) is None
+    events = [e for e in snapshot() if e["op"] == "cache:hazard_fit"]
+    assert [(e["model"], e["cached"]) for e in events] == [("disk", True), ("disk", False)]
+
+
+def test_writes_go_to_the_live_backend_and_never_to_the_seed(tmp_path):
+    from tools.cache_backend import _with_seed
+
+    key = JsonCache("demo").key("abc")
+    _seed_file(tmp_path / "s.json", [{"key": key, "value": {"name": "seeded", "value": 1}}])
+    live = _StubBackend("disk")
+    backend = _with_seed(live, {"CRG_CACHE_SEED_DIR": str(tmp_path)})
+
+    JsonCache("demo", backend=backend).set_model("abc", _Thing(name="new", value=3), ttl_s=60)
+
+    assert json.loads(live.store[key]) == {"name": "new", "value": 3}
+    assert json.loads((tmp_path / "s.json").read_text())["entries"][0]["value"]["name"] == "seeded"
+
+
+def test_no_seed_entries_leave_the_live_backend_untouched(tmp_path):
+    from tools.cache_backend import _with_seed
+
+    live = _StubBackend("disk")
+
+    assert _with_seed(live, {"CRG_CACHE_SEED_DIR": str(tmp_path)}) is live  # empty dir
+    assert _with_seed(live, {"CRG_CACHE_SEED_DIR": ""}) is live  # explicitly off
+
+
+def test_an_unreadable_seed_file_is_skipped_loudly_and_the_rest_still_load(tmp_path, caplog):
+    from tools.cache_backend import load_seed_entries
+
+    (tmp_path / "a_broken.json").write_text("{not json", encoding="utf-8")
+    _seed_file(tmp_path / "b_good.json", [
+        {"key": "crg:v1:demo:k1", "value": {"x": 1}},
+        {"key": "not-a-cache-key", "value": {"x": 2}},  # not a JsonCache key: refused
+        {"key": "crg:v1:demo:k3"},  # no value: refused
+    ])
+
+    with caplog.at_level(logging.WARNING):
+        entries = load_seed_entries(tmp_path)
+
+    assert list(entries) == ["crg:v1:demo:k1"]
+    assert json.loads(entries["crg:v1:demo:k1"]) == {"x": 1}
+    assert "a_broken.json" in caplog.text
+    assert "2 malformed" in caplog.text
+
+
+def test_write_seed_file_round_trips_through_the_loader(tmp_path):
+    from tools.cache_backend import load_seed_entries, write_seed_file
+
+    path = tmp_path / "out.json"
+    write_seed_file(
+        path,
+        header={"schema_version": 1, "namespace": "demo"},
+        entries=[
+            {"key": "crg:v1:demo:b", "value": {"name": "b", "value": 2}},
+            {"key": "crg:v1:demo:a", "value": {"name": "a", "value": 1}, "label": "first"},
+        ],
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["namespace"] == "demo"
+    assert [e["key"] for e in payload["entries"]] == ["crg:v1:demo:a", "crg:v1:demo:b"]  # sorted
+    entries = load_seed_entries(tmp_path)
+    assert _Thing.model_validate_json(entries["crg:v1:demo:a"]) == _Thing(name="a", value=1)
+
+
+def test_every_committed_seed_file_loads_cleanly(caplog):
+    """The files under tools/cache_seed/ ship in the image: each one must parse,
+    and every entry must be a namespaced cache key with a value."""
+    from tools.cache_backend import SEED_DIR, load_seed_entries
+
+    files = sorted(SEED_DIR.glob("*.json"))
+    with caplog.at_level(logging.WARNING):
+        entries = load_seed_entries(SEED_DIR)
+
+    assert "unreadable" not in caplog.text and "malformed" not in caplog.text
+    total = sum(len(json.loads(f.read_text(encoding="utf-8"))["entries"]) for f in files)
+    assert len(entries) == total
+    assert all(key.startswith(f"crg:{CACHE_SCHEMA_VERSION}:") for key in entries)

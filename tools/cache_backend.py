@@ -297,6 +297,118 @@ class FallbackCache:
                 self._degrade("set", exc)
 
 
+# Precomputed entries that ship with the code. The service runs at
+# min-instances 0, and without Upstash credentials the live tier is a disk that
+# dies with every instance, so a value computed once has to be IN the image to
+# help the next cold visitor. Each entry is stored under the exact namespaced
+# key JsonCache builds, so it can only answer the request, and the code
+# version, folded into that key; anything else falls through to the live tier.
+SEED_DIR = Path(__file__).resolve().parent / "cache_seed"
+
+
+class PrecomputedCache:
+    """Read-only entries loaded from the seed files. Writes are ignored."""
+
+    def __init__(self, entries: Mapping[str, str]) -> None:
+        self.name = "precomputed"
+        self._entries = dict(entries)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def get(self, key: str) -> str | None:
+        return self._entries.get(key)
+
+    def set(self, key: str, value: str, ttl_s: int | None = None) -> None:
+        return None
+
+
+class SeededCache:
+    """Precomputed entries first, then the live backend; writes go to the live one."""
+
+    def __init__(self, seed: PrecomputedCache, backend: CacheBackend) -> None:
+        self.seed = seed
+        self.backend = backend
+        self.name = f"{seed.name}+{backend.name}"
+
+    def get_traced(self, key: str) -> tuple[str | None, str]:
+        value = self.seed.get(key)
+        if value is not None:
+            return value, self.seed.name
+        return get_traced(self.backend, key)
+
+    def get(self, key: str) -> str | None:
+        return self.get_traced(key)[0]
+
+    def set(self, key: str, value: str, ttl_s: int | None = None) -> None:
+        self.backend.set(key, value, ttl_s)
+
+
+def load_seed_entries(directory: Path | str) -> dict[str, str]:
+    """Every well-formed entry in every `*.json` seed file under `directory`.
+
+    A file that does not parse is skipped with a warning naming it, and so is an
+    entry without a namespaced key or a value: a bad seed costs its own entries,
+    never the process.
+    """
+    entries: dict[str, str] = {}
+    for path in sorted(Path(directory).glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            rows = payload["entries"]
+            if not isinstance(rows, list):
+                raise ValueError("`entries` is not a list")
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            _log.warning("cache seed %s unreadable (%s), skipped", path.name, exc)
+            continue
+        malformed = 0
+        for row in rows:
+            key = row.get("key") if isinstance(row, dict) else None
+            value = row.get("value") if isinstance(row, dict) else None
+            if not isinstance(key, str) or not key.startswith(f"{_KEY_PREFIX}:") or value is None:
+                malformed += 1
+                continue
+            entries[key] = value if isinstance(value, str) else json.dumps(
+                value, ensure_ascii=False, separators=(",", ":")
+            )
+        if malformed:
+            _log.warning("cache seed %s: %d malformed entries skipped", path.name, malformed)
+    return entries
+
+
+def write_seed_file(path: Path | str, *, header: Mapping[str, object], entries: list[dict]) -> None:
+    """Write a seed file: the header fields, then one entry per line, sorted by key.
+
+    One line per entry keeps a regenerated file reviewable as a diff. Each entry
+    needs `key` (the full JsonCache key) and `value` (the stored model, as JSON);
+    any other fields (a city name, a region) are for the reader and ignored on load.
+    """
+    rows = sorted(entries, key=lambda row: row["key"])
+    head = json.dumps(dict(header), ensure_ascii=False, indent=1)[:-2]  # drop the closing "\n}"
+    body = ",\n".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) for row in rows)
+    text = f'{head},\n "entries": [\n{body}\n ]\n}}\n' if rows else f'{head},\n "entries": []\n}}\n'
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+
+
+def _with_seed(backend: CacheBackend, env: Mapping[str, str]) -> CacheBackend:
+    """Put the precomputed entries in front of `backend`, when there are any.
+
+    CRG_CACHE_SEED_DIR overrides the directory; set to an empty string it turns
+    the seed off (what a precompute run wants, so it computes instead of reading).
+    """
+    raw = env.get("CRG_CACHE_SEED_DIR")
+    if raw == "":
+        return backend
+    directory = SEED_DIR if raw is None else Path(raw)
+    entries = load_seed_entries(directory)
+    if not entries:
+        return backend
+    _log.info("cache seed: %d precomputed entries from %s", len(entries), directory)
+    return SeededCache(PrecomputedCache(entries), backend)
+
+
 def _backend_from_env(env: Mapping[str, str]) -> CacheBackend:
     """Pick a backend from configuration. Pure in `env` so it is directly testable."""
     root = Path(env.get("CRG_CACHE_DIR", _DEFAULT_ROOT))
@@ -320,7 +432,7 @@ def cache_from_env() -> CacheBackend:
     """The process-wide backend (memoised: one instance, one outage warning)."""
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return NullCache()  # hermetic tests: the shared cache is never touched
-    return _backend_from_env(os.environ)
+    return _with_seed(_backend_from_env(os.environ), os.environ)
 
 
 # Disk sampling for cache-read telemetry. Every read used to append a line to
