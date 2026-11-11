@@ -45,6 +45,7 @@ from typing import Protocol
 
 from agent.contracts import ChangeDirection, Citation, Hazard, ProjectedChange
 from rag.chunk import Chunk
+from rag.scope import out_of_scope_hazard
 from tools.ar6_regions import AR6Region
 
 _log = logging.getLogger(__name__)
@@ -181,7 +182,9 @@ def _direction(sentence: str) -> ChangeDirection:
     return ChangeDirection.UNKNOWN
 
 
-def _focus(sentence: str, region_pattern: re.Pattern[str]) -> str | None:
+def _focus(
+    sentence: str, region_pattern: re.Pattern[str], hazard: Hazard | None = None
+) -> str | None:
     """The clause of `sentence` that speaks about this region, or None.
 
     A clause qualifies only if it carries ALL THREE signals ITSELF: the region,
@@ -195,6 +198,15 @@ def _focus(sentence: str, region_pattern: re.Pattern[str]) -> str | None:
     which yielded SAS / INCREASE / "high confidence", none of it about SAS.
     There is no safe fallback here, so an ambiguous sentence yields None and the
     caller moves on to the next candidate (or reports no projection at all).
+
+    With `hazard`, a clause that names a hazard this agent refuses, and not
+    this hazard's own driver, is evidence about that other hazard and yields
+    None. Measured on the Ch.12 Africa wind summary (p29): "high confidence of a
+    decrease in frequency of cyclones landing in SEAF, ESAF and MDG" was read as
+    ESAF's mean wind projection, because the sentence's wind term ("wind
+    storms") sits in another clause, about other regions. Only that sentence's
+    clauses are dropped across the corpus; a clause that names no other hazard
+    ("medium confidence of such decreases in Northern Europe") still reads.
     """
     clauses = _CLAUSE_SPLIT.split(sentence)
     naming = [c for c in clauses if region_pattern.search(c)]
@@ -202,6 +214,9 @@ def _focus(sentence: str, region_pattern: re.Pattern[str]) -> str | None:
         return None
     clause = naming[0]
     if not _CONFIDENCE.search(clause) or not _states_direction(clause):
+        return None
+    if (hazard is not None and out_of_scope_hazard(clause) is not None
+            and not _CID_TERM[hazard].search(clause)):
         return None
     return clause
 
@@ -284,7 +299,7 @@ def projected_change_for(
         (sentence, focus)
         for chunk in chunks
         for sentence in _qualifying_sentences(chunk, hazard, pattern)
-        if (focus := _focus(sentence, pattern)) is not None
+        if (focus := _focus(sentence, pattern, hazard)) is not None
     ]
     chosen = next(
         (pair for pair in candidates if pair[0].endswith(".")),

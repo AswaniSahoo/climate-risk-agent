@@ -126,7 +126,6 @@ def test_filter_rejects_the_table_legend_and_the_wrong_hazard():
          ChangeDirection.INCREASE, "medium confidence", None),
         (WNA, Hazard.WIND, WIND_NORTH_AMERICA, 66,
          ChangeDirection.DECREASE, "high confidence", None),
-        (ESAF, Hazard.WIND, WIND_AFRICA, 29, ChangeDirection.DECREASE, "high confidence", None),
     ],
 )
 def test_direction_and_confidence_parse_from_real_rows(
@@ -396,6 +395,32 @@ def test_focus_requires_region_direction_and_confidence_in_one_clause():
     assert _focus(sentence, _region_pattern(SAS)) is None  # clause has neither
     focus = _focus(sentence, _region_pattern(WAF))
     assert focus is not None and "South Asia" not in focus
+
+
+SEAF = AR6Region(acronym="SEAF", name="South Eastern Africa")
+MDG = AR6Region(acronym="MDG", name="Madagascar")
+
+
+@pytest.mark.parametrize("region", [ESAF, SEAF, MDG], ids=lambda r: r.acronym)
+def test_a_clause_about_cyclone_landfalls_is_not_a_wind_projection(region):
+    """The ESAF clause states "a decrease in frequency of cyclones landing"; the wind term
+    that let the sentence in ("wind storms") belongs to another clause, about other
+    regions. It used to come out as ESAF wind: decrease, high confidence (dev CID-11)."""
+    change = projected_change_for(
+        region, Hazard.WIND, retriever=_StubRetriever([_chunk(WIND_AFRICA, page=29)])
+    )
+
+    assert change is None
+
+
+def test_a_clause_with_no_other_hazard_still_reads_by_reference():
+    """The narrowing is about a clause that names ANOTHER hazard: NEU's "such decreases"
+    names none, and keeps its own verdict (dev CID-10's sentence)."""
+    from rag.cid import _focus
+
+    focus = _focus(WIND_EUROPE, _region_pattern(NEU), Hazard.WIND)
+
+    assert focus is not None and "such decreases" in focus
 
 
 # --- from_retrieval: the ids are read off the retriever, not off the caller --
