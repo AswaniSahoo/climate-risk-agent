@@ -220,17 +220,29 @@ runs until it resets at 00:00 UTC. Answers already cached still carry their
 citations." A session over its cap gets the same with its own sentence; a
 reload starts a new session, so that cap stops one tab from spending the day
 by accident, and the daily budget is the hard stop. The startup embedding
-probe is exempt and cached per process (ten minutes when it passes, one minute
-when it fails), so a spent budget never shows up as the "embedding config"
-banner.
+probe is exempt, and `embedding_available_once` shares one answer per process
+(ten minutes when it passes, one minute when it fails), so a spent budget
+never shows up as the "embedding config" banner.
 
 Where the count lives. With `UPSTASH_REDIS_REST_URL` and
 `UPSTASH_REDIS_REST_TOKEN` set: in Upstash, one `INCRBY` + `EXPIRE` transaction
 per change, one budget for every instance. Without them, or for 60 s after an
 Upstash error: in each process, so every instance has a budget of its own and a
 restart resets it, and the bound below multiplies by the instances that run in
-a day. The live service has no `UPSTASH_*` variables (checked 2026-11-11), so
-set them, or keep `--max-instances` low, for the bound to mean what it says.
+a day. The deployment shares its cache through Cloud Storage, not Upstash
+("Hardening the GCP side"), so this counter is per process there, and the
+service runs at most one instance (`--max-instances=1`): the in-process
+count is the service's count, except that every cold start begins the day
+at zero again. Until the counter is shared, the daily bound holds per
+instance lifetime, not per calendar day.
+
+The per-client API limit (`CRG_API_RATE_LIMIT`) counts by the connecting
+address uvicorn reports, and uvicorn trusts `X-Forwarded-For` only from
+`FORWARDED_ALLOW_IPS` (127.0.0.1 by default in uvicorn 0.50.0). When the
+API runs behind a proxy, set `FORWARDED_ALLOW_IPS` to the proxy's address,
+or every caller shares one limit. The production image runs Streamlit only
+(the Dockerfile's `CMD`), so this applies wherever `api/app.py` is served,
+not to the live demo.
 
 Evals run with the budget off: `evals.yml` sets `CRG_DAILY_MODEL_BUDGET_USD:
 "off"`, and both eval runners default to off unless the variable is set. A
