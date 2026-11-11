@@ -69,12 +69,16 @@ import itertools
 import json
 import logging
 import os
+import random
+import secrets
 import tempfile
+import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from functools import lru_cache
 from pathlib import Path
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -348,6 +352,423 @@ class FallbackCache:
                 self._degrade("set", exc)
 
 
+# --- Cloud Storage: the shared tier that outlives every instance --------------
+#
+# WHY CLOUD STORAGE, and WHY THE JSON API OVER httpx rather than the
+# google-cloud-storage client: the service already ships google-auth (through
+# google-genai, whose lock entry asks for google-auth[requests]) and httpx, so
+# minting a token with google-auth and sending four JSON API requests with httpx
+# adds no dependency to the image, and pytest-httpx mocks it like every other
+# HTTP seam here. The client library would add google-cloud-storage and its
+# google-api-core and google-resumable-media stack to cold start for exactly
+# four calls.
+#
+# CLOUD STORAGE CONTRACT, JSON API, read 2026-11-11 at
+# cloud.google.com/storage/docs (quoted, not remembered):
+# - objects.get: "When `alt=media` is included as a query parameter in the
+#   request, this method retrieves object data." Without it, the object
+#   resource: `generation` is "The content generation of this object" and
+#   `metadata` is "User-provided metadata, in key-value pairs."
+# - objects.insert, POST https://storage.googleapis.com/upload/storage/v1/b/bucket/o
+#   with uploadType=multipart: "Upload both the object data and its metadata, in
+#   a single request." And: "If the object being inserted has the same name as
+#   an existing object, the user must also have the `storage.objects.delete`
+#   permission to overwrite the existing object."
+# - request preconditions: with ifGenerationMatch, "If the values don't match,
+#   the request fails with a `412 Precondition Failed` response", and with the
+#   value 0 "the request only proceeds if no object with the specified name
+#   exists in the bucket".
+# - objects.delete: "If successful, this method returns an empty response body."
+# - a request URL must percent-encode `/`, `:` and the other listed characters
+#   in an object name.
+# - scope devstorage.read_write: "Allows access to read and change data, but not
+#   metadata like IAM policies."
+# The runtime identity holds storage.objects.get, .create and .delete on the
+# bucket and nothing else, so nothing here lists, patches or reads bucket
+# settings: an expiry, or a counter's value, is written with the object at
+# upload time, and an overwrite relies on the delete permission quoted above.
+
+GCS_SCOPE = "https://www.googleapis.com/auth/devstorage.read_write"
+_GCS_API = "https://storage.googleapis.com/storage/v1"
+_GCS_UPLOAD_API = "https://storage.googleapis.com/upload/storage/v1"
+
+
+def _adc_file() -> str | None:
+    """The Application Default Credentials file, or None (as on Cloud Run).
+
+    Read directly for the reason rag/gemini_client.py gives: google.auth.default()
+    may shell out to gcloud to find a project, which hangs under an MCP stdio
+    server. On Cloud Run there is no file and the metadata server answers.
+    """
+    explicit = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    try:
+        from google.auth import _cloud_sdk
+
+        path = _cloud_sdk.get_application_default_credentials_path()
+    except Exception:  # noqa: BLE001 -- a private helper that moved: let default() decide
+        return None
+    return path if os.path.isfile(path) else None
+
+
+class GoogleAuthToken:
+    """`Authorization` headers from Application Default Credentials, refreshed when stale.
+
+    The token goes into request headers only: it is never logged, and no error
+    message here carries it.
+    """
+
+    def __init__(self, scopes: tuple[str, ...] = (GCS_SCOPE,)) -> None:
+        self._scopes = list(scopes)
+        self._credentials: Any = None  # google.auth credentials, imported lazily
+        self._lock = threading.Lock()
+
+    def __call__(self) -> dict[str, str]:
+        import google.auth
+        from google.auth.transport.requests import Request
+
+        with self._lock:
+            if self._credentials is None:
+                path = _adc_file()
+                if path:
+                    self._credentials, _ = google.auth.load_credentials_from_file(
+                        path, scopes=self._scopes)
+                else:
+                    self._credentials, _ = google.auth.default(scopes=self._scopes)
+            credentials = self._credentials
+            if not credentials.valid:
+                credentials.refresh(Request())
+            return {"Authorization": f"Bearer {credentials.token}"}
+
+
+class _GcsObjects:
+    """The four JSON API calls the tier needs. Every failure is CacheUnavailable."""
+
+    def __init__(self, bucket: str, *, token: Callable[[], Mapping[str, str]],
+                 timeout_s: float) -> None:
+        self.bucket = bucket
+        self._token = token
+        self._timeout_s = timeout_s
+
+    def _url(self, name: str) -> str:
+        return f"{_GCS_API}/b/{quote(self.bucket, safe='')}/o/{quote(name, safe='')}"
+
+    def _send(self, method: str, url: str, *, params: Mapping[str, str] | None = None,
+              content: bytes | None = None, headers: Mapping[str, str] | None = None
+              ) -> httpx.Response:
+        try:
+            auth = dict(self._token())
+        except Exception as exc:  # noqa: BLE001 -- no credentials is a cache that cannot answer
+            raise CacheUnavailable(
+                f"Cloud Storage credentials unavailable ({type(exc).__name__})") from exc
+        try:
+            return httpx.request(method, url, params=params, content=content,
+                                 headers={**auth, **(headers or {})}, timeout=self._timeout_s)
+        except httpx.HTTPError as exc:
+            raise CacheUnavailable(f"Cloud Storage request failed ({type(exc).__name__})") from exc
+
+    @staticmethod
+    def _refused(response: httpx.Response) -> CacheUnavailable:
+        return CacheUnavailable(f"Cloud Storage returned HTTP {response.status_code}")
+
+    def read(self, name: str) -> bytes | None:
+        """The object's data, or None when it does not exist."""
+        response = self._send("GET", self._url(name), params={"alt": "media"})
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise self._refused(response)
+        return response.content
+
+    def stat(self, name: str) -> dict | None:
+        """The object resource (`generation`, `metadata`), or None when it does not exist."""
+        response = self._send("GET", self._url(name))
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise self._refused(response)
+        try:
+            resource = response.json()
+        except ValueError as exc:
+            raise CacheUnavailable("Cloud Storage returned a non-JSON resource") from exc
+        if not isinstance(resource, dict):
+            raise CacheUnavailable("Cloud Storage returned an unexpected resource shape")
+        return resource
+
+    def write(self, name: str, data: bytes, metadata: Mapping[str, str], *,
+              if_generation_match: int | None) -> bool:
+        """Upload data and custom metadata in one request. False on 412: the
+        precondition failed (0: the object exists; n: it is no longer generation n)."""
+        boundary = f"crg{secrets.token_hex(12)}"
+        resource = {"name": name, "contentType": "application/json", "metadata": dict(metadata)}
+        body = b"".join([
+            f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode(),
+            json.dumps(resource).encode(),
+            f"\r\n--{boundary}\r\nContent-Type: application/json\r\n\r\n".encode(),
+            data,
+            f"\r\n--{boundary}--\r\n".encode(),
+        ])
+        params = {"uploadType": "multipart"}
+        if if_generation_match is not None:
+            params["ifGenerationMatch"] = str(if_generation_match)
+        response = self._send(
+            "POST", f"{_GCS_UPLOAD_API}/b/{quote(self.bucket, safe='')}/o", params=params,
+            content=body, headers={"Content-Type": f"multipart/related; boundary={boundary}"})
+        if response.status_code == 200:
+            return True
+        if response.status_code == 412:
+            return False
+        raise self._refused(response)
+
+    def delete(self, name: str) -> None:
+        response = self._send("DELETE", self._url(name))
+        if response.status_code not in (200, 204, 404):
+            raise self._refused(response)
+
+
+class GcsCache:
+    """Key/value entries in one Cloud Storage bucket, each carrying its expiry.
+
+    The expiry is written into the object's data (read back with the value in
+    one GET) and into its custom metadata (for a person browsing the bucket),
+    and it is enforced on read. The bucket's own lifecycle rule deletes objects
+    at 400 days of age, longer than any TTL used here.
+    """
+
+    def __init__(self, bucket: str, *, prefix: str = "kv/",
+                 token: Callable[[], Mapping[str, str]] | None = None, timeout_s: float = 3.0,
+                 clock: Callable[[], float] | None = None) -> None:
+        self.name = "gcs"
+        self.bucket = bucket
+        self._prefix = prefix
+        self._objects = _GcsObjects(bucket, token=token or GoogleAuthToken(), timeout_s=timeout_s)
+        self._clock = clock
+
+    def _now(self) -> float:
+        return self._clock() if self._clock is not None else _now()
+
+    def get_with_expiry(self, key: str) -> tuple[str | None, float | None]:
+        data = self._objects.read(self._prefix + key)
+        if data is None:
+            return None, None
+        try:
+            payload = json.loads(data)
+            value, expires_at = payload["value"], payload["expires_at"]
+            if not isinstance(value, str):
+                raise ValueError("cached value is not a string")
+        except (ValueError, KeyError, TypeError) as exc:
+            _log.warning("corrupt Cloud Storage cache entry ignored (%s)", exc)
+            return None, None
+        if expires_at is not None and self._now() >= expires_at:
+            return None, None
+        return value, expires_at
+
+    def get(self, key: str) -> str | None:
+        return self.get_with_expiry(key)[0]
+
+    def set(self, key: str, value: str, ttl_s: int | None = None) -> None:
+        expires_at = None if ttl_s is None else self._now() + ttl_s
+        data = json.dumps({"value": value, "expires_at": expires_at}).encode()
+        metadata = {} if expires_at is None else {"expires_at": repr(expires_at)}
+        self._objects.write(self._prefix + key, data, metadata, if_generation_match=None)
+
+    def delete(self, key: str) -> None:
+        self._objects.delete(self._prefix + key)
+
+
+class TieredCache:
+    """The instance's own disk first, then the shared bucket.
+
+    Writes go through to both. A bucket hit fills the disk with the time the
+    entry has left, so the next read on this instance costs no request. Any
+    bucket failure is logged and the bucket is left alone for `retry_after_s`:
+    a dead bucket costs one timeout a minute, not one per report.
+    """
+
+    def __init__(self, near: CacheBackend, far: GcsCache, *, retry_after_s: float = 60.0,
+                 clock: Callable[[], float] | None = None) -> None:
+        self.near = near
+        self.far = far
+        self.name = f"{near.name}+{far.name}"
+        self._retry_after_s = retry_after_s
+        self._clock = clock
+        self._down_until = 0.0
+
+    def _now(self) -> float:
+        return self._clock() if self._clock is not None else _now()
+
+    def _degrade(self, op: str, exc: Exception) -> None:
+        self._down_until = self._now() + self._retry_after_s
+        _log.warning("Cloud Storage cache tier failed on %s (%s); using this instance's disk "
+                     "only for the next %.0f s", op, exc, self._retry_after_s)
+
+    def get_traced(self, key: str) -> tuple[str | None, str]:
+        value, served_by = get_traced(self.near, key)
+        if value is not None or self._now() < self._down_until:
+            return value, served_by
+        try:
+            value, expires_at = self.far.get_with_expiry(key)
+        except CacheUnavailable as exc:
+            self._degrade("get", exc)
+            return None, self.near.name
+        if value is None:
+            return None, self.far.name
+        ttl = None if expires_at is None else max(1, int(expires_at - self._now()))
+        self.near.set(key, value, ttl)
+        return value, self.far.name
+
+    def get(self, key: str) -> str | None:
+        return self.get_traced(key)[0]
+
+    def set(self, key: str, value: str, ttl_s: int | None = None) -> None:
+        self.near.set(key, value, ttl_s)
+        if self._now() < self._down_until:
+            return
+        try:
+            self.far.set(key, value, ttl_s)
+        except CacheUnavailable as exc:
+            self._degrade("set", exc)
+
+
+# --- counters: the INCRBY plus EXPIRE contract -------------------------------
+#
+# Shaped on the spend guard's counter (rag/spend_guard.py on the hardening
+# branch): `add(key, amount, ttl_s)` adds `amount`, which may be negative,
+# renews the key's lifetime to `ttl_s` and returns the value after the change,
+# raising CacheUnavailable when the shared store cannot answer.
+
+class Counter(Protocol):
+    name: str
+
+    def add(self, key: str, amount: int, ttl_s: int) -> int: ...
+
+
+class LocalCounter:
+    """Integer counters with a lifetime, kept in this process."""
+
+    def __init__(self, clock: Callable[[], float] = time.time) -> None:
+        self.name = "local"
+        self._clock = clock
+        self._values: dict[str, tuple[int, float]] = {}
+        self._lock = threading.Lock()
+
+    def add(self, key: str, amount: int, ttl_s: int) -> int:
+        now = self._clock()
+        with self._lock:
+            for stale in [k for k, (_, until) in self._values.items() if until <= now]:
+                del self._values[stale]
+            value = self._values.get(key, (0, 0.0))[0] + amount
+            self._values[key] = (value, now + ttl_s)
+            return value
+
+
+class GcsCounter:
+    """A shared counter in one Cloud Storage object, changed by compare-and-swap.
+
+    Each add reads the object's resource (its `generation`, and the value and
+    expiry kept in its custom metadata), then uploads the new value with
+    ifGenerationMatch set to that generation, or to 0 when the object does not
+    exist. A 412 means another writer got there first: read again and retry,
+    with exponential backoff and jitter, up to `max_attempts` times. Anything
+    else, or running out of attempts, is CacheUnavailable.
+    """
+
+    def __init__(self, bucket: str, *, prefix: str = "counter/",
+                 token: Callable[[], Mapping[str, str]] | None = None, timeout_s: float = 3.0,
+                 max_attempts: int = 8, base_delay_s: float = 0.05, max_delay_s: float = 1.0,
+                 sleep: Callable[[float], None] = time.sleep,
+                 jitter: Callable[[], float] = random.random,
+                 clock: Callable[[], float] | None = None) -> None:
+        self.name = "gcs"
+        self._prefix = prefix
+        self._objects = _GcsObjects(bucket, token=token or GoogleAuthToken(), timeout_s=timeout_s)
+        self._max_attempts = max_attempts
+        self._base_delay_s = base_delay_s
+        self._max_delay_s = max_delay_s
+        self._sleep = sleep
+        self._jitter = jitter
+        self._clock = clock
+
+    def _now(self) -> float:
+        return self._clock() if self._clock is not None else _now()
+
+    def add(self, key: str, amount: int, ttl_s: int) -> int:
+        name = self._prefix + key
+        for attempt in range(self._max_attempts):
+            resource = self._objects.stat(name)
+            now = self._now()
+            generation, current = 0, 0
+            if resource is not None:
+                generation = int(resource["generation"])
+                metadata = resource.get("metadata") or {}
+                try:
+                    if float(metadata.get("expires_at", "0")) > now:
+                        current = int(metadata.get("value", "0"))
+                except ValueError:
+                    _log.warning("counter %r held an unreadable value; starting it again", key)
+            value = current + amount
+            expires_at = now + ttl_s
+            data = json.dumps({"value": value, "expires_at": expires_at}).encode()
+            if self._objects.write(name, data, {"value": str(value), "expires_at": repr(expires_at)},
+                                   if_generation_match=generation):
+                return value
+            self._sleep(min(self._max_delay_s,
+                            self._base_delay_s * (2 ** attempt) * (0.5 + self._jitter())))
+        raise CacheUnavailable(
+            f"counter {key!r}: lost the compare-and-swap {self._max_attempts} times in a row")
+
+    def delete(self, key: str) -> None:
+        self._objects.delete(self._prefix + key)
+
+
+class FallbackCounter:
+    """The shared counter while it answers; this process's own when it does not.
+
+    After a failure the primary is left alone for `retry_after_s`. While it is,
+    this instance counts on its own, on top of what the shared counter holds,
+    and the log says so.
+    """
+
+    def __init__(self, primary: Counter, fallback: Counter, *, retry_after_s: float = 60.0,
+                 clock: Callable[[], float] = time.monotonic) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self.name = f"{primary.name}+{fallback.name}"
+        self._retry_after_s = retry_after_s
+        self._clock = clock
+        self._down_until = 0.0
+
+    def add_traced(self, key: str, amount: int, ttl_s: int) -> tuple[int, Counter]:
+        if self._clock() >= self._down_until:
+            try:
+                return self.primary.add(key, amount, ttl_s), self.primary
+            except CacheUnavailable as exc:
+                self._down_until = self._clock() + self._retry_after_s
+                _log.warning("counter %r unavailable (%s): counting in this process for the "
+                             "next %.0f s", self.primary.name, exc, self._retry_after_s)
+        return self.fallback.add(key, amount, ttl_s), self.fallback
+
+    def add(self, key: str, amount: int, ttl_s: int) -> int:
+        return self.add_traced(key, amount, ttl_s)[0]
+
+
+def _counter_for(env: Mapping[str, str]) -> Counter:
+    bucket = env.get("CRG_CACHE_GCS_BUCKET")
+    if bucket:
+        _log.info("counters: Cloud Storage bucket %s, falling back to this process", bucket)
+        return FallbackCounter(GcsCounter(bucket), LocalCounter())
+    return LocalCounter()
+
+
+@lru_cache(maxsize=1)
+def counter_from_env() -> Counter:
+    """The process-wide counter: shared through the bucket when one is configured."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return LocalCounter()  # hermetic tests: the shared counter is never touched
+    return _counter_for(os.environ)
+
+
 # Precomputed entries that ship with the code. The service runs at
 # min-instances 0, and without Upstash credentials the live tier is a disk that
 # dies with every instance, so a value computed once has to be IN the image to
@@ -472,9 +893,17 @@ def _with_seed(backend: CacheBackend, env: Mapping[str, str]) -> CacheBackend:
 
 
 def _backend_from_env(env: Mapping[str, str]) -> CacheBackend:
-    """Pick a backend from configuration. Pure in `env` so it is directly testable."""
+    """Pick a backend from configuration. Pure in `env` so it is directly testable.
+
+    CRG_CACHE_GCS_BUCKET wins when set: this instance's disk, then the shared
+    bucket (the seed goes in front of either, in `cache_from_env`).
+    """
     root = Path(env.get("CRG_CACHE_DIR", _DEFAULT_ROOT))
     disk = DiskCache(root)
+    bucket = env.get("CRG_CACHE_GCS_BUCKET")
+    if bucket:
+        _log.info("cache backend: disk at %s, then Cloud Storage bucket %s", root, bucket)
+        return TieredCache(disk, GcsCache(bucket))
     url, token = env.get("UPSTASH_REDIS_REST_URL"), env.get("UPSTASH_REDIS_REST_TOKEN")
     if url and token:
         # Deliberately no URL/token in the log line: the token is a secret and
