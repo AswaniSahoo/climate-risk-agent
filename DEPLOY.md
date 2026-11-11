@@ -11,9 +11,14 @@ docker run -p 7860:7860 -e GEMINI_API_KEY=... climate-risk-agent    # hybrid + c
 Open http://localhost:7860.
 
 - The build bakes the IPCC corpus (~50 MB, downloaded from ipcc.ch, idempotent).
-- If `data/cache/embeddings/` exists locally it is COPYed into the image
-  (`.dockerignore` deliberately does not exclude `data/`), so the container
-  starts on hybrid retrieval without re-embedding.
+- **The build fails unless the image carries every corpus vector.** It wipes
+  whatever `data/cache` the build context holds, fetches the `eval-cache-v1`
+  release asset pinned by sha256 (`ARG EVAL_CACHE_SHA256` in the Dockerfile; a
+  mismatch fails the build), installs it through `scripts/unpack_eval_cache.py`
+  (which refuses a manifest that does not match this repo), and its last step,
+  `scripts/check_baked_index.py`, fails the build unless every chunk in the
+  baked `chunks.json` has its document vector on disk (2,730 of 2,730 today),
+  so no cold container ever embeds the corpus through the API.
 - Without Gemini auth the retrieval layer falls back to BM25-only **loudly**
   (measured on the 60-question dev set: 76% vs 82% headline R@3) and `answer_ipcc`-style LLM answers are
   unavailable; the UI reports both degradations honestly.
@@ -23,11 +28,10 @@ Open http://localhost:7860.
 The public demo runs here:
 **https://climate-risk-agent-714882950125.us-central1.run.app/**
 
-Cloud Run serves the same Docker image described above. `.gcloudignore` mirrors
-`.dockerignore` and deliberately keeps `data/` in the Cloud Build upload, so the
-embedding cache (~9 MB) is baked into the image and the container starts on
-hybrid retrieval instead of re-embedding the corpus (and hitting 429s) on every
-cold start.
+Cloud Run serves the same Docker image described above, so its embedding
+cache (~9 MB) comes from the pinned release asset, not from the Cloud Build
+upload, and the container starts on hybrid retrieval instead of re-embedding
+the corpus (and hitting 429s) on every cold start.
 
 Auth and models run on **Vertex AI via the `global` endpoint** (ADC through the
 Cloud Run service account, so there is no API key to manage):
