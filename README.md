@@ -281,7 +281,7 @@ Python, LangGraph, Google Gemini (generation) + gemini-embedding-2 (dense) on Ve
 ## Data sources and licences
 
 - Forecasts: [Open-Meteo](https://open-meteo.com/), CC BY 4.0.
-- ERA5 daily extremes: ERA5 reanalysis, served through the Open-Meteo archive under the same licence.
+- ERA5 daily extremes: ERA5 reanalysis, served through the Open-Meteo archive under the same licence. The return levels and trends are fitted here from that series. Contains modified Copernicus Climate Change Service information 2026 ([Licence to use Copernicus Products](https://cds.climate.copernicus.eu/licences/licence-to-use-copernicus-products), 5.1.2).
 - Climate assessment: IPCC AR6 WG1 SPM, Chapter 11 and Chapter 12 PDFs, reused for research under IPCC's terms.
 - AR6 reference-region polygons: bundled from the [IPCC WGI Atlas](https://github.com/IPCC-WG1/Atlas) in `tools/ar6/` under CC BY 4.0. Required citation: Iturbide, M., Fernández, J., Gutiérrez, J.M. et al. Implementation of FAIR principles in the IPCC: the WGI AR6 Atlas repository. *Scientific Data* 9, 629 (2022). <https://doi.org/10.1038/s41597-022-01739-y>
 
