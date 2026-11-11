@@ -216,6 +216,16 @@ def test_a_429_from_the_model_is_a_quota_sentence():
     assert "quota" in error_sentence(GeminiError("Gemini call failed: 429 RESOURCE_EXHAUSTED"))
 
 
+def test_a_spend_limit_refusal_is_shown_in_its_own_words():
+    """Its message is already a sentence for a person (rag/spend_guard.py), and
+    neither the credentials nor the quota sentence would be true."""
+    from rag.gemini_client import ModelBudgetExceeded
+
+    message = ("The daily model budget for this deployment is used up, so no new model "
+               "call runs until it resets at 00:00 UTC.")
+    assert error_sentence(ModelBudgetExceeded(message)) == message
+
+
 def test_a_network_error_gets_the_network_sentence():
     assert "network call" in error_sentence(HTTPStatusError("500 Server Error"))
 

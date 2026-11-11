@@ -345,6 +345,9 @@ def error_sentence(exc: BaseException) -> str:
     with plain stand-ins. Never shows a traceback: the caller logs that.
     """
     names = [cls.__name__ for cls in type(exc).__mro__]
+    if "ModelBudgetExceeded" in names:
+        # rag/spend_guard.py writes this message for the reader already.
+        return str(exc)
     if "GeminiError" in names:
         return _gemini_sentence(str(exc))
     for name in names:

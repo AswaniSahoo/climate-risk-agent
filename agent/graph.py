@@ -61,7 +61,7 @@ from rag.chunk import Chunk
 from rag.cid import projected_change_for
 from rag.corpus import CorpusError, load_corpus_chunks
 from rag.embed import EmbeddingError
-from rag.gemini_client import GeminiError
+from rag.gemini_client import GeminiError, ModelBudgetExceeded
 from rag.retrieve import HybridRetriever
 from tools.ar6_regions import region_for
 from tools.forecast import OPEN_METEO_URL, ForecastResult, get_forecast
@@ -100,6 +100,7 @@ class AgentState(TypedDict, total=False):
     hazard_stat: Optional[HazardStat]  # optional ERA5 climatology, injected by caller
     ipcc_answer: Optional[CitedAnswer]  # research node output (None if degraded)
     ipcc_chunks: list[Chunk]  # what research retrieved — needed to map chunk_id -> page
+    ipcc_note: str  # why there is no IPCC answer, when a spend limit refused the call
     evidence: Optional[EvidenceCheck]  # Jev citation support (CRG_JEV=verify|all only)
     projected_change: Optional[ProjectedChange]  # project node output (None if nothing found)
     projection_note: str  # why there is no projection, when there is none
@@ -267,6 +268,19 @@ def _ipcc_area(state: AgentState) -> str:
     return region.label if region is not None else state["location"]
 
 
+def _spend_refusal(exc: BaseException) -> ModelBudgetExceeded | None:
+    """The spend-limit refusal behind `exc`, if that is why the call failed.
+    rag/answer.py re-raises seam errors as AnswerError, so walk the chain."""
+    seen: BaseException | None = exc
+    for _ in range(10):  # a chain is short; never loop on a cyclic one
+        if seen is None:
+            return None
+        if isinstance(seen, ModelBudgetExceeded):
+            return seen
+        seen = seen.__cause__ or seen.__context__
+    return None
+
+
 def research(state: AgentState) -> dict:
     """Ground the report in IPCC AR6: retrieve + cited answer for this hazard.
 
@@ -302,7 +316,12 @@ def research(state: AgentState) -> dict:
             answer = answer_with_guard(question, chunks, cache=_answer_cache())
         except (CorpusError, AnswerError, GeminiError) as exc:
             _log.warning("IPCC grounding unavailable (%s), report ships without citations", exc)
-            return {}
+            refusal = _spend_refusal(exc)
+            # A spend limit is the one cause a reader can act on (wait, or rely on a
+            # cached report), so it is the one cause the report itself states. This
+            # branch never reaches cache.put, so a refusal is never cached.
+            return ({"ipcc_note": f"No new IPCC AR6 answer for this report: {refusal}"}
+                    if refusal else {})
         except ValidationError as exc:
             # The model cited a chunk it was not given, or answered without citing.
             # CitedAnswer rejects that by construction; here it costs the citations,
@@ -506,6 +525,10 @@ def synthesize(state: AgentState) -> dict:
         )
     else:
         summary += " " + state.get("projection_note", _NOT_FOUND_NOTE)
+
+    # A spend limit refused the IPCC answer: say so, like the projection note.
+    if state.get("ipcc_note"):
+        summary += " " + state["ipcc_note"]
 
     confidence = compose_confidence(
         representativeness=stat.representativeness if stat is not None else None,

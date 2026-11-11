@@ -404,6 +404,73 @@ def test_offline_corpus_degrades_loudly_report_still_ships(httpx_mock, caplog):
     assert "IPCC grounding unavailable" in caplog.text  # loud (WARNING), never silent
 
 
+# --- a spend limit costs the citations, never the report, and says so --------
+
+_SPENT = "The daily model budget for this deployment is used up."
+
+
+def test_a_spend_limit_refusal_ships_the_report_and_says_why(httpx_mock, monkeypatch):
+    from rag.answer import AnswerError
+    from rag.gemini_client import ModelBudgetExceeded
+
+    httpx_mock.add_response(json=CANNED)
+    monkeypatch.setattr(graph_mod, "_ipcc_retriever", lambda: _FakeRetriever())
+
+    def refused(question, chunks, **_):
+        # what rag/answer.py does with any GeminiError from the seam
+        try:
+            raise ModelBudgetExceeded(_SPENT)
+        except ModelBudgetExceeded as exc:
+            raise AnswerError(str(exc)) from exc
+
+    monkeypatch.setattr(graph_mod, "answer_with_guard", refused)
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.HEATWAVE, horizon_days=3,
+    )
+
+    assert report.citations == [] and report.risk_level is RiskLevel.SEVERE
+    assert _SPENT in report.summary
+    assert " IPCC AR6: " not in report.summary  # ui/app.py splits a real answer off there
+
+
+def test_other_failures_add_no_note(httpx_mock, monkeypatch):
+    """Only a spend refusal is explained in the report; the rest stay in the log."""
+    from rag.answer import AnswerError
+
+    httpx_mock.add_response(json=CANNED)
+    monkeypatch.setattr(graph_mod, "_ipcc_retriever", lambda: _FakeRetriever())
+
+    def broken(question, chunks, **_):
+        raise AnswerError("model returned malformed JSON")
+
+    monkeypatch.setattr(graph_mod, "answer_with_guard", broken)
+    report = run_agent(
+        location="Rourkela", latitude=22.26, longitude=84.85,
+        hazard=Hazard.HEATWAVE, horizon_days=3,
+    )
+
+    assert "malformed" not in report.summary and "budget" not in report.summary
+
+
+def test_a_paused_session_stops_the_real_answer_call_inside_the_graph(httpx_mock, monkeypatch):
+    """LangGraph runs research on its own executor. The UI's per-session pause
+    must still stop the real answer call there, before anything is sent."""
+    from rag import spend_guard
+
+    httpx_mock.add_response(json=CANNED)
+    monkeypatch.setattr(graph_mod, "_ipcc_retriever", lambda: _FakeRetriever())
+
+    with spend_guard.call_scope(blocked="This session is paused.") as scope:
+        report = run_agent(
+            location="Rourkela", latitude=22.26, longitude=84.85,
+            hazard=Hazard.HEATWAVE, horizon_days=3,
+        )
+
+    assert "This session is paused." in report.summary
+    assert scope.calls == 0 and report.citations == []
+
+
 # --- research asks AR6 a climate question about the region, not the city ----
 
 
