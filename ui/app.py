@@ -30,7 +30,7 @@ _log = logging.getLogger(__name__)  # tracebacks go HERE, never onto the page
 # imports below the sys.path shim + logging config on purpose (script entrypoint)
 # agent.graph is NOT imported here: it pulls langgraph (~17 s cold) and nothing
 # on the boot path needs it. It is imported where a report is actually run.
-from agent.contracts import Hazard  # noqa: E402
+from agent.contracts import Hazard, RiskReport  # noqa: E402
 from agent.location import (  # noqa: E402
     coordinate_error,
     name_still_applies,
@@ -51,6 +51,9 @@ from agent.progress import (  # noqa: E402
     step_meaning,
     track,
 )
+
+# The CRG_JEV flag only (adr/0002): reading it builds no client and makes no call.
+from rag.jev_client import triage_enabled, verify_enabled  # noqa: E402
 from tools import climatology  # noqa: E402
 from tools.climatology import ClimatologyError  # noqa: E402
 from tools.geocode import GeocodeError  # noqa: E402
@@ -65,6 +68,8 @@ from ui.theme import (  # noqa: E402
     driver_list,
     method_strip,
     plate_caption,
+    prose_with_flags,
+    question_reading,
     quoted_statement,
     specimen_card,
     why_line,
@@ -105,7 +110,8 @@ st.session_state.setdefault("horizon_input", 7)
 
 # Is an answer on its way this run? A button's click is in session state before the
 # button is drawn, so the page can be laid out for the answer instead of the intro.
-_answering = bool(st.session_state.get("assess")) or bool(
+# `_reassess` is the one-click "Assess as ... instead" under a question Jev read.
+_answering = bool(st.session_state.get("assess") or st.session_state.get("_reassess")) or bool(
     (st.session_state.get("ask_btn") or st.session_state.get("_nl_submitted"))
     and str(st.session_state.get("nl_query", "")).strip()
 )
@@ -230,15 +236,17 @@ def _remember_place(name: str, country: str, latitude: float, longitude: float) 
     st.session_state["place_query"] = f"{name}, {country}" if country else name
 
 
-def _sync_controls(query: str, *, locate: bool) -> None:
+def _sync_controls(query: str, *, locate: bool, parsed: Any = None) -> None:
     """Point the sidebar at what a plain-language question asks about.
 
     Hazard and horizon always; the place too when `locate`, since a chip already knows
-    its point. Runs before the sidebar widgets exist in this run.
+    its point. Runs before the sidebar widgets exist in this run. `parsed` is a parse
+    already made (`_read_question`), so the question is not read twice.
     """
-    from agent.nl import parse_query
+    if parsed is None:
+        from agent.nl import parse_query
 
-    parsed = parse_query(query)
+        parsed = parse_query(query)
     if parsed.hazard is not None:
         st.session_state["hazard_input"] = parsed.hazard
     if 1 <= parsed.horizon_days <= 16:
@@ -274,6 +282,81 @@ def _on_nl_query_submit() -> None:
 def _on_place_query_change() -> None:
     """Invoked when user changes the place query text input."""
     _resolve_and_set_place(st.session_state.get("place_query", ""))
+
+
+def _hazard_label(hazard: Hazard) -> str:
+    """The hazard as the sidebar control names it."""
+    return hazard.value.replace("_", " ").capitalize()
+
+
+# The hazard as a sentence names it.
+_HAZARD_NOUN: dict[Hazard, str] = {
+    Hazard.HEATWAVE: "heat",
+    Hazard.EXTREME_PRECIP: "extreme rain",
+    Hazard.WIND: "wind",
+}
+
+
+def _probability_text(probability: float) -> str:
+    """Jev's probability as a reader sees it. Never "100%": a reading is not a certainty."""
+    return "over 99%" if probability >= 0.995 else f"{probability:.0%}"
+
+
+def _reading_note(source: str | None, probability: float | None, hazard: Hazard) -> str | None:
+    """One sentence on who named the hazard, when it was not the person's own word.
+
+    Jev's number is its probability that the question is about that hazard, and it is
+    said as exactly that, never as the report's confidence (docs/jev-ui-integration.md).
+    """
+    noun = _HAZARD_NOUN[hazard]
+    if source == "jev" and probability is not None:
+        return (f"Your words name no hazard, so Jev read the question: "
+                f"{_probability_text(probability)} probability that it is about {noun}. "
+                "The report answers that reading.")
+    if source in ("embed", "llm"):
+        return (f"Your words name no hazard, so a semantic match read the question as "
+                f"{noun}. The report answers that reading.")
+    return None
+
+
+def _read_question(query: str, *, locate: bool) -> tuple[Any, Any]:
+    """Read the question before anything expensive runs (CRG_JEV includes triage).
+
+    One parse, and at most one Jev request: none when the words already name heat, rain
+    or wind. The sidebar is then pointed at what was read, as `_sync_controls` always
+    does. Returns the parse, which the run uses as is, and its telemetry span.
+    """
+    from agent.nl import parse_query
+    from obs.telemetry import Span
+
+    with Span("read") as span, _ask_slot, st.spinner("Reading your question…"):
+        parsed = parse_query(query)
+    _sync_controls(query, locate=locate, parsed=parsed)
+    reading = parsed.triage
+    if reading is not None and reading.jev_status.startswith("unavailable"):
+        # Nothing is shown for it: the reading is then exactly the one with Jev off.
+        _log.info("question read without Jev (%s)", reading.jev_status)
+    note = None
+    if parsed.hazard is not None and reading is not None:
+        note = _reading_note(reading.hazard_source, reading.hazard_probability, parsed.hazard)
+    if note is None:
+        st.session_state.pop("_triage_note", None)
+    else:
+        source = ("Jev read it as " + _HAZARD_NOUN[parsed.hazard]
+                  + f" ({_probability_text(reading.hazard_probability)} probability)"
+                  if reading.hazard_source == "jev" else "a semantic match read it")
+        st.session_state["_triage_note"] = {
+            "hazard": parsed.hazard,
+            "sidebar": f"Set from your question: {source}. Change it here.",
+        }
+    return parsed, span
+
+
+def _reassess_as(hazard: Hazard) -> None:
+    """One click to change a reading: the same point and horizon, another hazard."""
+    st.session_state["hazard_input"] = hazard
+    st.session_state["_reassess"] = True
+    st.session_state.pop("_triage_note", None)
 
 
 # One-click examples: each chip fills the question, points the sidebar and the map
@@ -347,10 +430,19 @@ with _ask_slot:
 _submitted = bool(st.session_state.pop("_nl_submitted", False))
 nl_triggered = bool(ask or _submitted)
 
+# With CRG_JEV including triage the question is read first, and that one reading
+# drives the sidebar, an instant refusal, and the run (`_parsed`). With it off,
+# nothing below changes: `_parsed` stays None.
+_parsed: Any = None
+_reading_span: Any = None
+
 # A question points the sidebar (Place box, coordinates, map, hazard, horizon) at
 # what it asks about, before the sidebar is drawn, so the two never disagree.
 if nl_triggered and nl_query.strip():
-    if st.session_state.pop("_nl_place_set", None) != nl_query:
+    _locate = st.session_state.pop("_nl_place_set", None) != nl_query
+    if triage_enabled():
+        _parsed, _reading_span = _read_question(nl_query, locate=_locate)
+    elif _locate:
         _sync_controls(nl_query, locate=True)
 
 with st.sidebar:
@@ -435,9 +527,14 @@ with st.sidebar:
                     st.info(selected.notice, icon=":material/public_off:")
 
     hazard = st.selectbox(
-        "Hazard", list(Hazard), format_func=lambda h: h.value.replace("_", " ").capitalize(),
+        "Hazard", list(Hazard), format_func=_hazard_label,
         key="hazard_input",
     )
+    # Said where the control is, while it still holds the reading: an interpretation,
+    # one change away from another hazard (docs/jev-ui-integration.md).
+    _note = st.session_state.get("_triage_note")
+    if _note is not None and _note["hazard"] == hazard:
+        st.caption(_note["sidebar"])
     horizon = st.slider("Forecast horizon (days)", 1, 16, key="horizon_input")
     use_climatology = st.checkbox(
         "Ground with ERA5 climatology (GEV return levels)", value=True,
@@ -445,11 +542,14 @@ with st.sidebar:
              "fits them: about 1 to 2 minutes, then cached.",
     )
     # Secondary on purpose: the Ask box is the page's one primary action.
-    run = st.button("Assess risk", key="assess", width="stretch")
+    _reassess = bool(st.session_state.pop("_reassess", False))
+    run = st.button("Assess risk", key="assess", width="stretch") or _reassess
     st.caption("First report for a new place: about 1 to 2 minutes, then cached.")
 
 report = None
 failure: str | None = None
+span: Any = None  # telemetry for the run that produced `report`
+instant_refusal: str | None = None  # the note under a refusal made from the question alone
 
 
 class _StepPanel:
@@ -510,22 +610,14 @@ def _run_with_panel(work: Any) -> tuple[Any, str | None]:
         return result, None
 
 
-if nl_triggered and nl_query.strip():
-    from agent.nl import run_agent_nl  # noqa: E402
-    from obs.telemetry import Span  # noqa: E402
+def _run_point(sel: Any, haz: Hazard, horizon_days: int) -> tuple[Any, str | None, Any]:
+    """The sidebar's path: this resolved point, hazard and horizon, under the panel.
 
-    with Span("report") as span:
-        report, failure = _run_with_panel(
-            lambda on_step: run_agent_nl(nl_query, on_step=on_step)
-        )
-    if failure is not None:
-        st.error(failure, icon=":material/error:")
-elif run and selected is not None and hazard is not None:
-    from agent import graph as agent_graph  # noqa: E402
-    from obs.telemetry import Span  # noqa: E402
+    Returns (report, message, telemetry span), like `_run_with_panel` plus the span.
+    """
+    from agent import graph as agent_graph
+    from obs.telemetry import Span
 
-    sel = selected
-    haz = hazard
     # Collected rather than written inline: a warning drawn inside the status
     # container would vanish when the panel collapses on success.
     notices: list[str] = []
@@ -550,22 +642,103 @@ elif run and selected is not None and hazard is not None:
         return agent_graph.run_agent(
             location=sel.label,
             latitude=sel.latitude, longitude=sel.longitude,
-            hazard=haz, horizon_days=horizon, hazard_stat=hazard_stat,
+            hazard=haz, horizon_days=horizon_days, hazard_stat=hazard_stat,
             on_step=on_step,
         )
 
-    with Span("report") as span:
-        report, failure = _run_with_panel(_assess)
+    with Span("report") as point_span:
+        result, message = _run_with_panel(_assess)
     for notice in notices:
         st.warning(notice, icon=":material/warning:")
+    return result, message, point_span
+
+
+def _show_reading(parsed: Any, place: str) -> None:
+    """How the question was read, above the run it starts. When the hazard is an
+    interpretation rather than the person's own word, any other hazard is one click."""
+    reading = parsed.triage
+    note = _reading_note(reading.hazard_source if reading else None,
+                         reading.hazard_probability if reading else None, parsed.hazard)
+    with st.container(key="cra_reading"):
+        st.markdown(
+            question_reading(_hazard_label(parsed.hazard), parsed.horizon_days, place, note),
+            unsafe_allow_html=True,
+        )
+        if note is not None:
+            with st.container(horizontal=True, key="cra_reading_alts"):
+                for other in Hazard:
+                    if other is not parsed.hazard:
+                        st.button(
+                            f"Assess as {_HAZARD_NOUN[other]} instead", key=f"reassess_{other.value}",
+                            type="tertiary", on_click=_reassess_as, args=(other,),
+                        )
+
+
+if nl_triggered and nl_query.strip() and _parsed is not None:
+    # CRG_JEV includes triage: the reading made before the sidebar was drawn decides.
+    from agent.nl import refusal_reason, run_agent_nl  # noqa: E402
+    from obs.telemetry import Span  # noqa: E402
+
+    _reason = refusal_reason(_parsed)
+    # The words name a supported hazard but no place, and the sidebar holds a resolved
+    # point: run on that point rather than refuse (docs/jev-ui-integration.md).
+    _sidebar_point = (_reason is not None and _parsed.out_of_scope is None
+                      and _parsed.hazard is not None and _parsed.place is None
+                      and selected is not None)
+    if _reason is not None and not _sidebar_point:
+        # Refused from the question alone: no progress panel, no forecast, no ERA5 fetch.
+        report = RiskReport(
+            location=nl_query, hazard=None, horizon_days=_parsed.horizon_days,
+            confidence=0.0, refusal=_reason, triage=_parsed.triage,
+        )
+        _by_jev = _parsed.triage is not None and _parsed.triage.scope_stage == "jev"
+        instant_refusal = (
+            "Decided from the question alone, before any forecast, climate record or IPCC "
+            "page was fetched."
+            + (" The words name no hazard, so Jev read the question." if _by_jev else "")
+        )
+    else:
+        _show_reading(
+            _parsed,
+            f"{selected.name} (no place in the question, so the sidebar's point)"
+            if _sidebar_point else _parsed.place,
+        )
+        if _sidebar_point:
+            report, failure, span = _run_point(selected, _parsed.hazard, _parsed.horizon_days)
+        else:
+            with Span("report") as span:
+                report, failure = _run_with_panel(
+                    lambda on_step: run_agent_nl(nl_query, on_step=on_step, parsed=_parsed)
+                )
+        if report is not None and report.triage is None:
+            report = report.model_copy(update={"triage": _parsed.triage})
     if failure is not None:
         st.error(failure, icon=":material/error:")
+elif nl_triggered and nl_query.strip():
+    from agent.nl import run_agent_nl  # noqa: E402
+    from obs.telemetry import Span  # noqa: E402
+
+    with Span("report") as span:
+        report, failure = _run_with_panel(
+            lambda on_step: run_agent_nl(nl_query, on_step=on_step)
+        )
+    if failure is not None:
+        st.error(failure, icon=":material/error:")
+elif run and selected is not None and hazard is not None:
+    report, failure, span = _run_point(selected, hazard, horizon)
+    if failure is not None:
+        st.error(failure, icon=":material/error:")
+
+_UNSUPPORTED_NOTE = "No cited page clearly supports this sentence"
 
 if report is not None:
     if report.refusal is not None:
         with st.container(key="cra_refusal"):
             st.error(f"**Refused:** {report.refusal}", icon=":material/block:")
-            st.caption("Out-of-scope is an explicit, valid output: not a fabricated risk.")
+            if instant_refusal is not None:
+                st.caption(instant_refusal)
+            else:
+                st.caption("Out-of-scope is an explicit, valid output: not a fabricated risk.")
     else:
         _plot_html = return_level_plot(report)
         # The agent writes the forecast and ERA5 numbers first, then any IPCC prose.
@@ -573,6 +746,14 @@ if report is not None:
         _numbers, _, _ipcc_prose = report.summary.partition(" IPCC AR6: ")
         # The agent's own sentence for why the band is what it is, lifted under the answer.
         _why = next((d.detail for d in report.drivers if d.factor == "severity_basis"), None)
+        # Jev's citation check (CRG_JEV=verify|all) annotates; it never changes a
+        # citation, the band or the confidence above (adr/0002).
+        _check = report.evidence if verify_enabled() else None
+        if _check is not None and _check.status == "unavailable":
+            _check = None
+        _evidence = (
+            {(e.source, e.locator): e.strength for e in _check.citations} if _check else None
+        )
 
         # Headings go h1, h2, h3 for a screen reader; the band itself is the visible title.
         st.markdown('<h2 class="cra-sr-only">Report</h2>', unsafe_allow_html=True)
@@ -603,7 +784,18 @@ if report is not None:
             if _ipcc_prose:
                 _prose_key = "cra_prose_long" if len(_ipcc_prose) > 480 else "cra_prose"
                 with st.container(key=_prose_key):
-                    st.write(f"IPCC AR6: {_ipcc_prose}")
+                    if _check is not None and _check.unsupported_statements:
+                        _prose_html, _missing = prose_with_flags(
+                            f"IPCC AR6: {_ipcc_prose}", _check.unsupported_statements,
+                            _UNSUPPORTED_NOTE,
+                        )
+                        st.markdown(_prose_html, unsafe_allow_html=True)
+                        st.caption(
+                            "Dotted underline: no cited page clearly supports that sentence."
+                            + "".join(f" Also not supported: “{s}”" for s in _missing)
+                        )
+                    else:
+                        st.write(f"IPCC AR6: {_ipcc_prose}")
 
         # Collapsed, and below the answer: it answers "what am I looking at?" for a
         # first reader without pushing the band down the page for anyone.
@@ -646,7 +838,15 @@ if report is not None:
             with st.container(border=True):
                 st.markdown("**IPCC AR6 citations** (page-level, validator-guaranteed)")
                 if report.citations:
-                    st.markdown(citation_list(report.citations), unsafe_allow_html=True)
+                    st.markdown(citation_list(report.citations, _evidence), unsafe_allow_html=True)
+                    if _check is not None:
+                        st.caption(
+                            "Evidence labels: Jev's reading of each cited page against the IPCC "
+                            "statement. A signal not yet checked against real answers "
+                            "(adr/0002); it never adds, drops or reorders a citation."
+                            + (" Some pages could not be checked in time and carry no label."
+                               if _check.status == "partial" else "")
+                        )
                 else:
                     st.caption(
                         "No IPCC citations in this report (RAG layer offline or the "
@@ -727,10 +927,18 @@ if report is not None:
                     )
 
     with st.expander("Cost & latency (measured telemetry)", icon=":material/speed:"):
-        s = span.summary()
+        # Reading the question (Jev, before the run) and the run itself, added up.
+        _spans = [x.summary() for x in (_reading_span, span) if x is not None]
+        s = {k: sum(x[k] for x in _spans) for k in (
+            "wall_ms", "calls", "cache_hits", "retries", "failures", "tokens_in",
+            "tokens_out", "est_cost_usd")}
         obs_cols = st.columns(4)
         obs_cols[0].metric("Wall time", f"{s['wall_ms']/1000:.1f} s")
-        obs_cols[1].metric("Model calls", s["calls"], help="Live Gemini calls (cache hits excluded)")
+        obs_cols[1].metric(
+            "Model calls", s["calls"],
+            help="Live Gemini and Jev calls (cache hits excluded)"
+            if triage_enabled() or verify_enabled() else "Live Gemini calls (cache hits excluded)",
+        )
         obs_cols[2].metric("Cache hits", s["cache_hits"])
         obs_cols[3].metric("Est. cost", f"${s['est_cost_usd']:.4f}",
                            help="Estimated from token counts × configured prices (not a bill).")
@@ -738,6 +946,8 @@ if report is not None:
             f"tokens in/out: {s['tokens_in']}/{s['tokens_out']} · "
             f"retries: {s['retries']} · failures: {s['failures']} · every model "
             "call is measured at the SDK seam; none can opt out."
+            + (f" Reading the question took {_reading_span.wall_ms / 1000:.1f} s of the wall time."
+               if _reading_span is not None else "")
         )
 
     with st.expander("Data provenance (audit trail)", icon=":material/fact_check:"):

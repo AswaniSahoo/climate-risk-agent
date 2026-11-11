@@ -21,7 +21,8 @@ Design method after unslop by Damir Sokolovsky (@heydamir), CC BY 4.0.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+import re
+from collections.abc import Iterable, Mapping
 from html import escape
 
 from agent.contracts import Citation, RiskDriver, RiskLevel
@@ -106,14 +107,75 @@ def driver_list(drivers: Iterable[RiskDriver]) -> str:
     return f'<dl class="cra-drivers">{rows}</dl>'
 
 
-def citation_list(citations: Iterable[Citation]) -> str:
-    """One row per citation, in report order, with the pages in one right-aligned column."""
-    rows = "".join(
-        f'<div class="cra-cite"><span class="cra-cite-src">{escape(c.source)}</span>'
-        f'<span class="cra-cite-loc">{escape(c.locator)}</span></div>'
-        for c in citations
+# What a reader sees for each evidence strength (docs/jev-ui-integration.md). An
+# unchecked page gets no label at all: silence is not a verdict.
+EVIDENCE_LABELS: dict[str, str] = {
+    "strong": "Supports the statement",
+    "moderate": "Partly supports",
+    "weak": "Does not clearly support this statement",
+    "contradicted": "May contradict the statement",
+}
+
+
+def citation_list(
+    citations: Iterable[Citation], evidence: Mapping[tuple[str, str], str] | None = None
+) -> str:
+    """One row per citation, in report order, with the pages in one right-aligned column.
+
+    `evidence` maps (source, locator) to a strength from the citation check. It
+    only adds a label under a row: no row is hidden, added or moved by it.
+    """
+    rows = []
+    for c in citations:
+        strength = (evidence or {}).get((c.source, c.locator), "")
+        label = EVIDENCE_LABELS.get(strength)
+        tag = (f'<span class="cra-cite-ev cra-ev-{strength}">{escape(label)}</span>'
+               if label else "")
+        rows.append(
+            f'<div class="cra-cite"><span class="cra-cite-src">{escape(c.source)}</span>'
+            f'<span class="cra-cite-loc">{escape(c.locator)}</span>{tag}</div>'
+        )
+    return f'<div class="cra-cites">{"".join(rows)}</div>'
+
+
+def prose_with_flags(prose: str, flagged: Iterable[str], note: str) -> tuple[str, list[str]]:
+    """The IPCC prose as one paragraph, each flagged sentence marked where it stands.
+
+    The mark is a dotted underline with `note` as its hover text and, for a screen
+    reader, the same note spoken after the sentence. Returns the HTML and the
+    flagged sentences it could not find in the prose, so a caller can list them.
+    """
+    flat = re.sub(r"\s+", " ", prose).strip()
+    spans: list[tuple[int, int]] = []
+    missing: list[str] = []
+    for sentence in flagged:
+        at = flat.find(sentence) if sentence else -1
+        end = at + len(sentence)
+        if at < 0 or any(at < stop and start < end for start, stop in spans):
+            missing.append(sentence)
+            continue
+        spans.append((at, end))
+    parts, pos = [], 0
+    for start, stop in sorted(spans):
+        parts.append(escape(flat[pos:start]))
+        parts.append(
+            f'<span class="cra-unsupported" title="{escape(note)}">{escape(flat[start:stop])}'
+            f'<span class="cra-sr-only"> ({escape(note)})</span></span>'
+        )
+        pos = stop
+    parts.append(escape(flat[pos:]))
+    return f'<p class="cra-prose">{"".join(parts)}</p>', missing
+
+
+def question_reading(hazard: str, horizon_days: int, place: str, note: str | None) -> str:
+    """How the question was read, shown before the report runs: hazard, horizon, place."""
+    days = f"next {horizon_days} day{'' if horizon_days == 1 else 's'}"
+    parts = (f'<span class="cra-read-hazard">{escape(hazard)}</span>', escape(days), escape(place))
+    note_html = f'<p class="cra-read-note">{escape(note)}</p>' if note else ""
+    return (
+        '<div class="cra-read"><h2 class="cra-read-title">How your question was read</h2>'
+        f'<p class="cra-read-line">{" · ".join(parts)}</p>{note_html}</div>'
     )
-    return f'<div class="cra-cites">{rows}</div>'
 
 
 def quoted_statement(statement: str) -> str:
@@ -511,6 +573,36 @@ blockquote.cra-quote {
   line-height: 20px;
   color: var(--cra-ink);
 }
+
+/* Evidence labels (CRG_JEV=verify): a line under the page they describe, never a reorder */
+.cra-cite { flex-wrap: wrap; row-gap: 0; }
+.cra-cite-ev { flex-basis: 100%; color: var(--cra-ink-2); }
+.cra-ev-strong { color: var(--cra-ink); }
+.cra-ev-weak { color: var(--cra-ink-3); }
+.cra-ev-contradicted { color: var(--cra-red); font-weight: 600; }
+.cra-unsupported {
+  text-decoration: underline dotted var(--cra-red);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+/* How the question was read (CRG_JEV=triage): under the question, before the answer */
+.st-key-cra_reading { max-width: 760px; gap: 8px; }
+.cra-read { padding-top: 12px; border-top: 1px solid var(--cra-line); }
+h2.cra-read-title {
+  margin: 0 0 4px;
+  padding: 0;
+  font-family: var(--cra-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 450;
+  color: var(--cra-ink-3);
+}
+p.cra-read-line { margin: 0; font-size: 17px; line-height: 26px; color: var(--cra-ink); }
+.cra-read-hazard { font-weight: 600; }
+p.cra-read-note { margin: 4px 0 0; max-width: 64ch; font-size: 14px; line-height: 20px; color: var(--cra-ink-2); }
+.st-key-cra_reading_alts { flex-wrap: wrap; gap: 0 16px; }
+.st-key-cra_reading_alts button { min-height: 32px; }
 @media (max-width: 640px) {
   .cra-driver { grid-template-columns: minmax(0, 1fr); }
   .cra-band { font-size: 40px; line-height: 48px; }

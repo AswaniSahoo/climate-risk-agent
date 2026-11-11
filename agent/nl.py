@@ -242,7 +242,11 @@ def _nl_refusal(
 
 
 def run_agent_nl(
-    query: str, *, use_climatology: bool = True, on_step: OnStep = None
+    query: str,
+    *,
+    use_climatology: bool = True,
+    on_step: OnStep = None,
+    parsed: ParsedQuery | None = None,
 ) -> "RiskReport":
     """Free text -> RiskReport: parse -> geocode -> AR6 region -> the agent.
 
@@ -254,8 +258,12 @@ def run_agent_nl(
     steps this function owns (resolving the place and fitting the climatology)
     run BEFORE the graph is invoked, so they are reported here; the graph's own
     nodes are reported by `run_agent`, into the same callback.
+
+    `parsed` (optional) is `parse_query(query)` made earlier, by a client that
+    showed the reading before running it (the UI with CRG_JEV=triage). The run
+    then answers exactly the reading the person saw, and asks Jev nothing twice.
     """
-    parsed = parse_query(query)
+    parsed = parsed if parsed is not None else parse_query(query)
     reason = refusal_reason(parsed)
     if reason is not None:
         return _nl_refusal(
