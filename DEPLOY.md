@@ -85,6 +85,39 @@ gcloud run deploy climate-risk-agent \
   `--min-instances 0` its cache dies with every instance. They also give
   the spend guard one budget for every instance (see "Spend guard"); the
   token is a secret, so it never goes in `--set-env-vars`.
+- **Shared cache on Cloud Storage: option A, chosen over Upstash by Aswani
+  (2026-11-11).** Set `CRG_CACHE_GCS_BUCKET=climate-risk-agent-cache` on the
+  service. Reads go shipped seed, then this instance's disk, then the bucket; a
+  bucket hit fills the disk; writes go to disk and bucket; each object carries
+  its expiry, enforced on read; any bucket error is logged, the bucket is left
+  alone for 60 s, and the report runs on the tiers that answer. With the setting
+  absent, the Upstash pair above (or disk alone) applies as before. The code
+  talks to the JSON API through httpx with a google-auth token (no new
+  dependency); `tools/cache_backend.py` quotes the API contract it relies on.
+  Resources created on 2026-11-11 with Aswani's yes, not to be changed from here:
+  - bucket `gs://climate-risk-agent-cache`: us-central1, uniform access, public
+    access prevention, soft delete off, objects deleted at 400 days of age
+    (longer than any cache TTL, which tops out at 365 days);
+  - runtime service account
+    `climate-risk-runtime@climate-risk-agent.iam.gserviceaccount.com`, holding
+    on that bucket only a custom role with exactly `storage.objects.get`,
+    `storage.objects.create` and `storage.objects.delete`. No list and no update:
+    the code never lists, sets metadata at upload time, and overwrites under the
+    delete permission (an overwrite needs it, per the objects.insert docs);
+  - the service runs as that account after the next deploy, maxScale 1, min 0.
+  Smoke test, 2026-11-11, with the owner's ADC under `smoke/`: write, read,
+  increment twice (1 then 3), delete both, read back nothing. All passed.
+- **Open-Meteo archive budget** (`tools/archive_budget.py`), in front of every
+  live ERA5 request. One 1960 to 2022 request weighs about 1,644 calls against
+  the free 10,000 a day and 5,000 an hour, and Cloud Run's egress addresses are
+  shared. `CRG_ARCHIVE_DAILY_CALLS` (default 8,000, UTC day) and
+  `CRG_ARCHIVE_HOURLY_CALLS` (default 4,000) are weighted calls; `off` disables
+  one. The counts live on the bucket counter (compare-and-swap on
+  `ifGenerationMatch`), counted in the process for 60 s after a bucket failure.
+  Any HTTP 429 stops every archive request until the next full hour. Refused, a
+  report runs without ERA5 and says so in its numbers line, for example: "ERA5
+  history skipped for this place: today's free data allowance for new places is
+  used up. It resets at 00:00 UTC."
 - **Precomputed entries ship in the image** (`tools/cache_seed/*.json`, read
   before Redis or disk, so they survive scale to zero). Each entry sits under
   the exact cache key the live path builds, so it only answers the request and
