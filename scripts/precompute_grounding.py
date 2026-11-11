@@ -27,8 +27,8 @@ Run (repo root, with the corpus and the embedding cache in data/, and model auth
   uv run python -m scripts.precompute_grounding --areas WCE,SAS --hazards heatwave
   uv run python -m scripts.precompute_grounding                    # all 138 pairs
   uv run python -m scripts.precompute_grounding --check --presets
-Any change to the corpus, the ranking code, rag/answer.py, rag/cid.py or the
-model moves every key: run it again after such a change.
+Any change to the corpus, the ranking code, rag/answer.py, rag/prompt_safety.py,
+rag/cid.py or the model moves every key: run it again after such a change.
 """
 from __future__ import annotations
 

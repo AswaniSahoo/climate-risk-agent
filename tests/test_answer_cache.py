@@ -42,6 +42,40 @@ def test_key_depends_on_question_chunks_and_text(tmp_path):
     assert cache.key("how much?", edited) != base  # same ids, new TEXT -> new key
 
 
+# --- an answer belongs to the prompt that asked for it --------------------------
+#
+# The same question over the same chunks can be answered differently once the
+# rules, the schema or the fencing change, so a shared cache must never hand a
+# newer prompt an answer an older one wrote.
+
+def test_an_answer_cached_under_another_prompt_is_a_miss(tmp_path, monkeypatch):
+    import rag.answer_cache as answer_cache_mod
+
+    cache = AnswerCache(tmp_path)
+    cache.put(cache.key("how much?", _CHUNKS), _ANSWER)
+    monkeypatch.setattr(answer_cache_mod, "prompt_version", lambda: "an-edited-prompt")
+
+    assert cache.get(cache.key("how much?", _CHUNKS)) is None
+
+
+def test_the_regional_rule_switch_moves_the_answer_key(tmp_path, monkeypatch):
+    """CRG_REGIONAL_GROUNDING changes the rule block at runtime, not the source."""
+    cache = AnswerCache(tmp_path)
+    monkeypatch.delenv("CRG_REGIONAL_GROUNDING", raising=False)
+    off = cache.key("how much?", _CHUNKS)
+    monkeypatch.setenv("CRG_REGIONAL_GROUNDING", "1")
+
+    assert cache.key("how much?", _CHUNKS) != off
+
+
+def test_the_prompt_version_covers_the_fence_code():
+    """The question fence and the excerpt framing are built in rag/prompt_safety.py,
+    so that file is part of the prompt's identity, not only rag/answer.py."""
+    import rag.answer_cache as answer_cache_mod
+
+    assert {"answer.py", "prompt_safety.py"} <= set(answer_cache_mod._PROMPT_SOURCES)
+
+
 def test_corrupt_cache_file_is_a_loud_miss(tmp_path, caplog):
     cache = AnswerCache(tmp_path)
     key = cache.key("q", _CHUNKS)

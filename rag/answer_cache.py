@@ -61,7 +61,9 @@ _GROUNDING_TTL_S = 365 * 24 * 3600
 # same way rag/corpus.py fingerprints the chunker: nobody has to remember to
 # bump a version constant.
 _RETRIEVAL_SOURCES = ("retrieve.py", "bm25.py", "dense.py", "hybrid.py")
-_PROMPT_SOURCES = ("answer.py",)
+# answer.py writes the rules and the schema; prompt_safety.py builds the
+# question fence and the excerpt framing that wrap them.
+_PROMPT_SOURCES = ("answer.py", "prompt_safety.py")
 _PROJECTION_SOURCES = ("cid.py",)
 _SOURCE_DIR = Path(__file__).resolve().parent
 
@@ -98,7 +100,12 @@ def prompt_version() -> str:
 
 
 class AnswerCache:
-    """sha256-keyed entries, one per (question, evidence, model).
+    """sha256-keyed entries, one per (question, evidence, model, prompt).
+
+    The prompt version is in the key because the same question over the same
+    chunks is asked differently once the rules, the schema or the fencing
+    change, and a shared cache must never hand a newer prompt an answer that
+    an older one wrote.
 
     `directory` pins the cache to a local folder (what the tests and offline
     runs want); passing nothing takes the process-wide backend from the
@@ -118,6 +125,7 @@ class AnswerCache:
     def key(self, question: str, chunks: Sequence[Chunk]) -> str:
         hasher = hashlib.sha256()
         hasher.update(GENERATE_MODEL.encode())
+        hasher.update(prompt_version().encode())
         hasher.update(question.encode())
         for chunk in chunks:
             hasher.update(chunk.chunk_id.encode())

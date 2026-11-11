@@ -97,9 +97,9 @@ gcloud run deploy climate-risk-agent \
     the Ch.12 projection per (hazard, AR6 region), up to 3 model calls a pair.
     `--presets` covers the six UI presets (6 pairs); no flag runs all 138.
   Both keys move when their inputs change (fit code and bootstrap counts; corpus,
-  ranking code, `rag/answer.py`, `rag/cid.py`, model), so rerun the matching
-  script after such a change and check with `--check`. CI fails when a shipped
-  entry no longer matches the key the code builds
+  ranking code, `rag/answer.py`, `rag/prompt_safety.py`, `rag/cid.py`, model),
+  so rerun the matching script after such a change and check with `--check`.
+  CI fails when a shipped entry no longer matches the key the code builds
   (`tests/test_seed_freshness.py`); after a `rag/cid.py` change,
   `precompute_grounding.py --presets --only projection --prune-stale` refreshes
   the projections alone, with no answer asked again.
