@@ -5,6 +5,7 @@ RiskReport path honestly (risk, citations, refusal), not the agent logic.
 """
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -26,7 +27,9 @@ from tools.hazard_stats import HazardStat, Representativeness, ReturnLevel
 from ui.report_plot import forecast_peak, return_level_plot
 from ui.theme import APP_CSS
 
-_APP = "ui/app.py"
+# Absolute: since Streamlit 1.66 a relative path is "resolved against the Python
+# file that calls AppTest.from_file()" (tests/), not the working directory.
+_APP = str(Path(__file__).resolve().parents[1] / "ui" / "app.py")
 FULL_PLOT_LEFT, FULL_PLOT_RIGHT = 44, 468  # the full-size drawing's plot area in report_plot.py
 
 
@@ -71,10 +74,12 @@ def _run_clicked(at: AppTest) -> AppTest:
     return at.run()
 
 
-# AppTest classifies EVERY expandable block that carries an icon as a `Status`
-# (element_tree.py: `if block.expandable.icon`), so the app's icon'd expanders
-# land in `at.status` alongside the real one. The run's own panel is the block
-# wearing an icon that only st.status sets.
+# Before Streamlit 1.66, AppTest classified EVERY expandable block that carries an
+# icon as a `Status` (element_tree.py: `if block.expandable.icon`), so the app's
+# icon'd expanders landed in `at.status` alongside the real one. 1.66 keys on
+# state instead ("st.status always sets state; st.expander leaves it undefined
+# even when an icon is present"), so they are in `at.expander` now. The run's
+# own panel is still the block wearing an icon that only st.status sets.
 _STATUS_ICONS = {"spinner", ":material/check:", ":material/error:"}
 
 
@@ -168,7 +173,7 @@ def test_the_first_visit_wait_is_stated_next_to_the_assess_button(stubbed):
 def test_results_carry_a_collapsed_how_to_read_this_report_explainer(stubbed):
     at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
 
-    assert "How to read this report" in [e.label for e in at.status]
+    assert "How to read this report" in [e.label for e in (*at.status, *at.expander)]
     rendered = " ".join(m.value for m in at.markdown)
     assert "return-level curve" in rendered  # what the risk band means
     assert "LIMITATIONS.md" in rendered  # where the limits live
