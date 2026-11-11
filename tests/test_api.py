@@ -145,3 +145,53 @@ def test_query_refusal_is_200_with_refusal_report(client, monkeypatch):
     assert response.status_code == 200  # refusing is a VALID output, not an error
     payload = response.json()["report"]
     assert payload["refusal"] and payload["risk_level"] is None
+
+
+# --- per-client request limit (rag/spend_guard.py) ---------------------------
+
+_QUERY = {"query": "heatwave risk in Rourkela next week"}
+
+
+def test_a_client_over_its_limit_gets_429_and_a_retry_after(client, monkeypatch):
+    monkeypatch.setenv("CRG_API_RATE_LIMIT", "2")
+    monkeypatch.setattr(api_app, "run_agent_nl", lambda q: _stub_report())
+
+    codes = [client.post("/query", json=_QUERY).status_code for _ in range(2)]
+    limited = client.post("/query", json=_QUERY)
+
+    assert codes == [200, 200]
+    assert limited.status_code == 429
+    assert 1 <= int(limited.headers["Retry-After"]) <= 60
+    assert "2 requests per 60 s" in limited.json()["detail"]
+
+
+def test_every_endpoint_that_can_spend_shares_the_client_limit(client, monkeypatch):
+    monkeypatch.setenv("CRG_API_RATE_LIMIT", "1")
+    monkeypatch.setattr(api_app, "run_agent", lambda *a, **kw: _stub_report())
+    monkeypatch.setattr(api_app, "run_agent_nl", lambda q: _stub_report())
+    monkeypatch.setattr(api_app, "climatology_hazard_stat", lambda *a, **kw: object())
+
+    assert client.post("/report", json=_request_body()).status_code == 200
+    assert client.post("/query", json=_QUERY).status_code == 429
+    assert client.post("/triage", json=_QUERY).status_code == 429
+
+
+def test_probes_and_metrics_are_never_rate_limited(client, monkeypatch):
+    monkeypatch.setenv("CRG_API_RATE_LIMIT", "0")
+
+    assert client.get("/healthz").status_code == 200
+    assert client.get("/metrics").status_code == 200
+    assert client.post("/query", json=_QUERY).status_code == 429
+
+
+def test_a_key_that_is_not_ascii_is_rejected_not_a_server_error(client, monkeypatch):
+    """The key comparison is constant-time and runs on bytes: hmac.compare_digest
+    raises on a non-ASCII str, and a header arrives as whatever bytes were sent."""
+    monkeypatch.setenv("API_KEY", "secret")
+    monkeypatch.setattr(api_app, "run_agent_nl", lambda q: _stub_report())
+
+    response = client.post(
+        "/query", json=_QUERY, headers={"x-api-key": "sécret".encode("latin-1")}
+    )
+
+    assert response.status_code == 401

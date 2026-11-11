@@ -16,22 +16,33 @@ Access control: set env API_KEY -> POST /report, /query, /triage and GET
 /metrics require a matching `x-api-key` header. Unset -> open, with a loud
 dev-mode warning.
 
+Request limit: POST /report, /query and /triage, the endpoints that can spend
+money, allow CRG_API_RATE_LIMIT requests per CRG_API_RATE_WINDOW_S seconds per
+client (default 10 per 60 s, "off" to disable) and answer 429 with Retry-After
+past that. The client is the connecting address as uvicorn reports it: uvicorn
+honours X-Forwarded-For only from FORWARDED_ALLOW_IPS (127.0.0.1 by default in
+uvicorn 0.50.0), so behind a proxy, list the proxy there or every caller
+shares one limit.
+The daily spend limit in rag/spend_guard.py still caps the total.
+
 Run:  uv run uvicorn api.app:app --port 8000
 """
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from agent.contracts import Hazard, RiskReport
 from agent.graph import run_agent
 from agent.nl import TriageOutcome, run_agent_nl, triage_query
 from obs.telemetry import Span, snapshot, summarize
+from rag import spend_guard
 from tools.climatology import ClimatologyError, climatology_hazard_stat
 
 _log = logging.getLogger(__name__)
@@ -78,8 +89,27 @@ def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     expected = os.environ.get("API_KEY")
     if expected is None:
         return  # dev mode — warned once at startup
-    if x_api_key != expected:
+    # Constant time, so response timing does not leak how much of a guess was
+    # right; on bytes, because compare_digest raises on a non-ASCII str.
+    if x_api_key is None or not hmac.compare_digest(
+        x_api_key.encode("utf-8"), expected.encode("utf-8")
+    ):
         raise HTTPException(status_code=401, detail="invalid or missing x-api-key")
+
+
+def _limit_client(request: Request) -> None:
+    """Per-client request limit on the endpoints that can spend money."""
+    client = request.client.host if request.client is not None else "unknown"
+    wait_s = spend_guard.client_rate_limited("api", client)
+    if wait_s is None:
+        return
+    limit, window = spend_guard.api_rate_limit() or (0, spend_guard.DEFAULT_API_RATE_WINDOW_S)
+    raise HTTPException(
+        status_code=429,
+        detail=(f"Too many requests from this client: at most {limit} requests per "
+                f"{window} s. Retry in {wait_s} s."),
+        headers={"Retry-After": str(wait_s)},
+    )
 
 
 class ReportRequest(BaseModel):
@@ -98,7 +128,8 @@ class ReportResponse(BaseModel):
     telemetry: dict
 
 
-@app.post("/report", response_model=ReportResponse, dependencies=[Depends(_require_api_key)])
+@app.post("/report", response_model=ReportResponse,
+          dependencies=[Depends(_limit_client), Depends(_require_api_key)])
 async def create_report(request: ReportRequest) -> ReportResponse:
     hazard_stat = None
     if request.use_climatology:
@@ -132,7 +163,8 @@ class QueryRequest(BaseModel):
     query: str
 
 
-@app.post("/query", response_model=ReportResponse, dependencies=[Depends(_require_api_key)])
+@app.post("/query", response_model=ReportResponse,
+          dependencies=[Depends(_limit_client), Depends(_require_api_key)])
 async def create_report_from_query(request: QueryRequest) -> ReportResponse:
     """NL entry: parse -> geocode -> AR6 region -> agent. Unresolvable queries
     return a 200 with a typed REFUSAL report — refusing is a valid output of
@@ -147,7 +179,8 @@ class TriageResponse(BaseModel):
     telemetry: dict
 
 
-@app.post("/triage", response_model=TriageResponse, dependencies=[Depends(_require_api_key)])
+@app.post("/triage", response_model=TriageResponse,
+          dependencies=[Depends(_limit_client), Depends(_require_api_key)])
 async def triage_question(request: QueryRequest) -> TriageResponse:
     """Read a question without answering it: hazard, horizon, place, and the
     refusal `/query` would give, in well under a second.
