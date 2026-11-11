@@ -9,6 +9,7 @@ its evidence label and nothing else about the report moves.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -29,7 +30,9 @@ from agent.contracts import (
 from agent.location import ResolvedPlace
 from tests.jev_fakes import enable_jev, triage_reply
 
-_APP = "ui/app.py"
+# Absolute: since Streamlit 1.66 a relative path is "resolved against the Python
+# file that calls AppTest.from_file()" (tests/), not the working directory.
+_APP = str(Path(__file__).resolve().parents[1] / "ui" / "app.py")
 STATEMENT = "Hot extremes have become more frequent. Heatwaves will stop by 2030."
 
 
