@@ -43,6 +43,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agent.contracts import Hazard
+from rag.corpus import corpus_file_sizes, fingerprint_for
 from tools.ar6_regions import AR6Region, _land_regions, region_for
 from tools.cache_backend import SEED_DIR, write_seed_file
 
@@ -141,8 +142,58 @@ def save_rows(rows: Sequence[dict], path: Path = SEED_FILE) -> None:
         },
         "version": {"corpus": corpus_version(), "retrieval": retrieval_version(),
                     "prompt": prompt_version(), "model": GENERATE_MODEL},
+        # The PDF sizes the corpus version was computed from. CI has no PDFs, and
+        # with these it can still rebuild every key (stale_rows).
+        "corpus_files": corpus_file_sizes(),
     }
     write_seed_file(path, header=header, entries=list(rows))
+
+
+def _expected_key(row: dict, *, corpus: str, regions: dict[str, AR6Region]) -> str | None:
+    """The key the current code builds for this row's own (namespace, hazard, region)."""
+    from agent import graph
+
+    region = regions.get(str(row.get("region", "")))
+    if region is None:
+        return None
+    hazard = Hazard(row["hazard"])
+    if row.get("namespace") == "grounding":
+        grounding = graph._grounding_cache()
+        raw = grounding.key(hazard=hazard.value, area=region.label,
+                            question=graph._ipcc_question(hazard, region.label),
+                            top_k=graph._IPCC_TOP_K, corpus=corpus)
+        return grounding.json_cache.key(raw)
+    if row.get("namespace") == "projection":
+        projection = graph._projection_cache()
+        return projection.json_cache.key(projection.key(region, hazard, corpus=corpus))
+    return None
+
+
+def stale_rows(seed_path: Path = SEED_FILE) -> list[str]:
+    """Rows whose key the current code no longer builds, so they can never answer.
+
+    Needs no PDFs: the corpus version comes from the sizes the header records.
+    When the PDFs ARE on disk and differ from those sizes, that is reported
+    too, because the live keys would then differ from every shipped one.
+    """
+    path = Path(seed_path)
+    if not path.exists():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    recorded = payload.get("corpus_files")
+    if not isinstance(recorded, dict):
+        return [f"{path.name}: no corpus_files in the header, so its keys cannot be rebuilt"]
+    out: list[str] = []
+    on_disk = corpus_file_sizes()
+    if all(size is not None for size in on_disk.values()) and on_disk != recorded:
+        out.append(f"{path.name}: the corpus on disk {on_disk} is not the one "
+                   f"the seed was built on {recorded}")
+    corpus = fingerprint_for(recorded)
+    regions = {region.acronym: region for region, _, _ in region_points()}
+    for row in payload["entries"]:
+        if row.get("key") != _expected_key(row, corpus=corpus, regions=regions):
+            out.append(f"{row.get('namespace')} {row.get('hazard')}/{row.get('region')}")
+    return out
 
 
 def _model_calls() -> int:
@@ -160,41 +211,81 @@ class Summary:
     model_calls: int = 0
 
 
-def run(pairs: Sequence[Pair], *, seed_path: Path = SEED_FILE, max_calls: int = 30) -> Summary:
-    """Ground every pair not yet shipped, spending at most `max_calls` model calls."""
+def _prune(rows: dict[str, dict]) -> dict[str, dict]:
+    """Keep only rows whose key the current code builds against the corpus on disk."""
+    from rag.answer_cache import corpus_version
+
+    corpus = corpus_version()
+    regions = {region.acronym: region for region, _, _ in region_points()}
+    kept = {k: r for k, r in rows.items() if _expected_key(r, corpus=corpus, regions=regions) == k}
+    if len(kept) != len(rows):
+        _log.info("pruned %d stale rows", len(rows) - len(kept))
+    return kept
+
+
+def run(
+    pairs: Sequence[Pair],
+    *,
+    seed_path: Path = SEED_FILE,
+    max_calls: int = 30,
+    only: str | None = None,
+    prune_stale: bool = False,
+) -> Summary:
+    """Ground every pair not yet shipped, spending at most `max_calls` model calls.
+
+    `only="projection"` recomputes the Ch.12 projections alone (the right call
+    after a rag/cid.py change: at most one query embedding a pair, and none when
+    the vector is already cached); `only="grounding"` the answers alone.
+    `prune_stale` first drops rows the current code no longer builds a key for.
+    """
     from agent import graph
     from agent.graph import AgentState
 
     rows = {row["key"]: row for row in read_rows(seed_path)}
+    if prune_stale:
+        rows = _prune(rows)
     summary = Summary()
     start = _model_calls()
     for pair in pairs:
         g_key, p_key = _keys(pair)
-        if g_key in rows and p_key in rows:
+        need_grounding = only in (None, "grounding") and g_key not in rows
+        need_projection = only in (None, "projection") and p_key not in rows
+        if not need_grounding and not need_projection:
             summary.skipped.append(pair.label)
             continue
-        if summary.model_calls + MAX_CALLS_PER_PAIR > max_calls:
+        worst = (2 if need_grounding else 0) + (1 if need_projection else 0)
+        if summary.model_calls + worst > max_calls:
             summary.deferred.append(pair.label)
             continue
         state: AgentState = {"location": pair.region.label, "latitude": pair.latitude,
                              "longitude": pair.longitude, "hazard": pair.hazard, "horizon_days": 7}
-        graph.research(state)
-        graph.project(state)
+        if need_grounding:
+            graph.research(state)
+        if need_projection:
+            graph.project(state)
         summary.model_calls = _model_calls() - start
         common = {"hazard": pair.hazard.value, "region": pair.region.acronym}
-        grounded = graph._grounding_cache().json_cache.backend.get(g_key)
-        projected = graph._projection_cache().json_cache.backend.get(p_key)
-        if projected is not None:
-            rows[p_key] = {"key": p_key, "namespace": "projection", **common,
-                           "value": json.loads(projected)}
-        if grounded is not None:
-            rows[g_key] = {"key": g_key, "namespace": "grounding", **common,
-                           "value": json.loads(grounded)}
+        if need_projection:
+            projected = graph._projection_cache().json_cache.backend.get(p_key)
+            if projected is not None:
+                rows[p_key] = {"key": p_key, "namespace": "projection", **common,
+                               "value": json.loads(projected)}
+            else:
+                summary.not_cached.append(f"{pair.label}: no projection entry (BM25-only or failed)")
+        if need_grounding:
+            grounded = graph._grounding_cache().json_cache.backend.get(g_key)
+            if grounded is not None:
+                rows[g_key] = {"key": g_key, "namespace": "grounding", **common,
+                               "value": json.loads(grounded)}
+                summary.written.append(pair.label)
+            else:
+                summary.not_cached.append(
+                    f"{pair.label}: no grounding entry (abstained, BM25-only or failed)")
+        elif need_projection and p_key in rows:
             summary.written.append(pair.label)
-        else:
-            summary.not_cached.append(
-                f"{pair.label}: no grounding entry (abstained, BM25-only or failed)")
         save_rows(list(rows.values()), seed_path)  # after every pair: an interrupted run resumes
+    if prune_stale and not pairs:
+        save_rows(list(rows.values()), seed_path)
     return summary
 
 
@@ -218,9 +309,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     scope.add_argument("--areas", default=None, help="comma-separated AR6 acronyms, e.g. WCE,SAS")
     parser.add_argument("--hazards", default=None, help="comma-separated hazards (default: all)")
     parser.add_argument("--max-calls", type=int, default=30, help="model calls this run may make")
+    parser.add_argument("--only", choices=("grounding", "projection"), default=None,
+                        help="recompute one namespace (after a rag/cid.py change: projection)")
+    parser.add_argument("--prune-stale", action="store_true",
+                        help="drop shipped rows the current code no longer builds a key for")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--plan", action="store_true", help="list the pairs and the worst-case cost")
-    mode.add_argument("--check", action="store_true", help="exit 1 if a listed pair is missing")
+    mode.add_argument("--check", action="store_true",
+                      help="exit 1 if a listed pair is missing or a shipped row is stale")
     args = parser.parse_args(argv)
 
     # Before anything touches the cache: compute live (seed off) into a scratch
@@ -245,11 +341,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{len(pairs)} pairs, at most {MAX_CALLS_PER_PAIR * len(pairs)} model calls")
         return 0
     if args.check:
-        result = check(pairs)
+        result = {**check(pairs), "stale_rows": stale_rows()}
         print(json.dumps(result, indent=1))
-        return 1 if result["missing"] else 0
+        return 1 if result["missing"] or result["stale_rows"] else 0
 
-    summary = run(pairs, max_calls=args.max_calls)
+    summary = run(pairs, max_calls=args.max_calls, only=args.only, prune_stale=args.prune_stale)
     print(f"written {len(summary.written)} | already shipped {len(summary.skipped)} | "
           f"not cached {len(summary.not_cached)} | deferred {len(summary.deferred)} | "
           f"model calls {summary.model_calls}")

@@ -360,6 +360,36 @@ def check(cities: Sequence[City], hazards: Sequence[Hazard], seed_path: Path = S
             "presets_missing": presets_missing}
 
 
+def _row_key(row: dict) -> str:
+    city = City(name=row["city"], country=row.get("country", ""),
+                latitude=row["latitude"], longitude=row["longitude"])
+    return entry_key(city, Hazard(row["hazard"]))
+
+
+def stale_rows(seed_path: Path = SEED_FILE) -> list[str]:
+    """Rows whose key the current code no longer builds, so they can never answer.
+
+    The key is rebuilt from each row's own coordinates and hazard with the
+    live key function, so a change to the fitting code (its source
+    fingerprint), the bootstrap counts, the years or the return periods shows
+    up here. Needs no network.
+    """
+    return [
+        f"hazard_fit {row['city']}/{row['hazard']} at ({row['latitude']}, {row['longitude']})"
+        for row in read_rows(seed_path) if row["key"] != _row_key(row)
+    ]
+
+
+def prune_stale(seed_path: Path = SEED_FILE) -> int:
+    """Drop the stale rows. Run --refit first: a row with a stored series is
+    re-keyed there instead, and one without can only come back by a paced fetch."""
+    rows = read_rows(seed_path)
+    kept = [row for row in rows if row["key"] == _row_key(row)]
+    if len(kept) != len(rows):
+        save_rows(kept, seed_path)
+    return len(rows) - len(kept)
+
+
 def resolve(path: Path = CITIES_FILE, pause_s: float = 0.5) -> int:
     """Geocode list entries that have a query but no coordinates; write them back.
 
@@ -412,8 +442,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--min-interval-s", type=float, default=DEFAULT_MIN_INTERVAL_S)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--plan", action="store_true", help="print the cost and exit")
-    mode.add_argument("--check", action="store_true", help="exit 1 if a preset lacks a current entry")
+    mode.add_argument("--check", action="store_true",
+                      help="exit 1 if a preset lacks a current entry or a shipped row is stale")
     mode.add_argument("--refit", action="store_true", help="refit stored series offline")
+    mode.add_argument("--prune-stale", action="store_true",
+                      help="drop shipped rows the current code no longer builds a key for")
     mode.add_argument("--resolve", action="store_true", help="geocode list entries without coordinates")
     args = parser.parse_args(argv)
     configure()
@@ -424,12 +457,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.refit:
         print(f"refitted {refit()} entries from their stored series")
         return 0
+    if args.prune_stale:
+        print(f"pruned {prune_stale()} stale entries")
+        return 0
     cities = load_cities(args.cities)[: args.limit]
     hazards = [Hazard(name.strip()) for name in args.hazards.split(",") if name.strip()]
     if args.check:
-        result = check(cities, hazards)
+        result = {**check(cities, hazards), "stale_rows": stale_rows()}
         print(json.dumps(result, indent=1))
-        return 1 if result["presets_missing"] else 0
+        return 1 if result["presets_missing"] or result["stale_rows"] else 0
     # Reuse what a live run already paid for: the live tier only, never the seed.
     live = _backend_from_env(os.environ)
     if args.plan:

@@ -182,3 +182,34 @@ def test_check_counts_current_and_stale_entries(nodes, tmp_path):
     result = pre.check([_pair("WCE"), _pair("SAS")], seed_path=seed)
 
     assert result == {"pairs": 2, "current": 1, "missing": ["heatwave/SAS"], "stale": 1}
+
+
+def test_only_projection_recomputes_the_projection_and_never_asks_the_model(nodes, tmp_path):
+    """After a rag/cid.py change only the projections move: no answer is asked again."""
+    seed = tmp_path / "ipcc.json"
+    pre.run([_pair("WCE")], seed_path=seed, max_calls=30)
+    payload = json.loads(seed.read_text())
+    payload["entries"] = [r for r in payload["entries"] if r["namespace"] != "projection"]
+    seed.write_text(json.dumps(payload))
+    asked_before = len(nodes["asked"])
+
+    summary = pre.run([_pair("WCE")], seed_path=seed, max_calls=1, only="projection")
+
+    assert summary.written == ["heatwave/WCE"] and summary.deferred == []
+    assert len(nodes["asked"]) == asked_before  # research never ran
+    rows = json.loads(seed.read_text())["entries"]
+    assert sorted(r["namespace"] for r in rows) == ["grounding", "projection"]
+
+
+def test_prune_stale_drops_rows_the_code_no_longer_builds(nodes, tmp_path):
+    seed = tmp_path / "ipcc.json"
+    pre.run([_pair("WCE")], seed_path=seed, max_calls=30)
+    payload = json.loads(seed.read_text())
+    payload["entries"].append({"key": "crg:v1:grounding:retired", "namespace": "grounding",
+                               "hazard": "heatwave", "region": "WCE", "value": {}})
+    seed.write_text(json.dumps(payload))
+
+    pre.run([], seed_path=seed, prune_stale=True)
+
+    keys = [r["key"] for r in json.loads(seed.read_text())["entries"]]
+    assert "crg:v1:grounding:retired" not in keys and len(keys) == 2

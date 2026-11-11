@@ -248,3 +248,18 @@ def test_every_listed_city_has_coordinates():
 
     assert all(c.latitude is not None and c.longitude is not None for c in cities)
     assert len({(c.latitude, c.longitude) for c in cities}) == len(cities)  # no duplicates
+
+
+def test_prune_stale_drops_only_the_rows_the_code_no_longer_builds(httpx_mock, tmp_path,
+                                                                   monkeypatch):
+    _archive(httpx_mock, {52.52: _series(1), 48.85341: _series(2)})
+    seed = tmp_path / "seed.json"
+    pre.run([BERLIN, PARIS], [Hazard.HEATWAVE], budget_calls=10_000, min_interval_s=0,
+            live=None, seed_path=seed, sleep=lambda s: None)
+    payload = json.loads(seed.read_text())
+    payload["entries"][0]["key"] = "crg:v1:hazard_fit:retired"
+    seed.write_text(json.dumps(payload))
+
+    assert len(pre.stale_rows(seed)) == 1
+    assert pre.prune_stale(seed) == 1
+    assert pre.stale_rows(seed) == [] and len(pre.read_rows(seed)) == 1

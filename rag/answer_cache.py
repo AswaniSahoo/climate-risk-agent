@@ -198,10 +198,15 @@ class GroundingCache:
     def json_cache(self) -> JsonCache:
         return self._cache
 
-    def key(self, *, hazard: str, area: str, question: str, top_k: int) -> str:
+    def key(
+        self, *, hazard: str, area: str, question: str, top_k: int, corpus: str | None = None,
+    ) -> str:
+        """`corpus` defaults to the PDFs on disk; a check without them passes the
+        recorded version instead (scripts/precompute_grounding.py stale_rows)."""
         raw = "|".join([
             hazard, area, question, f"top_k={top_k}",
-            f"corpus={corpus_version()}", f"retrieval={retrieval_version()}",
+            f"corpus={corpus if corpus is not None else corpus_version()}",
+            f"retrieval={retrieval_version()}",
             f"prompt={prompt_version()}", f"model={GENERATE_MODEL}",
         ])
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -242,12 +247,13 @@ class ProjectionCache:
     def json_cache(self) -> JsonCache:
         return self._cache
 
-    def key(self, region: AR6Region, hazard: Hazard) -> str:
+    def key(self, region: AR6Region, hazard: Hazard, *, corpus: str | None = None) -> str:
         from rag.cid import DEFAULT_TOP_K, cid_question
 
         raw = "|".join([
             region.acronym, region.name, hazard.value, cid_question(region, hazard),
-            f"top_k={DEFAULT_TOP_K}", f"corpus={corpus_version()}",
+            f"top_k={DEFAULT_TOP_K}",
+            f"corpus={corpus if corpus is not None else corpus_version()}",
             f"retrieval={retrieval_version()}", f"cid={_source_digest(_PROJECTION_SOURCES)}",
         ])
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
