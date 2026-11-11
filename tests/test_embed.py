@@ -3,13 +3,25 @@
 The SDK seam (rag.gemini_client.embed_batch) is monkeypatched; cosine and RRF
 are pure math on tiny vectors.
 """
+import logging
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 import rag.embed as embed_mod
 from rag.chunk import Chunk
 from rag.dense import DenseIndex
-from rag.embed import DiskVectorCache, EmbeddingError, cache_key, cached_embed_texts, embed_texts
+from rag.embed import (
+    DiskVectorCache,
+    EmbeddingError,
+    cache_key,
+    cached_embed_texts,
+    embed_texts,
+    pack_path,
+    vector_digest,
+    write_pack,
+)
 from rag.gemini_client import GeminiError
 from rag.hybrid import rrf_fuse
 
@@ -116,3 +128,144 @@ def test_rrf_handles_item_missing_from_one_ranking():
     a, b = _chunk(0), _chunk(1)
     fused = rrf_fuse([[a, b], [a]], top_k=2)
     assert fused[0].chunk_id == a.chunk_id
+
+
+# --- the vector pack: the same vectors in ONE file, read before the files ---
+#
+# A Cloud Run gen2 container pulls image files on first read, so 2,730 vector
+# files cost 17.5 s on the live revision against 0.15 s locally. The pack must
+# answer exactly what the files answer, bit for bit, and anything wrong with it
+# must cost the slow path, never a wrong vector or a crash.
+
+
+def _vector_files(directory, n=6, dims=8, seed=0):
+    """`n` document vectors as files, with awkward float32 bits in each."""
+    rng = np.random.default_rng(seed)
+    store = DiskVectorCache(directory)
+    keys = []
+    for i in range(n):
+        vector = rng.standard_normal(dims).astype(np.float32)
+        vector[:4] = [-0.0, 1e-45, np.finfo(np.float32).max, np.finfo(np.float32).tiny]
+        key = cache_key(f"chunk {i}", "RETRIEVAL_DOCUMENT")
+        store.put(key, vector.tolist())
+        keys.append(key)
+    return store, keys
+
+
+def _file_of(store, key):
+    return store.directory / f"{vector_digest(key)}.npy"
+
+
+def _pack(store, keys):
+    vectors = {vector_digest(k): np.load(_file_of(store, k)) for k in keys}
+    return write_pack(pack_path(store.directory), vectors)
+
+
+def test_the_pack_sits_beside_the_folder_it_packs():
+    assert pack_path("data/cache/embeddings") == Path("data/cache/embeddings.pack.npy")
+
+
+def test_a_packed_vector_is_bit_for_bit_its_file_and_needs_no_file(tmp_path):
+    store, keys = _vector_files(tmp_path / "embeddings")
+    files = {k: np.load(_file_of(store, k)) for k in keys}
+    assert _pack(store, keys) == len(keys)
+    for key in keys:
+        _file_of(store, key).unlink()  # only the pack can answer now
+
+    cache = DiskVectorCache(tmp_path / "embeddings")
+    for key in keys:
+        vector = cache.get(key)
+        assert vector == files[key].tolist()
+        assert np.asarray(vector, dtype=np.float32).tobytes() == files[key].tobytes()
+
+
+def test_the_corpus_is_read_from_the_pack_in_one_file_open(tmp_path, monkeypatch):
+    store, keys = _vector_files(tmp_path / "embeddings", n=60)
+    _pack(store, keys)
+    texts = [f"chunk {i}" for i in range(60)]
+    real_load = np.load
+    opened = []
+
+    def counting_load(path, *args, **kwargs):
+        opened.append(Path(path).name)
+        return real_load(path, *args, **kwargs)
+
+    monkeypatch.setattr(embed_mod.np, "load", counting_load)
+    monkeypatch.setattr(
+        embed_mod, "embed_batch", lambda *a, **k: pytest.fail("every vector is in the pack")
+    )
+    vectors = cached_embed_texts(
+        texts, task_type="RETRIEVAL_DOCUMENT", cache=DiskVectorCache(tmp_path / "embeddings")
+    )
+
+    assert len(vectors) == 60
+    assert opened == ["embeddings.pack.npy"]
+
+
+def test_a_vector_the_pack_lacks_is_read_from_its_file(tmp_path):
+    store, keys = _vector_files(tmp_path / "embeddings")
+    _pack(store, keys[:-1])
+
+    cache = DiskVectorCache(tmp_path / "embeddings")
+
+    assert cache.get(keys[-1]) == np.load(_file_of(store, keys[-1])).tolist()
+    assert cache.get(cache_key("never embedded", "RETRIEVAL_QUERY")) is None
+
+
+def test_a_new_query_vector_goes_to_a_file_and_leaves_the_pack_alone(tmp_path):
+    store, keys = _vector_files(tmp_path / "embeddings")
+    _pack(store, keys)
+    pack = pack_path(store.directory)
+    before = pack.read_bytes()
+    question = cache_key("a new question", "RETRIEVAL_QUERY")
+
+    DiskVectorCache(tmp_path / "embeddings").put(question, [0.5, 0.25])
+
+    assert pack.read_bytes() == before
+    assert _file_of(store, question).exists()
+    assert DiskVectorCache(tmp_path / "embeddings").get(question) == [0.5, 0.25]
+
+
+@pytest.mark.parametrize("damage", ["truncated", "not numpy", "wrong layout"])
+def test_a_damaged_pack_is_a_loud_miss_and_the_files_still_answer(tmp_path, caplog, damage):
+    store, keys = _vector_files(tmp_path / "embeddings")
+    _pack(store, keys)
+    pack = pack_path(store.directory)
+    if damage == "truncated":
+        pack.write_bytes(pack.read_bytes()[:-10])
+    elif damage == "not numpy":
+        pack.write_bytes(b"not a numpy file at all")
+    else:
+        np.save(pack, np.zeros((len(keys), 8), dtype=np.float32))
+
+    with caplog.at_level(logging.WARNING):
+        vector = DiskVectorCache(tmp_path / "embeddings").get(keys[0])
+
+    assert vector == np.load(_file_of(store, keys[0])).tolist()
+    assert "vector pack" in caplog.text
+
+
+def test_a_rewritten_pack_is_read_again(tmp_path):
+    store, keys = _vector_files(tmp_path / "embeddings")
+    _pack(store, keys)
+    assert DiskVectorCache(tmp_path / "embeddings").get(keys[0]) is not None
+
+    replacement = np.arange(8, dtype=np.float32)
+    write_pack(pack_path(store.directory), {vector_digest(keys[0]): replacement})
+
+    assert DiskVectorCache(tmp_path / "embeddings").get(keys[0]) == replacement.tolist()
+
+
+def test_write_pack_refuses_what_it_would_have_to_cast(tmp_path):
+    target = tmp_path / "embeddings.pack.npy"
+    with pytest.raises(ValueError, match="float32"):
+        write_pack(target, {"a" * 64: np.zeros(4, dtype=np.float64)})
+    with pytest.raises(ValueError, match="width"):
+        write_pack(target, {"a" * 64: np.zeros(4, dtype=np.float32),
+                            "b" * 64: np.zeros(5, dtype=np.float32)})
+    with pytest.raises(ValueError, match="sha256"):
+        write_pack(target, {"not a digest": np.zeros(4, dtype=np.float32)})
+    with pytest.raises(ValueError, match="nothing"):
+        write_pack(target, {})
+
+    assert list(tmp_path.iterdir()) == []
