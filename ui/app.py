@@ -9,12 +9,11 @@ Run:  uv run streamlit run ui/app.py
 """
 from __future__ import annotations
 
-import base64
 import logging
 import sys
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 # `streamlit run ui/app.py` puts ui/ (not the repo root) on sys.path: same
 # entry-point shim the MCP servers use.
@@ -31,7 +30,7 @@ _log = logging.getLogger(__name__)  # tracebacks go HERE, never onto the page
 # imports below the sys.path shim + logging config on purpose (script entrypoint)
 # agent.graph is NOT imported here: it pulls langgraph (~17 s cold) and nothing
 # on the boot path needs it. It is imported where a report is actually run.
-from agent.contracts import Hazard, RiskLevel  # noqa: E402
+from agent.contracts import Hazard  # noqa: E402
 from agent.location import (  # noqa: E402
     coordinate_error,
     name_still_applies,
@@ -55,6 +54,21 @@ from agent.progress import (  # noqa: E402
 from tools import climatology  # noqa: E402
 from tools.climatology import ClimatologyError  # noqa: E402
 from tools.geocode import GeocodeError  # noqa: E402
+from ui.report_plot import return_level_plot, specimen_plot  # noqa: E402
+from ui.theme import (  # noqa: E402
+    APP_CSS,
+    FAVICON_SVG,
+    MARK_SVG,
+    PIN_RED,
+    band_heading,
+    citation_list,
+    driver_list,
+    method_strip,
+    plate_caption,
+    quoted_statement,
+    specimen_card,
+    why_line,
+)
 
 # Shortcut buttons, not the menu: any place on Earth works via the Place box or
 # the coordinate inputs. These are the eval-set cities whose ERA5/answer caches
@@ -68,498 +82,83 @@ LOCATIONS: dict[str, tuple[float, float]] = {
     "Berlin, Germany": (52.52, 13.40),
 }
 
-# Severity -> (badge color, Material icon). Colors match the semantic palette
-# in .streamlit/config.toml, so the badge is themed consistently in light/dark.
-_BadgeColor = Literal["green", "yellow", "orange", "red"]
-_LEVEL_STYLE: dict[RiskLevel, tuple[_BadgeColor, str]] = {
-    RiskLevel.LOW: ("green", ":material/check_circle:"),
-    RiskLevel.MODERATE: ("yellow", ":material/warning:"),
-    RiskLevel.HIGH: ("orange", ":material/priority_high:"),
-    RiskLevel.SEVERE: ("red", ":material/emergency:"),
-}
-
-_ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
-_FAVICON_PATH = _ASSETS_DIR / "favicon.png"
-if not _FAVICON_PATH.is_file():
-    _FAVICON_PATH = Path("assets/favicon.png")
-
-_LOGO_B64 = ""
-if _FAVICON_PATH.is_file():
-    try:
-        _LOGO_B64 = base64.b64encode(_FAVICON_PATH.read_bytes()).decode("utf-8")
-    except Exception as _exc:
-        _log.warning("Could not read brand logo: %s", _exc)
+# The question and the example report share one split on the first screen.
+_SPLIT = [11, 9]
 
 st.set_page_config(
     page_title="Climate-Risk Analyst Agent",
-    page_icon=str(_FAVICON_PATH) if _FAVICON_PATH.is_file() else "assets/favicon.png",
+    page_icon=FAVICON_SVG,
     layout="wide",
 )
 
-if hasattr(st, "logo") and _FAVICON_PATH.is_file():
-    try:
-        st.logo(str(_FAVICON_PATH), icon_image=str(_FAVICON_PATH))
-    except Exception:
-        pass
+st.html(APP_CSS)
 
-st.markdown(
-    """
-    <style>
-    /* Scientific Climate Risk Intelligence Theme (Dark & Light) */
-    :root {
-      --cra-bg: #111613;
-      --cra-surface: rgba(26, 34, 30, 0.72);
-      --cra-surface-card: rgba(22, 29, 25, 0.85);
-      --cra-surface-card-hover: rgba(28, 38, 33, 0.95);
-      --cra-border: rgba(82, 183, 136, 0.18);
-      --cra-border-subtle: rgba(82, 183, 136, 0.10);
-      --cra-border-hover: rgba(82, 183, 136, 0.35);
-      --cra-text: #ECEAE4;
-      --cra-text-muted: #9BA59F;
-      --cra-text-subtle: #6E7972;
-      --cra-primary: #3E886D;
-      --cra-primary-dark: #2D6A4F;
-      --cra-primary-hover: #4D9E80;
-      --cra-primary-glow: rgba(62, 136, 109, 0.25);
-      --cra-badge-bg: rgba(62, 136, 109, 0.14);
-      --cra-badge-border: rgba(62, 136, 109, 0.28);
-      --cra-badge-text: #52B788;
-      --cra-dot: #52B788;
-      --cra-callout-red-bg: rgba(229, 115, 115, 0.08);
-      --cra-callout-red-border: rgba(229, 115, 115, 0.24);
-      --cra-callout-red-text: #EF9A9A;
-      --cra-callout-green-bg: rgba(62, 136, 109, 0.09);
-      --cra-callout-green-border: rgba(62, 136, 109, 0.24);
-      --cra-callout-green-text: #66BB6A;
-      --cra-shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.4), 0 1px 3px 0 rgba(0, 0, 0, 0.2);
-      --cra-shadow-hover: 0 8px 30px -4px rgba(0, 0, 0, 0.55), 0 2px 6px 0 rgba(0, 0, 0, 0.25);
-      --cra-inner-refract: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    }
+# Seeded BEFORE any input widgets exist, so suggestion chips and preset buttons
+# can populate them reliably.
+st.session_state.setdefault("lat_input", 22.26)
+st.session_state.setdefault("lon_input", 84.85)
+st.session_state.setdefault("place_name", "Rourkela")
+st.session_state.setdefault("place_country", "India")
+st.session_state.setdefault("place_coords", (22.26, 84.85))
+st.session_state.setdefault("place_query", "Rourkela, India")
+st.session_state.setdefault("horizon_input", 7)
 
-    [data-theme="light"], .stApp[data-theme="light"], [data-base-theme="light"], .stApp[data-base-theme="light"] {
-      --cra-bg: #F9F8F5;
-      --cra-surface: rgba(255, 255, 255, 0.82);
-      --cra-surface-card: rgba(255, 255, 255, 0.90);
-      --cra-surface-card-hover: rgba(255, 255, 255, 0.98);
-      --cra-border: rgba(36, 94, 72, 0.14);
-      --cra-border-subtle: rgba(36, 94, 72, 0.08);
-      --cra-border-hover: rgba(36, 94, 72, 0.28);
-      --cra-text: #1E2621;
-      --cra-text-muted: #556058;
-      --cra-text-subtle: #8A948D;
-      --cra-primary: #245E48;
-      --cra-primary-dark: #1B4736;
-      --cra-primary-hover: #1B4736;
-      --cra-primary-glow: rgba(36, 94, 72, 0.16);
-      --cra-badge-bg: rgba(36, 94, 72, 0.08);
-      --cra-badge-border: rgba(36, 94, 72, 0.18);
-      --cra-badge-text: #245E48;
-      --cra-dot: #2D6A4F;
-      --cra-callout-red-bg: rgba(198, 146, 20, 0.05);
-      --cra-callout-red-border: rgba(198, 146, 20, 0.18);
-      --cra-callout-red-text: #9E2A2B;
-      --cra-callout-green-bg: rgba(45, 106, 79, 0.05);
-      --cra-callout-green-border: rgba(45, 106, 79, 0.18);
-      --cra-callout-green-text: #2D6A4F;
-      --cra-shadow-card: 0 4px 20px -2px rgba(30, 38, 33, 0.04), 0 1px 3px 0 rgba(30, 38, 33, 0.02);
-      --cra-shadow-hover: 0 8px 28px -4px rgba(30, 38, 33, 0.07), 0 2px 6px 0 rgba(30, 38, 33, 0.02);
-      --cra-inner-refract: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    }
-
-    @media (prefers-color-scheme: light) {
-      :root:not([data-theme="dark"]):not([data-base-theme="dark"]) {
-        --cra-bg: #F9F8F5;
-        --cra-surface: rgba(255, 255, 255, 0.82);
-        --cra-surface-card: rgba(255, 255, 255, 0.90);
-        --cra-surface-card-hover: rgba(255, 255, 255, 0.98);
-        --cra-border: rgba(36, 94, 72, 0.14);
-        --cra-border-subtle: rgba(36, 94, 72, 0.08);
-        --cra-border-hover: rgba(36, 94, 72, 0.28);
-        --cra-text: #1E2621;
-        --cra-text-muted: #556058;
-        --cra-text-subtle: #8A948D;
-        --cra-primary: #245E48;
-        --cra-primary-dark: #1B4736;
-        --cra-primary-hover: #1B4736;
-        --cra-primary-glow: rgba(36, 94, 72, 0.16);
-        --cra-badge-bg: rgba(36, 94, 72, 0.08);
-        --cra-badge-border: rgba(36, 94, 72, 0.18);
-        --cra-badge-text: #245E48;
-        --cra-dot: #2D6A4F;
-        --cra-callout-red-bg: rgba(198, 146, 20, 0.05);
-        --cra-callout-red-border: rgba(198, 146, 20, 0.18);
-        --cra-callout-red-text: #9E2A2B;
-        --cra-callout-green-bg: rgba(45, 106, 79, 0.05);
-        --cra-callout-green-border: rgba(45, 106, 79, 0.18);
-        --cra-callout-green-text: #2D6A4F;
-        --cra-shadow-card: 0 4px 20px -2px rgba(30, 38, 33, 0.04), 0 1px 3px 0 rgba(30, 38, 33, 0.02);
-        --cra-shadow-hover: 0 8px 28px -4px rgba(30, 38, 33, 0.07), 0 2px 6px 0 rgba(30, 38, 33, 0.02);
-        --cra-inner-refract: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-      }
-    }
-
-    /* Brand Header with Logo */
-    .cra-header-container {
-      display: flex;
-      align-items: center;
-      gap: 1.15rem;
-      margin-top: 0.2rem;
-      margin-bottom: 0.6rem;
-    }
-    .cra-brand-logo {
-      width: 50px;
-      height: 50px;
-      border-radius: 12px;
-      border: 1px solid var(--cra-border);
-      box-shadow: 0 4px 14px -2px var(--cra-primary-glow), 0 1px 3px rgba(0, 0, 0, 0.15);
-      object-fit: contain;
-      image-rendering: -webkit-optimize-contrast;
-      background: var(--cra-surface-card);
-      padding: 2px;
-      flex-shrink: 0;
-      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .cra-brand-logo:hover {
-      transform: translateY(-1px) scale(1.03);
-      box-shadow: 0 8px 22px -4px var(--cra-primary-glow);
-    }
-    .cra-header-content {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-    .cra-title {
-      font-size: 2.3rem;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      line-height: 1.12;
-      margin: 0;
-      color: var(--cra-text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    }
-    @media (max-width: 640px) {
-      .cra-header-container {
-        gap: 0.85rem;
-      }
-      .cra-brand-logo {
-        width: 44px;
-        height: 44px;
-      }
-      .cra-title {
-        font-size: 1.7rem;
-      }
-    }
-
-    /* Eyebrow Pill Badge */
-    .cra-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.26rem 0.75rem;
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--cra-badge-text);
-      background: var(--cra-badge-bg);
-      border: 1px solid var(--cra-badge-border);
-      border-radius: 9999px;
-      margin-bottom: 0.45rem;
-      width: fit-content;
-    }
-    @keyframes cra-pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.45; transform: scale(0.85); }
-    }
-    .cra-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--cra-dot);
-      box-shadow: 0 0 6px var(--cra-dot);
-      animation: cra-pulse 2.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-    }
-
-    /* Double-Bezel Card Depth */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-      border-radius: 14px !important;
-      border: 1px solid var(--cra-border) !important;
-      background: var(--cra-surface-card) !important;
-      backdrop-filter: blur(14px) !important;
-      -webkit-backdrop-filter: blur(14px) !important;
-      box-shadow: var(--cra-shadow-card), var(--cra-inner-refract) !important;
-      transition: border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-      border-color: var(--cra-border-hover) !important;
-      box-shadow: var(--cra-shadow-hover), var(--cra-inner-refract) !important;
-    }
-
-    /* Tactile Physics for Buttons */
-    .stButton > button {
-      border-radius: 10px !important;
-      font-weight: 500 !important;
-      letter-spacing: -0.01em !important;
-      border: 1px solid var(--cra-border) !important;
-      background: var(--cra-surface) !important;
-      color: var(--cra-text) !important;
-      box-shadow: var(--cra-inner-refract) !important;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }
-    .stButton > button:hover {
-      transform: translateY(-1px) !important;
-      border-color: var(--cra-border-hover) !important;
-      box-shadow: 0 4px 12px -2px var(--cra-primary-glow), var(--cra-inner-refract) !important;
-      color: var(--cra-badge-text) !important;
-    }
-    .stButton > button:active {
-      transform: translateY(0) scale(0.985) !important;
-    }
-    .stButton > button[kind="primary"] {
-      background: var(--cra-primary) !important;
-      border-color: var(--cra-primary-dark) !important;
-      color: #F9F8F5 !important;
-      box-shadow: 0 2px 8px -1px var(--cra-primary-glow) !important;
-    }
-    .stButton > button[kind="primary"]:hover {
-      background: var(--cra-primary-hover) !important;
-      box-shadow: 0 6px 18px -2px var(--cra-primary-glow) !important;
-      color: #FFFFFF !important;
-    }
-
-    /* Metric Tabular Numbers & Clean Hierarchy */
-    div[data-testid="stMetric"] {
-      padding: 8px 4px !important;
-    }
-    div[data-testid="stMetricLabel"] {
-      font-size: 0.72rem !important;
-      text-transform: uppercase !important;
-      letter-spacing: 0.08em !important;
-      font-weight: 600 !important;
-      color: var(--cra-text-muted) !important;
-    }
-    div[data-testid="stMetricValue"] {
-      font-feature-settings: "tnum" 1 !important;
-      font-variant-numeric: tabular-nums !important;
-      letter-spacing: -0.025em !important;
-      font-weight: 600 !important;
-      color: var(--cra-text) !important;
-    }
-
-    /* Status & Expander Widgets */
-    div[data-testid="stStatusWidget"] {
-      border-radius: 12px !important;
-      border: 1px solid var(--cra-border) !important;
-      background: var(--cra-surface-card) !important;
-    }
-    div[data-testid="stExpander"] {
-      border-radius: 12px !important;
-      border: 1px solid var(--cra-border) !important;
-      background: var(--cra-surface-card) !important;
-    }
-
-    /* Badges */
-    span[data-testid="stBadge"] {
-      border-radius: 6px !important;
-      font-weight: 500 !important;
-      letter-spacing: 0.02em !important;
-    }
-
-    /* Input Fields Focus State */
-    div[data-baseweb="input"] {
-      border-radius: 10px !important;
-      border: 1px solid var(--cra-border) !important;
-      background: var(--cra-surface) !important;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
-    }
-    div[data-baseweb="input"]:focus-within {
-      border-color: var(--cra-primary) !important;
-      box-shadow: 0 0 0 3px var(--cra-primary-glow) !important;
-    }
-
-    /* Empty State Pipeline Styles */
-    .cra-pipeline-card {
-      padding: 1.1rem 1.2rem;
-      border-radius: 12px;
-      background: var(--cra-badge-bg);
-      border: 1px solid var(--cra-border-subtle);
-      margin-bottom: 0.85rem;
-      transition: all 0.2s ease;
-    }
-    .cra-pipeline-card:hover {
-      background: rgba(62, 136, 109, 0.12);
-      border-color: var(--cra-border);
-    }
-    .cra-step-badge {
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--cra-badge-text);
-    }
-    .cra-step-title {
-      font-size: 0.96rem;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      margin: 0.25rem 0 0.4rem 0;
-      color: var(--cra-text);
-    }
-    .cra-step-desc {
-      font-size: 0.85rem;
-      line-height: 1.5;
-      color: var(--cra-text-muted);
-    }
-    .cra-callout {
-      padding: 1.1rem 1.2rem;
-      border-radius: 12px;
-      background: var(--cra-callout-red-bg);
-      border: 1px solid var(--cra-callout-red-border);
-      margin-bottom: 0.85rem;
-    }
-    .cra-callout-green {
-      padding: 1.1rem 1.2rem;
-      border-radius: 12px;
-      background: var(--cra-callout-green-bg);
-      border: 1px solid var(--cra-callout-green-border);
-      margin-bottom: 0.85rem;
-    }
-
-    /* Sidebar Instrument Deck */
-    .cra-sidebar-header {
-      padding: 0.35rem 0 0.85rem 0;
-      margin-bottom: 0.65rem;
-      border-bottom: 1px solid var(--cra-border-subtle);
-    }
-    .cra-sidebar-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.22rem 0.65rem;
-      font-size: 0.64rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--cra-badge-text);
-      background: var(--cra-badge-bg);
-      border: 1px solid var(--cra-badge-border);
-      border-radius: 9999px;
-      margin-bottom: 0.45rem;
-    }
-    .cra-sidebar-title {
-      font-size: 1.08rem;
-      font-weight: 600;
-      letter-spacing: -0.015em;
-      color: var(--cra-text);
-      margin-bottom: 2px;
-    }
-    .cra-sidebar-desc {
-      font-size: 0.78rem;
-      line-height: 1.42;
-      color: var(--cra-text-muted);
-    }
-    .cra-section-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--cra-text-muted);
-      margin: 0.85rem 0 0.45rem 0;
-    }
-    .cra-fast-badge {
-      font-size: 0.62rem;
-      font-weight: 600;
-      padding: 0.12rem 0.45rem;
-      border-radius: 4px;
-      background: var(--cra-badge-bg);
-      color: var(--cra-badge-text);
-      border: 1px solid var(--cra-badge-border);
-      letter-spacing: 0.04em;
-    }
-
-    /* Tactile Sidebar Preset Buttons */
-    [data-testid="stSidebar"] .stButton > button:not([kind="primary"]) {
-      border-radius: 8px !important;
-      font-size: 0.82rem !important;
-      font-weight: 500 !important;
-      padding: 0.32rem 0.5rem !important;
-      border: 1px solid var(--cra-border) !important;
-      background: var(--cra-surface) !important;
-      color: var(--cra-text) !important;
-      box-shadow: var(--cra-inner-refract) !important;
-    }
-    [data-testid="stSidebar"] .stButton > button:not([kind="primary"]):hover {
-      background: var(--cra-badge-bg) !important;
-      border-color: var(--cra-border-hover) !important;
-      color: var(--cra-badge-text) !important;
-      transform: translateY(-1px) !important;
-    }
-    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-      border-radius: 10px !important;
-      font-weight: 600 !important;
-      letter-spacing: -0.01em !important;
-      background: var(--cra-primary) !important;
-      border: 1px solid var(--cra-primary-dark) !important;
-      color: #F9F8F5 !important;
-      box-shadow: 0 4px 14px -2px var(--cra-primary-glow), var(--cra-inner-refract) !important;
-    }
-    [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
-      background: var(--cra-primary-hover) !important;
-      border-color: var(--cra-primary) !important;
-      box-shadow: 0 6px 20px -2px var(--cra-primary-glow), var(--cra-inner-refract) !important;
-      color: #FFFFFF !important;
-      transform: translateY(-1px) !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
+# Is an answer on its way this run? A button's click is in session state before the
+# button is drawn, so the page can be laid out for the answer instead of the intro.
+_answering = bool(st.session_state.get("assess")) or bool(
+    (st.session_state.get("ask_btn") or st.session_state.get("_nl_submitted"))
+    and str(st.session_state.get("nl_query", "")).strip()
 )
 
-_SVG_FALLBACK_LOGO = (
-    '<svg class="cra-brand-logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">'
-    '<rect width="48" height="48" rx="12" fill="#1A221E" stroke="#3E886D" stroke-width="1.5"/>'
-    '<circle cx="24" cy="24" r="14" stroke="#52B788" stroke-width="1.5" stroke-dasharray="2 3"/>'
-    '<circle cx="24" cy="24" r="8" stroke="#3E886D" stroke-width="1.5"/>'
-    '<circle cx="24" cy="24" r="3" fill="#52B788"/>'
-    '<path d="M24 10V14M24 34V38M10 24H14M34 24H38" stroke="#52B788" stroke-width="1.5" stroke-linecap="round"/>'
-    '</svg>'
-)
+# First visit: the question on the left, an example report on the right (on a phone
+# they stack in that order). With an answer coming, the question bar sits alone above it.
+if _answering:
+    _lead, _side = st.container(key="cra_lead_wide"), None
+else:
+    _lead, _side = st.columns(_SPLIT, gap="large")
 
-_logo_html = (
-    f'<img src="data:image/png;base64,{_LOGO_B64}" class="cra-brand-logo" alt="Climate-Risk Analyst Logo" />'
-    if _LOGO_B64
-    else _SVG_FALLBACK_LOGO
-)
-
-st.markdown(
-    f"""
-    <div class="cra-header-container">
-        {_logo_html}
-        <div class="cra-header-content">
-            <div class="cra-eyebrow"><span class="cra-dot"></span>DECISION-GRADE CLIMATE INTELLIGENCE</div>
-            <h1 class="cra-title">Climate-Risk Analyst Agent</h1>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-st.caption(
-    "Ask about heat, extreme rainfall or wind risk anywhere on Earth. You get a "
-    "structured report built from a live forecast, 60+ years of ERA5 climate "
-    "statistics, and the IPCC AR6 assessment, complete with page-level citations and an "
-    "honest refusal when the evidence is not there."
-)
-
-with st.expander("How to use this (start here)", icon=":material/help:"):
+with _lead:
     st.markdown(
-        """
+        f'<div class="cra-head">{MARK_SVG}<h1 class="cra-title">Climate-Risk Analyst Agent</h1></div>'
+        '<p class="cra-lede">Heatwave, extreme rainfall and wind risk for any place on Earth, '
+        "graded against that place's own climate record.</p>",
+        unsafe_allow_html=True,
+    )
+
+# The full account of the method and how to use it: everything the first screen
+# says in one line per step, kept word for word behind one expander.
+_METHOD_MD = """
+Every assessment cross-examines operational forecast signals against 60+ years of extreme
+value distributions and the IPCC AR6 assessment tables:
+
+1. **Operational forecast: numerical forecast ensemble.** Fetches high-resolution weather
+   models (Open-Meteo) up to 16 days out for daily temperature extremes, heavy rainfall
+   accumulation, or maximum wind gusts at your exact coordinate.
+2. **Historical reanalysis: ERA5 extreme value climatology.** Fits 60+ years (1940 to 2023)
+   of daily historical extremes using Generalized Extreme Value (GEV) parametric
+   distributions. Calibrates local 10, 50, and 100-year return levels with 90% bootstrap
+   confidence intervals and tests for non-stationary warming trends.
+3. **Peer-reviewed synthesis: IPCC AR6 grounding & verification.** Cross-references
+   physical drivers against Chapter 11 and regional trend projections against Chapter 12.
+   Every assertion requires machine-checked page citations; ungrounded statements are
+   strictly omitted.
+
+**Climatological rarity: relative severity vs. raw weather.** Conventional weather apps
+only report raw predictions. The Climate-Risk Analyst determines how extreme that forecast
+is relative to the historical climatology of that specific location. For instance, 38 °C
+in Berlin triggers a severe risk rating because it surpasses the local 50-year return
+level, whereas the same temperature in Rourkela represents expected seasonal weather.
+
+**Audited abstention: zero fabricated answers.** Three physical hazards are supported:
+heatwaves, extreme precipitation, and wind. Out-of-scope hazards (cyclones, wildfires,
+drought, sea-level rise) and ungrounded queries trigger explicit typed refusals rather than
+hallucinated estimates.
+
 **Ask in plain language**, for example:
 
-- *How risky are heatwaves in Berlin over the next 7 days?*
-- *Is extreme rainfall a concern in Mumbai next week?*
-- *What is the wind risk in Chennai over the next 10 days?*
+- How risky are heatwaves in Berlin over the next 7 days?
+- Is extreme rainfall a concern in Mumbai next week?
+- What is the wind risk in Chennai over the next 10 days?
 
 **Or pick the point yourself** in the sidebar: geocode any place name, or type a
 latitude/longitude. The map marks the selected point (display-only: it cannot
@@ -574,7 +173,7 @@ will tell you so.
 
 | Part | What it means |
 | --- | --- |
-| Risk level | Where the forecast peak falls on *this location's own* ERA5 return-level curve, not a fixed threshold |
+| Risk level | Where the forecast peak falls on this location's own ERA5 return-level curve, not a fixed threshold |
 | Return levels | The 1-in-10 / 50 / 100 year severity for this exact spot, with a 90% bootstrap confidence interval |
 | Warming-trend banner | Shown only when a statistical test finds a real trend; the levels are then "effective" at today's climate |
 | IPCC citations | Every citation is machine-checked against the pages actually retrieved. No citation means it declined to claim something it could not ground |
@@ -583,8 +182,7 @@ will tell you so.
 **Refusals are a feature.** An empty citation list or a refusal means the system
 would rather say nothing than invent a number. On a 105-question held-out
 benchmark it produced **zero fabricated answers**.
-        """
-    )
+"""
 
 # On a hosted deploy without the baked corpus (Streamlit Community Cloud, a
 # fresh clone, etc.) fetch the IPCC PDFs once. Skipped when PYTEST_CURRENT_TEST
@@ -609,21 +207,48 @@ if not _os.environ.get("PYTEST_CURRENT_TEST"):
 
         st.session_state.dense_ok, st.session_state.dense_detail = embedding_available()
     if not st.session_state.dense_ok:
-        st.error(
-            f"**Degraded mode:** {st.session_state.dense_detail}. Retrieval is "
-            "running **BM25-only** (measured ~82% vs 87% hybrid R@3), so IPCC "
-            "citations may be sparse. This is an embedding config issue "
-            "(model / region), not a data problem.",
-            icon=":material/warning:",
-        )
+        with _lead:
+            st.error(
+                f"**Degraded mode:** {st.session_state.dense_detail}. Retrieval is "
+                "running **BM25-only** (measured ~82% vs 87% hybrid R@3), so IPCC "
+                "citations may be sparse. This is an embedding config issue "
+                "(model / region), not a data problem.",
+                icon=":material/warning:",
+            )
 
 def _remember_place(name: str, country: str, latitude: float, longitude: float) -> None:
-    """Pin a name to the point it was resolved for (see location.name_still_applies)."""
+    """Pin a name to the point it was resolved for (see location.name_still_applies).
+
+    Also writes the sidebar's Place box, so it never names a different place than the
+    map. Callers run before that box is drawn (or in a callback), as Streamlit requires.
+    """
     st.session_state["lat_input"] = float(latitude)
     st.session_state["lon_input"] = float(longitude)
     st.session_state["place_name"] = name
     st.session_state["place_country"] = country
     st.session_state["place_coords"] = (float(latitude), float(longitude))
+    st.session_state["place_query"] = f"{name}, {country}" if country else name
+
+
+def _sync_controls(query: str, *, locate: bool) -> None:
+    """Point the sidebar at what a plain-language question asks about.
+
+    Hazard and horizon always; the place too when `locate`, since a chip already knows
+    its point. Runs before the sidebar widgets exist in this run.
+    """
+    from agent.nl import parse_query
+
+    parsed = parse_query(query)
+    if parsed.hazard is not None:
+        st.session_state["hazard_input"] = parsed.hazard
+    if 1 <= parsed.horizon_days <= 16:
+        st.session_state["horizon_input"] = parsed.horizon_days
+    if locate and parsed.place:
+        try:
+            found = resolve_place(parsed.place)
+        except GeocodeError:
+            return
+        _remember_place(found.name, found.country, found.latitude, found.longitude)
 
 
 def _resolve_and_set_place(query_text: str) -> bool:
@@ -651,21 +276,11 @@ def _on_place_query_change() -> None:
     _resolve_and_set_place(st.session_state.get("place_query", ""))
 
 
-# Seeded BEFORE any input widgets exist, so suggestion chips and preset buttons
-# can populate them reliably.
-st.session_state.setdefault("lat_input", 22.26)
-st.session_state.setdefault("lon_input", 84.85)
-st.session_state.setdefault("place_name", "Rourkela")
-st.session_state.setdefault("place_country", "India")
-st.session_state.setdefault("place_coords", (22.26, 84.85))
-st.session_state.setdefault("place_query", "Rourkela, India")
-
-# One-click examples: each chip populates the query text AND synchronizes the
-# coordinates, place name, and map to the target location immediately.
+# One-click examples: each chip fills the question, points the sidebar and the map
+# at its place and hazard, and runs it.
 _SUGGESTIONS = [
     (
         "Heatwave · Berlin (7d)",
-        ":material/thermostat:",
         "How risky are heatwaves in Berlin over the next 7 days?",
         "Berlin",
         "Germany",
@@ -674,7 +289,6 @@ _SUGGESTIONS = [
     ),
     (
         "Rainfall · Mumbai (7d)",
-        ":material/rainy:",
         "Is extreme rainfall a concern in Mumbai over the next 7 days?",
         "Mumbai",
         "India",
@@ -683,7 +297,6 @@ _SUGGESTIONS = [
     ),
     (
         "Wind gusts · Chennai (10d)",
-        ":material/air:",
         "What is the wind risk in Chennai over the next 10 days?",
         "Chennai",
         "India",
@@ -691,8 +304,7 @@ _SUGGESTIONS = [
         80.27,
     ),
     (
-        "Wildfire · Sydney (Refusal)",
-        ":material/block:",
+        "Wildfire · Sydney (refusal)",
         "What is the wildfire risk in Sydney next week?",
         "Sydney",
         "Australia",
@@ -700,68 +312,58 @@ _SUGGESTIONS = [
         151.21,
     ),
 ]
-st.caption("Suggested inquiries (click to populate query):")
-_cols = st.columns(len(_SUGGESTIONS))
-for _col, (_label, _icon, _query, _city, _country, _lat, _lon) in zip(_cols, _SUGGESTIONS):
-    if _col.button(_label, icon=_icon, width="stretch"):
-        st.session_state["nl_query"] = _query
-        _remember_place(_city, _country, _lat, _lon)
-        st.rerun()
+with _lead:
+    _ask_slot = st.container()
+    with st.container(gap="xxsmall"):
+        st.caption("Or run an example")
+        _chip_slot = st.container(key="cra_chips")
 
-# Natural-language front door: any place on Earth, plain English.
-nl_query = st.text_input(
-    "Ask in plain language",
-    key="nl_query",
-    placeholder="How risky are heatwaves in Rourkela over the next 10 days?",
-    help="Deterministic parsing → geocoding → AR6 region mapping → the agent. "
-         "Unsupported hazards and unknown places refuse honestly.",
-    on_change=_on_nl_query_submit,
-)
-ask = st.button("Ask", type="primary", icon=":material/travel_explore:")
+with _chip_slot:
+    # No icons on the chips: Streamlit renders a Material icon as its ligature text with no
+    # aria-hidden, so a screen reader would read "thermostat Heatwave" as the button's name.
+    for _label, _query, _city, _country, _lat, _lon in _SUGGESTIONS:
+        if st.button(_label, type="tertiary"):
+            st.session_state["nl_query"] = _query
+            _remember_place(_city, _country, _lat, _lon)
+            _sync_controls(_query, locate=False)
+            st.session_state["_nl_place_set"] = _query  # no second geocode for it
+            st.session_state["_nl_submitted"] = True
+            st.rerun()
+
+with _ask_slot:
+    _query_col, _ask_col = st.columns([6, 1], gap="xsmall", vertical_alignment="bottom")
+    # Natural-language front door: any place on Earth, plain English.
+    nl_query = _query_col.text_input(
+        "Ask in plain language",
+        key="nl_query",
+        placeholder="How risky are heatwaves in Rourkela over the next 10 days?",
+        help="Deterministic parsing → geocoding → AR6 region mapping → the agent. "
+             "Unsupported hazards and unknown places refuse honestly.",
+        on_change=_on_nl_query_submit,
+    )
+    ask = _ask_col.button("Ask", key="ask_btn", type="primary", width="stretch")
 nl_triggered = bool(ask or st.session_state.pop("_nl_submitted", False))
 
-# When plain language inquiry is run, resolve its target location early so the
-# map and coordinates immediately reflect the queried place.
+# A question points the sidebar (Place box, coordinates, map, hazard, horizon) at
+# what it asks about, before the sidebar is drawn, so the two never disagree.
 if nl_triggered and nl_query.strip():
-    from agent.nl import parse_query
-    _parsed_early = parse_query(nl_query)
-    if _parsed_early.place:
-        try:
-            _found_early = resolve_place(_parsed_early.place)
-            _remember_place(
-                _found_early.name,
-                _found_early.country,
-                _found_early.latitude,
-                _found_early.longitude,
-            )
-        except GeocodeError:
-            pass
+    if st.session_state.pop("_nl_place_set", None) != nl_query:
+        _sync_controls(nl_query, locate=True)
 
 with st.sidebar:
-    st.markdown(
-        """
-        <div class="cra-sidebar-header">
-            <div class="cra-sidebar-pill">
-                <span class="cra-dot"></span>
-                <span>CONTROL DECK</span>
-            </div>
-            <div class="cra-sidebar-title">Assessment Controls</div>
-            <div class="cra-sidebar-desc">Configure coordinates, hazard domain, and climatology baseline manually.</div>
-        </div>
-        <div class="cra-section-label">
-            <span>PRESET LOCATIONS</span>
-            <span class="cra-fast-badge">CACHED</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    _example_names = list(LOCATIONS)
-    for _start in range(0, len(_example_names), 3):
-        for _col, _name in zip(st.columns(3), _example_names[_start:_start + 3]):
-            _city, _, _country = _name.partition(", ")
-            if _col.button(_city, key=f"ex_{_name}", width="stretch", help=_name):
-                _remember_place(_city, _country, *LOCATIONS[_name])
-                st.rerun()
+    st.markdown('<h2 class="cra-side-title">Manual assessment</h2>', unsafe_allow_html=True)
+    with st.container(gap="xsmall"):
+        st.markdown(
+            '<div class="cra-side-label"><span>Preset locations</span>'
+            '<span class="cra-side-meta">cached</span></div>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key="cra_presets"):
+            for _name in LOCATIONS:
+                _city, _, _country = _name.partition(", ")
+                if st.button(_city, key=f"ex_{_name}", width="stretch", help=_name):
+                    _remember_place(_city, _country, *LOCATIONS[_name])
+                    st.rerun()
 
     place_query = st.text_input(
         "Place", key="place_query", placeholder="Any town, city or region on Earth",
@@ -769,9 +371,9 @@ with st.sidebar:
              "shown on the map, so a wrong match is visible rather than silent.",
         on_change=_on_place_query_change,
     )
-    if st.button("Find place", icon=":material/search:", width="stretch"):
-        if _resolve_and_set_place(place_query):
-            st.rerun()
+    # A callback, not an `if st.button`: it runs before the Place box is drawn, so it may
+    # rewrite the box to the name it found.
+    st.button("Find place", width="stretch", on_click=_on_place_query_change)
 
     _geocode_err = st.session_state.pop("_place_geocode_error", None)
     if _geocode_err:
@@ -805,48 +407,42 @@ with st.sidebar:
             country=st.session_state["place_country"] if _named else "",
         )
 
+    # Where the assessment will run, right under the inputs that set it. Display-only
+    # by design: Streamlit's map selection reports which OBJECTS a click picked
+    # (per-layer `indices` / `objects`), never the coordinates of the click itself,
+    # so a click cannot place a new point. The Place box and the coordinates do that.
+    if selected is not None:
+        with st.container(border=True, key="cra_plate", gap=None):
+            st.map(
+                {"lat": [selected.latitude], "lon": [selected.longitude]},
+                zoom=3, color=PIN_RED, size=50_000, height=200,
+            )
+            with st.container(key="cra_plate_info"):
+                st.markdown(
+                    plate_caption(
+                        selected.name,
+                        selected.country,
+                        selected.region.label if selected.region else None,
+                        selected.latitude,
+                        selected.longitude,
+                    ),
+                    unsafe_allow_html=True,
+                )
+                if selected.notice is not None:
+                    st.info(selected.notice, icon=":material/public_off:")
+
     hazard = st.selectbox(
-        "Hazard", list(Hazard), format_func=lambda h: h.value.replace("_", " ")
+        "Hazard", list(Hazard), format_func=lambda h: h.value.replace("_", " ").capitalize(),
+        key="hazard_input",
     )
-    horizon = st.slider("Forecast horizon (days)", 1, 16, 7)
+    horizon = st.slider("Forecast horizon (days)", 1, 16, key="horizon_input")
     use_climatology = st.checkbox(
         "Ground with ERA5 climatology (GEV return levels)", value=True,
         help="First call fetches 60+ years of daily extremes (~3 s), then cached.",
     )
-    run = st.button(
-        "Assess risk", key="assess", type="primary",
-        icon=":material/troubleshoot:", width="stretch",
-    )
-    st.caption(
-        "First report for a new place takes about 1 to 2 minutes: 60+ years of ERA5 "
-        "extremes are fetched and fitted once, then cached. Repeat visits are instant."
-    )
-
-# Where the assessment will run. Display-only by design: Streamlit's map
-# selection reports which OBJECTS a click picked (per-layer `indices` /
-# `objects`), never the coordinates of the click itself, so a click cannot
-# place a new point. The Place box and the coordinate inputs do that.
-if selected is not None:
-    with st.container(border=True):
-        _map_col, _info_col = st.columns([2, 1])
-        with _map_col:
-            st.map(
-                {"lat": [selected.latitude], "lon": [selected.longitude]},
-                zoom=3, color="#E25C48", height=240,
-            )
-        with _info_col:
-            st.markdown(f"**{selected.name}**")
-            st.caption(
-                " · ".join(
-                    part for part in (
-                        selected.country,
-                        selected.region.label if selected.region else None,
-                        f"{selected.latitude:.4f}, {selected.longitude:.4f}",
-                    ) if part
-                )
-            )
-            if selected.notice is not None:
-                st.info(selected.notice, icon=":material/public_off:")
+    # Secondary on purpose: the Ask box is the page's one primary action.
+    run = st.button("Assess risk", key="assess", width="stretch")
+    st.caption("First report for a new place: about 1 to 2 minutes, then cached.")
 
 report = None
 failure: str | None = None
@@ -874,7 +470,7 @@ class _StepPanel:
             # The collapsed title says what is happening right now, so the panel
             # is useful even when the reader has it shut.
             self._status.update(label=f"{event.label}…")
-            head = f":green-badge[running] **{event.label}**"
+            head = f":gray-badge[running] **{event.label}**"
         elif event.status is StepStatus.FINISHED:
             badge = f" :gray-badge[{event.detail}]" if event.detail else ""
             head = f":green-badge[{format_elapsed(event.seconds)}] **{event.label}**{badge}"
@@ -963,17 +559,54 @@ elif run and selected is not None and hazard is not None:
 
 if report is not None:
     if report.refusal is not None:
-        st.error(f"**Refused:** {report.refusal}", icon=":material/block:")
-        st.caption("Out-of-scope is an explicit, valid output: not a fabricated risk.")
+        with st.container(key="cra_refusal"):
+            st.error(f"**Refused:** {report.refusal}", icon=":material/block:")
+            st.caption("Out-of-scope is an explicit, valid output: not a fabricated risk.")
     else:
-        color, icon = _LEVEL_STYLE[report.risk_level]
+        _plot_html = return_level_plot(report)
+        # The agent writes the forecast and ERA5 numbers first, then any IPCC prose.
+        # Same words in the same order, but only the numbers sit beside the plot.
+        _numbers, _, _ipcc_prose = report.summary.partition(" IPCC AR6: ")
+        # The agent's own sentence for why the band is what it is, lifted under the answer.
+        _why = next((d.detail for d in report.drivers if d.factor == "severity_basis"), None)
 
-        # Collapsed by default: it answers "what am I looking at?" for a first
-        # reader without pushing the actual report down the page for a repeat one.
+        # Headings go h1, h2, h3 for a screen reader; the band itself is the visible title.
+        st.markdown('<h2 class="cra-sr-only">Report</h2>', unsafe_allow_html=True)
+        with st.container(border=True, key="cra_verdict"):
+            _verdict_cols = st.columns(2, gap="large") if _plot_html else [st.container()]
+            with _verdict_cols[0]:
+                with st.container(gap="xxsmall"):
+                    st.markdown(band_heading(report.risk_level), unsafe_allow_html=True)
+                    st.subheader(
+                        f"{report.hazard.value.replace('_', ' ').capitalize()} "
+                        f"risk in {report.location}",
+                        anchor=False,
+                    )
+                    if _why:
+                        st.markdown(why_line(_why), unsafe_allow_html=True)
+                st.caption(_numbers)
+                metric_cols = st.columns(3 if report.hazard_stats else 2)
+                metric_cols[0].metric("Confidence", f"{report.confidence:.0%}")
+                metric_cols[1].metric("Forecast horizon", f"{report.horizon_days} d")
+                if report.hazard_stats:
+                    stat = report.hazard_stats[0]
+                    metric_cols[2].metric(
+                        "Record max (series)", f"{round(stat.record_max, 1)} {stat.unit}",
+                    )
+            if _plot_html:
+                with _verdict_cols[1]:
+                    st.markdown(_plot_html, unsafe_allow_html=True)
+            if _ipcc_prose:
+                _prose_key = "cra_prose_long" if len(_ipcc_prose) > 480 else "cra_prose"
+                with st.container(key=_prose_key):
+                    st.write(f"IPCC AR6: {_ipcc_prose}")
+
+        # Collapsed, and below the answer: it answers "what am I looking at?" for a
+        # first reader without pushing the band down the page for anyone.
         with st.expander("How to read this report", icon=":material/menu_book:"):
             st.markdown(
                 """
-- **Risk band**: where the forecast peak lands on *this location's own* ERA5
+- **Risk band**: where the forecast peak lands on this location's own ERA5
   return-level curve (the 2 / 10 / 50-year edges), not a fixed threshold. With no
   fitted curve it falls back to absolute cutoffs, and the `severity_basis` driver
   says which of the two you are reading.
@@ -984,7 +617,7 @@ if report is not None:
 - **Citations**: page-level (`file · p123`) and structurally validated against
   the pages actually retrieved. An empty list means the answerer declined to
   claim something it could not ground.
-- **Projected change**: a *verbatim* AR6 Chapter 12 sentence for the reference
+- **Projected change**: a verbatim AR6 Chapter 12 sentence for the reference
   region containing this point. Nothing is paraphrased, and an absence is stated
   in words rather than quietly filled in.
 - **Limits**: what this cannot do, and where the numbers stop being valid, in
@@ -995,32 +628,13 @@ if report is not None:
                 """
             )
 
-        with st.container(border=True):
-            with st.container(horizontal=True, vertical_alignment="center"):
-                st.subheader(
-                    f"{report.risk_level.value.upper()} · "
-                    f"{report.hazard.value.replace('_', ' ')} risk in {report.location}"
-                )
-                st.badge(report.risk_level.value.upper(), color=color, icon=icon)
-            st.write(report.summary)
-
-        metric_cols = st.columns(3 if report.hazard_stats else 2, border=True)
-        metric_cols[0].metric("Confidence", f"{report.confidence:.0%}")
-        metric_cols[1].metric("Forecast horizon", f"{report.horizon_days} d")
-        if report.hazard_stats:
-            stat = report.hazard_stats[0]
-            metric_cols[2].metric(
-                "Record max (series)", f"{round(stat.record_max, 1)} {stat.variable}",
-            )
-
         col_left, col_right = st.columns(2)
 
         with col_left:
             with st.container(border=True):
                 st.markdown("**Risk drivers**")
                 if report.drivers:
-                    for d in report.drivers:
-                        st.markdown(f"- **{d.factor}**: {d.detail}")
+                    st.markdown(driver_list(report.drivers), unsafe_allow_html=True)
                 else:
                     st.caption("No drivers reported.")
 
@@ -1028,11 +642,7 @@ if report is not None:
             with st.container(border=True):
                 st.markdown("**IPCC AR6 citations** (page-level, validator-guaranteed)")
                 if report.citations:
-                    for c in report.citations:
-                        st.markdown(
-                            f":gray-badge[:material/description: {c.source}] "
-                            f":gray-badge[{c.locator}]"
-                        )
+                    st.markdown(citation_list(report.citations), unsafe_allow_html=True)
                 else:
                     st.caption(
                         "No IPCC citations in this report (RAG layer offline or the "
@@ -1045,26 +655,21 @@ if report is not None:
                 _pc = report.projected_change
                 if _pc is not None:
                     st.markdown(
-                        f":gray-badge[:material/public: {_pc.region_name} "
-                        f"({_pc.region_acronym})] "
+                        f":gray-badge[{_pc.region_name} ({_pc.region_acronym})] "
                         f":gray-badge[{_pc.direction.value.replace('_', ' ')}]"
                         + (
-                            f" :green-badge[{_pc.confidence_language}]"
+                            f" :gray-badge[{_pc.confidence_language}]"
                             if _pc.confidence_language
                             else ""
                         )
                         + (
-                            f" :orange-badge[{_pc.warming_level_or_period}]"
+                            f" :gray-badge[{_pc.warming_level_or_period}]"
                             if _pc.warming_level_or_period
                             else ""
                         )
                     )
-                    st.caption(f"“{_pc.statement}”")
-                    for _c in _pc.citations:
-                        st.markdown(
-                            f":gray-badge[:material/description: {_c.source}] "
-                            f":gray-badge[{_c.locator}]"
-                        )
+                    st.markdown(quoted_statement(_pc.statement), unsafe_allow_html=True)
+                    st.markdown(citation_list(_pc.citations), unsafe_allow_html=True)
                 else:
                     st.caption(
                         "Regional projections were not found in the corpus for this "
@@ -1075,6 +680,7 @@ if report is not None:
             stat = report.hazard_stats[0]
             with st.container(border=True):
                 st.markdown(f"**ERA5 climatology** ({stat.n_years} years, {stat.variable})")
+                _table_col, _notes_col = st.columns([7, 5], gap="large")
                 table = {
                     "return_period_years": [
                         r.return_period_years for r in stat.return_levels
@@ -1085,37 +691,36 @@ if report is not None:
                     table["ci"] = [
                         f"{r.ci_low:.1f} to {r.ci_high:.1f}" for r in stat.return_levels
                     ]
-                st.dataframe(
+                _table_col.dataframe(
                     table,
                     column_config={
                         "return_period_years": st.column_config.NumberColumn(
                             "Return period (yr)", format="%d",
                         ),
                         "level": st.column_config.NumberColumn(
-                            f"Level ({stat.variable})", format="%.1f",
+                            f"Level ({stat.unit})", format="%.1f",
                         ),
                         "ci": st.column_config.TextColumn("90% CI (bootstrap)"),
                     },
                     hide_index=True,
                 )
-                st.caption(
-                    f"Record max in series: {round(stat.record_max, 1)} · "
-                    f"representativeness: {stat.representativeness.value}"
+                _notes_col.caption(
+                    f"Record max in series: {round(stat.record_max, 1)} {stat.unit} · "
+                    f"representativeness: {stat.representativeness.value.replace('_', ' ')}"
                 )
-                if stat.trend is not None:
-                    if stat.trend.significant:
-                        st.warning(
-                            f"Warming trend detected: {stat.trend.slope_per_decade:+.1f} "
-                            f"{stat.unit}/decade (p={stat.trend.p_value:.3f}). Return levels "
-                            f"above are EFFECTIVE at {stat.trend.evaluated_at_year} "
-                            "(today's climate, not the historical average).",
-                            icon=":material/trending_up:",
-                        )
-                    else:
-                        st.caption(
-                            f"Non-stationarity tested: no significant trend "
-                            f"(p={stat.trend.p_value:.2f}) · stationary fit reported."
-                        )
+                if stat.trend is not None and not stat.trend.significant:
+                    _notes_col.caption(
+                        f"Non-stationarity tested: no significant trend "
+                        f"(p={stat.trend.p_value:.2f}) · stationary fit reported."
+                    )
+                if stat.trend is not None and stat.trend.significant:
+                    st.warning(
+                        f"Warming trend detected: {stat.trend.slope_per_decade:+.1f} "
+                        f"{stat.unit}/decade (p={stat.trend.p_value:.3f}). Return levels "
+                        f"above are effective at {stat.trend.evaluated_at_year} "
+                        "(today's climate, not the historical average).",
+                        icon=":material/trending_up:",
+                    )
 
     with st.expander("Cost & latency (measured telemetry)", icon=":material/speed:"):
         s = span.summary()
@@ -1139,81 +744,19 @@ if report is not None:
     with st.expander("Raw RiskReport JSON (the contract)", icon=":material/code:"):
         st.code(report.model_dump_json(indent=2), language="json")
 
-elif failure is None and not run and not ask:
-    col_pipeline, col_principles = st.columns([11, 9], gap="medium")
-    with col_pipeline:
-        with st.container(border=True):
-            st.markdown(
-                """
-                <div style="margin-bottom: 0.9rem;">
-                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--cra-badge-text); margin-bottom: 4px;">
-                        EMPIRICAL EVALUATION PIPELINE
-                    </div>
-                    <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px; color: var(--cra-text);">
-                        How the agent grounds risk assessments
-                    </div>
-                    <div style="font-size: 0.86rem; color: var(--cra-text-muted); line-height: 1.5;">
-                        Every assessment cross-examines operational forecast signals against 60+ years of extreme value distributions and the IPCC AR6 assessment tables:
-                    </div>
-                </div>
-                <div class="cra-pipeline-card">
-                    <div class="cra-step-badge">LAYER 01 · OPERATIONAL FORECAST</div>
-                    <div class="cra-step-title">Numerical Forecast Ensemble</div>
-                    <div class="cra-step-desc">
-                        Fetches high-resolution weather models (Open-Meteo) up to 16 days out for daily temperature extremes, heavy rainfall accumulation, or maximum wind gusts at your exact coordinate.
-                    </div>
-                </div>
-                <div class="cra-pipeline-card">
-                    <div class="cra-step-badge">LAYER 02 · HISTORICAL REANALYSIS</div>
-                    <div class="cra-step-title">ERA5 Extreme Value Climatology</div>
-                    <div class="cra-step-desc">
-                        Fits 60+ years (1940 to 2023) of daily historical extremes using Generalized Extreme Value (GEV) parametric distributions. Calibrates local 10, 50, and 100-year return levels with 90% bootstrap confidence intervals and tests for non-stationary warming trends.
-                    </div>
-                </div>
-                <div class="cra-pipeline-card">
-                    <div class="cra-step-badge">LAYER 03 · PEER-REVIEWED SYNTHESIS</div>
-                    <div class="cra-step-title">IPCC AR6 Grounding & Verification</div>
-                    <div class="cra-step-desc">
-                        Cross-references physical drivers against Chapter 11 and regional trend projections against Chapter 12. Every assertion requires machine-checked page citations; ungrounded statements are strictly omitted.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-    with col_principles:
-        with st.container(border=True):
-            st.markdown(
-                """
-                <div style="margin-bottom: 0.75rem;">
-                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--cra-badge-text); margin-bottom: 4px;">
-                        DECISION PRINCIPLES
-                    </div>
-                    <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px; color: var(--cra-text);">
-                        Scientific Guarantees
-                    </div>
-                </div>
-                <div class="cra-callout">
-                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cra-callout-red-text); margin-bottom: 2px;">
-                        CLIMATOLOGICAL RARITY
-                    </div>
-                    <div style="font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; color: var(--cra-text);">
-                        Relative Severity vs. Raw Weather
-                    </div>
-                    <div style="font-size: 0.84rem; line-height: 1.48; color: var(--cra-text-muted);">
-                        Conventional weather apps only report raw predictions. The Climate-Risk Analyst determines how extreme that forecast is relative to the historical climatology of that specific location. For instance, 38 °C in Berlin triggers a severe risk rating because it surpasses the local 50-year return level, whereas the same temperature in Rourkela represents expected seasonal weather.
-                    </div>
-                </div>
-                <div class="cra-callout-green">
-                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cra-callout-green-text); margin-bottom: 2px;">
-                        AUDITED ABSTENTION
-                    </div>
-                    <div style="font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; color: var(--cra-text);">
-                        Zero Fabricated Answers
-                    </div>
-                    <div style="font-size: 0.84rem; line-height: 1.48; color: var(--cra-text-muted);">
-                        Three physical hazards are supported: heatwaves, extreme precipitation, and wind. Out-of-scope hazards (cyclones, wildfires, drought, sea-level rise) and ungrounded queries trigger explicit typed refusals rather than hallucinated estimates.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+# First visit, or nothing came back: the method in three lines and the example report.
+if report is None and failure is None:
+    with _lead if _side is not None else st.container():
+        st.markdown(
+            method_strip([
+                ("Forecast", "Open-Meteo, up to 16 days ahead"),
+                ("60+ years of ERA5 extremes", "this point's own return levels"),
+                ("IPCC AR6 pages", "every claim cites its page"),
+            ]),
+            unsafe_allow_html=True,
+        )
+        with st.expander("How it works, in full"):
+            st.markdown(_METHOD_MD)
+    if _side is not None:
+        with _side, st.container(border=True, key="cra_specimen"):
+            st.markdown(specimen_card(*specimen_plot()), unsafe_allow_html=True)
