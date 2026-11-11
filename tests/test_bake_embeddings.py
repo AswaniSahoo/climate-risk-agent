@@ -13,6 +13,8 @@ then holds the pack to the files, bit for bit.
 """
 import hashlib
 import json
+import re
+from pathlib import Path
 
 import httpx
 import numpy as np
@@ -205,3 +207,21 @@ def test_the_check_fails_on_an_unreadable_pack(tmp_path, capsys):
 def test_an_http_error_type_is_what_the_fetch_wraps():
     assert issubclass(fetch.AssetError, RuntimeError)
     assert httpx.HTTPError  # the fetch is plain httpx, mocked above with pytest-httpx
+
+
+# --- the Dockerfile wires the steps in order ---------------------------------
+
+def _builder_runs() -> list[str]:
+    """The RUN commands of the builder stage, continuation lines joined."""
+    text = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
+    builder = re.split(r"^FROM ", text.replace("\\\n", " "), flags=re.MULTILINE)[1]
+    return [line.strip()[4:] for line in builder.splitlines() if line.strip().startswith("RUN ")]
+
+
+def test_the_image_packs_the_vectors_after_the_chunk_cache_and_checks_them_last():
+    runs = _builder_runs()
+    chunk_cache = next(i for i, run in enumerate(runs) if "build_chunk_cache" in run)
+    packing = next(i for i, run in enumerate(runs) if "scripts.pack_vectors" in run)
+    checking = next(i for i, run in enumerate(runs) if "scripts.check_baked_index" in run)
+
+    assert chunk_cache < packing < checking == len(runs) - 1

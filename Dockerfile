@@ -67,9 +67,18 @@ RUN rm -rf data/cache \
 # committed at tools/ar6/, read with shapely, so nothing downloads at runtime.
 RUN .venv/bin/python -c "from rag.corpus import build_chunk_cache; build_chunk_cache()"
 
+# Pack those vectors into one file, data/cache/embeddings.pack.npy (8.6 MB), which
+# the runtime reads before the vector files. Cloud Run gen2 pulls image files on
+# first read, and reading 2,730 of them one by one took 17.5 s in the first live
+# answer of a process (revision 00031, 2026-11-11). The files stay, as the
+# fallback and as the write path for newly embedded questions. The step refuses
+# an index that lacks a vector file.
+RUN .venv/bin/python -m scripts.pack_vectors
+
 # Fail the build unless every chunk the image will serve has its document vector
-# on disk (2,730 of 2,730 today). Without them, the first report of every cold
-# container would embed the missing chunks through the API, 50 at a time.
+# on disk (2,730 of 2,730 today) and the same vector in the pack, bit for bit.
+# Without them, the first report of every cold container would embed the missing
+# chunks through the API, 50 at a time, or read the vectors file by file.
 RUN .venv/bin/python -m scripts.check_baked_index
 
 # ---------- runtime ----------

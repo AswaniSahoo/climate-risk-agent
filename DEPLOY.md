@@ -15,9 +15,12 @@ Open http://localhost:7860.
   whatever `data/cache` the build context holds, fetches the `eval-cache-v1`
   release asset pinned by sha256 (`ARG EVAL_CACHE_SHA256` in the Dockerfile; a
   mismatch fails the build), installs it through `scripts/unpack_eval_cache.py`
-  (which refuses a manifest that does not match this repo), and its last step,
-  `scripts/check_baked_index.py`, fails the build unless every chunk in the
-  baked `chunks.json` has its document vector on disk (2,730 of 2,730 today),
+  (which refuses a manifest that does not match this repo), packs the vectors
+  into one file, `data/cache/embeddings.pack.npy` (`scripts/pack_vectors.py`;
+  the runtime reads it instead of 2,730 vector files, which took 17.5 s on
+  Cloud Run gen2), and its last step, `scripts/check_baked_index.py`, fails the
+  build unless every chunk in the baked `chunks.json` has its document vector
+  on disk (2,730 of 2,730 today) and the same vector in the pack, bit for bit,
   so no cold container ever embeds the corpus through the API.
 - Without Gemini auth the retrieval layer falls back to BM25-only **loudly**
   (measured on the 60-question dev set: 76% vs 82% headline R@3) and `answer_ipcc`-style LLM answers are
