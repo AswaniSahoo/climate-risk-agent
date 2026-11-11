@@ -81,6 +81,15 @@ gcloud run deploy climate-risk-agent \
 - `CRG_JEV`, `JEV_BASE_URL` and `JEV_API_KEY` are **optional** and Jev is off
   by default ([adr/0002](adr/0002-jev-question-triage-and-citation-support.md)).
   Turn Jev on only after `evals/run_jev_eval.py` meets that ADR's criteria.
+  **`CRG_JEV=triage` is not recommended for deployment yet.** It met every
+  quality gate on the dev set, and Aswani accepted its gateway latency, but the
+  one-time held-out check (`evals/run_jev_heldout.py`, 2026-11-11,
+  [report](evals/results/jev-triage-test-2026-11-11.md)) failed the hard gate
+  of no new false refusal: one answerable background-science question (SP2-08,
+  on 2020 COVID-19 emission cuts, air pollution and radiative forcing) was
+  refused at the guard as air quality. The fix belongs on the dev set, and the
+  default can only change after another held-out exposure passes. The commands
+  below are for when it does.
   Two providers are vetted, and `JEV_BASE_URL` can only pick one of them (any
   other value is refused and Jev stays off):
 

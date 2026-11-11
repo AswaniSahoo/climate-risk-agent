@@ -1,9 +1,18 @@
 # Jev in the UI: integration note for after the redesign
 
 Status: the backend is built and off by default (`CRG_JEV`, see
-[adr/0002](../adr/0002-jev-question-triage-and-citation-support.md)). Nothing in
-`ui/` uses it yet. This note says what to show, where it comes from, and what
-not to show, so the redesign can wire it without reading the backend.
+[adr/0002](../adr/0002-jev-question-triage-and-citation-support.md)). Since
+2026-11-11 `ui/app.py` follows this note behind the same flag, and with
+`CRG_JEV=off` the page is the page it was (`tests/test_ui_jev.py`). With triage
+on, Ask reads the question before the run (a spinner shows if Jev takes over 0.5 s),
+an out-of-scope question is refused at once with no progress panel, and a
+question Jev read shows "How your question was read" above the run, with Jev's
+probability, a note by the sidebar's hazard control, and one button per other
+hazard that re-runs the same point as that hazard. A question with a hazard but
+no place runs on the sidebar's point and says so. With verify on, each citation
+carries its label and unsupported sentences get a dotted underline. The flag
+stays off: the held-out triage check of 2026-11-11 failed a hard gate (adr/0002).
+This note says what to show, where it comes from, and what not to show.
 
 ## 1. Read the question before running it
 
@@ -89,9 +98,11 @@ With `CRG_JEV=verify` or `all`, a report with IPCC citations carries
   supports at 0.5 or more. Underline them, with the hover text "No cited page
   clearly supports this sentence".
 
-Hold this section back until ADR 0002's citation criteria pass. They need a
+The UI shows these labels only with verify on, which stays off by default, and
+says under them that they are not yet checked against real answers. Keep the
+flag off for readers until ADR 0002's citation criteria pass. They need a
 measurement on real Gemini answers that has not run yet; until then the labels
-are unvalidated and should not be shown to readers.
+are unvalidated.
 
 ## What not to do
 

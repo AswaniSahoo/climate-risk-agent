@@ -1,12 +1,17 @@
 # ADR 0002: Where Jev helps this product, and on what evidence
 
-- **Status:** Proposed. Built behind `CRG_JEV`, default `off`, and measured
-  on the dev set on 2026-11-11 through the Experiential Labs gateway (see
-  "Measured" below): triage meets every quality criterion but not the latency
-  one, and the citation check misses one of its criteria, so both stay off.
-  The key supplied for this work is a gateway key: TypeSafe direct refused it
-  with HTTP 401 four times between 07:01 and 08:16 UTC, so TypeSafe direct
-  itself is still unmeasured.
+- **Status:** Proposed; both parts stay off. Built behind `CRG_JEV`, default
+  `off`, and measured on 2026-11-11 through the Experiential Labs gateway.
+  Triage met every quality criterion on the dev set but not the latency one
+  ("Measured" below), and Aswani accepted that latency as a product trade-off
+  the same day; the one-time held-out check (criterion 6, "Held-out check"
+  below) then failed hard gate 1, one answerable question refused at the
+  guard, so triage is not recommended for deployment. The citation check meets
+  criteria 1 and 2 once two wrong dev labels are corrected ("Citation check
+  re-measured" below), but criterion 3, on real Gemini answers, has not run.
+  The UI is wired behind the flag. The key supplied for this work is a gateway
+  key: TypeSafe direct refused it with HTTP 401 four times between 07:01 and
+  08:16 UTC, so TypeSafe direct itself is still unmeasured.
 - **Date:** 2026-11-11
 - **Decision:** Build (a) question triage and (b) a citation support check,
   each behind the flag and each off by default. Do not build (c) an
@@ -230,10 +235,11 @@ Against the criteria fixed above:
 - Triage: 1 met, 2 met, 3 met, 4 met (0 of 30 decisions changed with the topic
   options reversed, and 0 of 30 across two uncached runs). **5 not met**:
   triage p95 is 2,055 ms against the 1,000 ms gate, though no call failed. 6,
-  the held-out run, has not been done.
+  the held-out run, had not been done then ("Held-out check" below).
 - Citation check: 1 met (17 of 19, 89%, contradicted). **2 not met**: 11 of 15
   `cid_true` pairs are strong, 73% against 80%; the `cross` (37 of 38) and AUC
-  parts pass. 3, the comparison on real Gemini answers, has not been done.
+  parts pass ("Citation check re-measured" below). 3, the comparison on real
+  Gemini answers, has not been done.
 
 Decision after measurement: both stay off by default.
 
@@ -246,12 +252,131 @@ Decision after measurement: both stay off by default.
 - **Citation check.** It misses criterion 2, but two of its four non-strong
   `cid_true` pairs look like label errors rather than Jev errors. CID-11's
   recorded passage says "a decrease in frequency of cyclones landing in SEAF,
-  ESAF and MDG", which is not mean wind speed, and CID-06's says "Annual mean
-  precipitation is projected to increase", which is not heavy precipitation.
+  ESAF and MDG", which is not mean wind speed, and CID-06's parsed sentence
+  says "river flooding will increase in New Zealand and Australia", which is
+  not heavy precipitation (this record first quoted that chunk's opening
+  sentence, on annual mean precipitation; corrected below).
   Both claims come from the dev set's recorded Chapter 12 parse, so Jev's
   "weak" reads the passage correctly, and the parse in `rag/cid.py` should be
   checked. CID-11 is also the dev set's one e2e false refusal. Fix the labels,
   then re-measure; until then this counts as not met.
+
+## Held-out check of triage, 2026-11-11 (criterion 6)
+
+`JEV_BASE_URL=https://api.experientiallabs.ai uv run python -m
+evals.run_jev_heldout --spend-exposure`, report in
+`evals/results/jev-triage-test-2026-11-11.md`. This is the only code that sends
+held-out questions to Jev, and it sends only what `CRG_JEV=triage` itself
+sends: 37 of the 105 questions (36 with no hazard word, 1 whose hazard the
+front door cannot name). It ran triage only, with the dev run's thresholds and
+wording unchanged, and counts as one exposure of the held-out set, the first
+for Jev. 111 live calls (the run, the options reversed, a second uncached run),
+0 failures, 4 retries, 114,747 input tokens; $0.004819 at the list price, $0.00
+reported by the gateway. Latency per call, pacing excluded: p50 762 ms, p95
+2,855 ms, 36 of 111 calls over 1 s.
+
+The pass conditions were written into the script before the run, from
+criteria 1, 2 and 4 above: (1) no new false refusal at scope, (2) no wrong
+hazard named by the front door, (3) at least 90% of the questions Jev was asked
+keep their decision with the options reversed and across two uncached runs.
+Latency did not decide: on 2026-11-11 Aswani accepted the gateway's latency (a
+p95 of about 2 s on the dev set) as a product trade-off, so criterion 5 is
+waived for the gateway route, not met. Usefulness was shown on the dev set and
+is reported, not gated.
+
+| measure, held-out set | keyword guard today | with Jev (`CRG_JEV=triage`) |
+| --- | --- | --- |
+| scope decided right | 97/105, no false refusal | 98/105, one false refusal |
+| should be refused at scope, refused | 10/18 | 12/18 |
+| hazard named by the front door, 77 items with one | 57/77 | 73/77, none wrong |
+
+Against the pass conditions: **(1) not met**, (2) met, (3) met (36 of 37
+decisions kept with the options reversed, 97%; 37 of 37 across two runs). The
+new false refusal is SP2-08, "What effect did COVID-19-related emissions
+reductions in 2020 have on air pollution and radiative forcing, according to
+AR6?", an answerable background-science question that Jev refused as air
+quality (topic `other_hazard`, refusal probability 0.85, companion noul 0.01),
+the same with the options reversed. The topic options list "air pollution" as
+a hazard other than ours, and the question names it while asking about
+emissions and forcing. That is a hypothesis, to be tested on the dev set, never
+by re-running this set. Also seen: OOC2-02 ("How much did human-induced climate
+change increase the likelihood of the 2022 Pakistan floods?", out of corpus)
+was read as extreme precipitation (noul 0.87). At the guard that is the same
+false accept as today; at the front door it names a hazard, and with no place
+in its words the UI would run a rain report on the sidebar's point, which then
+says Jev chose the hazard. That is inside the bound stated above, but it is a
+real report for a question the corpus cannot answer.
+
+The run sent 37 held-out questions to the gateway, and its privacy notice
+(last updated September 16, 2026, read 2026-11-11) says: "The standard hosted
+service records prompts, responses and related activity." and "Stored prompts
+and responses in the primary capture table are automatically removed after 30
+days. That period does not describe every trace, file, backup or
+provider-held copy." A later held-out run cannot assume those providers never
+saw these questions.
+
+Decision: triage stays off, and `CRG_JEV=triage` is not recommended for
+deployment. The latency trade-off is accepted; the false refusal is not. The
+fix belongs on the dev set (a background-science probe that names air
+pollution, then the wording), and the default can change only after another
+held-out exposure passes.
+
+## Citation check re-measured after the label fix, 2026-11-11
+
+The parse behind both labels was checked in `rag/cid.py` against the recorded
+chunks, and both labels were wrong:
+
+- **CID-06** (heavy precipitation, New Zealand). The parsed sentence is "There
+  is medium confidence that river flooding will increase in New Zealand and
+  Australia, with higher increases in Northern Australia." `rag/cid.py` counts
+  river flooding toward heavy precipitation by design, but AR6 assesses River
+  flood as its own driver, and no Chapter 12 sentence in the corpus names New
+  Zealand with heavy or extreme precipitation (on that page, heavy
+  precipitation and pluvial flooding increase in Northern and Central Australia
+  only). The parse was right about what the sentence says; the eval's claim
+  named the wrong driver. The label now records "Parsed CID: river flooding",
+  and `evals/run_jev_eval.py` writes the claim with the recorded driver.
+- **CID-11** (mean wind speed, East Southern Africa). The parse was wrong. The
+  clause that names ESAF states "a decrease in frequency of cyclones landing in
+  SEAF, ESAF and MDG", a tropical cyclone statement; the wind term that let the
+  sentence in ("wind storms") sits in another clause, about most African
+  regions south of the Sahel, and the mean wind speed clause of the same
+  sentence names North Africa, and Southern and Western Africa. No Chapter 12
+  sentence in the corpus states a mean wind speed change for ESAF by name. The
+  label now records "Parsed direction: none", which gives no pair, and
+  `rag/cid.py` no longer reads a clause that names a hazard we refuse, and not
+  the asked driver, as that driver's projection. Across all 46 AR6 land regions
+  and the three hazards that drops 7 of 47 qualifying clauses, every one from
+  this same Africa sentence, so wind reports for SEAF, ESAF and MDG no longer
+  show "decrease, high confidence" from a cyclone clause.
+
+The same rules were applied to all 15 `cid-table` labels, prompted by Jev's
+two disagreements, which is a selection effect on the figure below. One more
+looks imprecise and was left as recorded, so it counts against Jev: CID-01's
+parsed sentence is an observed trend ("have been observed ( high confidence
+)"), written as a projection. CID-03's claim drops its "low confidence".
+
+Re-run, dev pairs only, Jev only, through the gateway
+(`uv run python -m evals.run_jev_eval --task verify --tag verify-relabelled`,
+report `evals/results/jev-dev-2026-11-11-verify-relabelled.md`): 108 live
+calls, 0 failures, 1 retry, 78,629 input tokens, $0.003302 at the list price,
+$0.00 reported; latency p50 841 ms, p95 2,283 ms.
+
+| pair kind | n | labelled as expected | gate |
+| --- | --- | --- | --- |
+| `cid_true`, expected strong | 14 | 12 strong (1 moderate, 1 weak) | 86%, at least 80%: met |
+| `cid_flipped` and `premise`, expected contradicted | 18 | 18 contradicted | 100%, at least 80%: met |
+| `cross`, expected weak | 38 | 37 weak | 97%, at least 80%: met |
+| `quote`, expected strong | 38 | 36 strong | not gated |
+
+AUC of P(supports), supporting pairs against cross pairs: 0.998, at least 0.9:
+met. The misses are CID-01 (moderate, 0.75) and CID-03 (weak, P(supports)
+0.43). This is a second, uncached sample of Jev, so it is not the first run's
+answers with two labels swapped; on the first run, setting the two wrong pairs
+aside gives 11 of 13 strong, 85%. Criteria 1 and 2 are met. Criterion 3, the
+comparison on real Gemini answers against the claim judge, still has not run,
+so the citation check stays off and the UI keeps saying its labels are not yet
+checked against real answers.
 
 ## Consequences
 
@@ -288,6 +413,18 @@ Decision after measurement: both stay off by default.
   of the flag: "marine heatwave" contains "heatwave", so the front door used to
   parse it as our heat hazard and build a land heat report. It now refuses, as
   stage 1 already does.
+- The UI follows `docs/jev-ui-integration.md` behind the same flag (2026-11-11).
+  With triage on, Ask reads the question before the run: a refusal is shown at
+  once with no progress panel behind it; a hazard Jev named is shown as Jev's
+  reading with its probability, by the sidebar control too, and each other
+  hazard is one click; the run answers that one reading (`run_agent_nl(...,
+  parsed=...)`), so Jev is asked once. With verify on, each citation carries its
+  label, unsupported sentences get a dotted underline, and a caption says the
+  labels are not yet checked against real answers. With the flag off the page
+  is unchanged and makes no Jev call (`tests/test_ui_jev.py`).
+- `evals/run_jev_heldout.py` is the one script that sends held-out questions to
+  Jev. A live run needs `--spend-exposure` and refuses to repeat once a live
+  artifact exists, unless `--new-exposure` says another exposure is intended.
 
 ## What was not tested
 
@@ -296,6 +433,7 @@ Decision after measurement: both stay off by default.
 - The production triage budget through the gateway (4 s): the eval widened the
   budget to 40 s so a rate-limited call could back off, and 4 of the 244 calls
   needed a retry; under the 4 s budget some of those would have fallen back.
+  The held-out run widened it the same way (4 retries in 111 calls).
 - Robustness to injected text: not sent, by TypeSafe's terms and for lack of
   labelled items.
 - Non-English questions. The Jev 1.14 changelog says "Better multilingual

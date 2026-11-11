@@ -27,6 +27,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   a triage p95 of 2,055 ms; both features stay off (adr/0002).
 - Fixed the free-text front door reading "marine heatwave" as the supported heat hazard;
   it now refuses, as the scope guard already did.
+- Wired Jev into the UI behind the same flag (docs/jev-ui-integration.md): with triage on,
+  Ask reads the question before the run, refuses an out-of-scope question at once with no
+  progress panel, shows a hazard Jev named with its probability, at the sidebar control
+  too, with each other hazard one click away, and runs a question with no place on the
+  sidebar's point; with verify on, each citation carries its evidence label and unsupported
+  sentences are underlined. `run_agent_nl` takes the parse the UI showed (`parsed=`). With
+  the flag off the page is unchanged.
+- Added `evals/run_jev_heldout.py`, the one-time held-out check of triage (adr/0002,
+  criterion 6), which sends only what `CRG_JEV=triage` sends. First run, 2026-11-11: no
+  wrong hazard and stable decisions, but one new false refusal (SP2-08), so triage stays off.
+- Corrected two dev labels the first Jev run flagged (CID-06 states river flooding, CID-11's
+  clause states cyclone landfalls) and re-measured the citation check: 12 of 14 true claims
+  strong, 18 of 18 flipped claims and premises contradicted, AUC 0.998.
+- Fixed `rag/cid.py` reading "a decrease in frequency of cyclones landing in SEAF, ESAF and
+  MDG" as the wind projection for those regions.
+- Fixed a question typed and then asked with the button rerunning on the next interaction.
+- Fixed three statements on the page: the ERA5 record is 1960 to 2022 (63 years), a first
+  report for a new place takes about 1 to 2 minutes rather than about 3 seconds, and the
+  degraded-mode banner's recall is the dev set's 76% (BM25 only) against 82% (hybrid).
 
 ## [1.0.0] - 2026-09-08
 

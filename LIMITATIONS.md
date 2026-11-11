@@ -148,17 +148,24 @@ possible, so a downstream consumer can check it programmatically.
 
 ## Jev (TypeSafe), optional and off by default
 
-- **Measured on the dev set only, through one route, and kept off.** Question
-  triage and the citation support check (`CRG_JEV=triage|verify|all`,
+- **Measured through one route, and kept off.** Question triage and the
+  citation support check (`CRG_JEV=triage|verify|all`,
   [adr/0002](adr/0002-jev-question-triage-and-citation-support.md)) were
   measured on 2026-11-11 on the 60 dev questions and 14 authored paraphrase
   probes, through the Experiential Labs gateway. Triage met every quality gate
-  (60/60 and 14/14 on scope, no false refusal, no wrong hazard) but not the
-  latency gate (p95 2,055 ms against 1,000 ms). The citation check missed one
-  accuracy gate (11 of 15 true Chapter 12 claims read as strong, against 80%).
-  These are small sets that steered development, the held-out set has not been
-  run, and TypeSafe direct is unmeasured. Leave the flag off until the ADR's
-  criteria are met.
+  there (60/60 and 14/14 on scope, no false refusal, no wrong hazard) but not
+  the latency gate (p95 2,055 ms against 1,000 ms), a trade-off Aswani
+  accepted. Its one-time held-out check then refused one answerable question
+  at the guard (SP2-08, on emission cuts, air pollution and radiative forcing,
+  read as air quality), which fails a hard gate. The citation check met its
+  accuracy gates only after two wrong dev labels were corrected (12 of 14 true
+  Chapter 12 claims strong), and has never been run on real Gemini answers.
+  TypeSafe direct is unmeasured. Leave the flag off until the ADR's criteria
+  are met.
+- **Held-out questions left this system once.** The held-out check sent the
+  37 held-out questions that triage itself would send to the Experiential Labs
+  gateway, which records prompts (its wording is quoted below), so a later
+  held-out run cannot assume those providers never saw them.
 - **What leaves this system.** With triage on, the first 1,000 characters of a
   question that names no hazard word are sent out; questions the lexical stage
   settles are not. With verify on, the IPCC statement Gemini wrote, which can
