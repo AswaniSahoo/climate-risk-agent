@@ -14,6 +14,10 @@ FROM ${BASE}
 # server.json, or `mcp-publisher publish` rejects the image.
 LABEL io.modelcontextprotocol.server.name="io.github.AswaniSahoo/climate-ipcc-rag"
 
+# The app image already ends as appuser. Say it again: BASE is a build arg,
+# and an override pointing at an image that ends as root must not run as root.
+USER appuser
+
 # stdio transport: stdout carries JSON-RPC, so logs must go to stderr (they do).
 # No EXPOSE and no port: this server is never reachable over the network.
 # The venv's interpreter directly — the base image no longer ships uv.

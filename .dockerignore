@@ -5,16 +5,37 @@
 .git
 .github
 .venv
+venv
 **/__pycache__
 **/*.pyc
 .pytest_cache
 .ruff_cache
 .mypy_cache
+.firecrawl
 htmlcov
+.coverage
+build
+dist
+**/*.egg-info
+docs
+
+# Secrets. Patterns match from the context root, and only `**/` reaches into
+# subdirectories, so each credential shape is named both ways it can appear.
 .env
 .env.*
 **/.env
-docs
+**/.env.*
+**/secrets.toml
+**/*.pem
+**/*.key
+**/*credentials*.json
+**/.mcp_publisher_token
+**/.mcpregistry_*
+
+# Not needed at runtime: nothing under agent, rag, tools, ui, api or obs
+# imports or reads them, and .gcloudignore already leaves them out.
+tests
+evals
 MASTER-PLAN*.md
 INTELLIGENCE_SYSTEM_BLUEPRINT.md
 # assets/ holds README screenshots; the UI only reads the favicon (brand logo).
@@ -44,5 +65,7 @@ assets/*
 # Downloaded publisher binary for the MCP registry, not part of the app.
 mcp-publisher*
 
-# Local run logs: the app recreates the directory on first write.
+# Local run logs and the local key/value cache (cached answers and fits from
+# this machine's runs): the app recreates both on first write.
 data/telemetry
+data/cache/kv

@@ -255,3 +255,81 @@ def test_no_workflow_can_reach_vertex():
                        "workload_identity_provider"):
             assert marker not in text, f"{name} mentions {marker}"
 
+
+# --- containers: non-root at runtime, nothing secret in the build context ---
+
+_ROOT = Path(__file__).resolve().parents[1]
+_SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", re.IGNORECASE)
+
+
+def _instructions(dockerfile: str) -> list[tuple[str, str]]:
+    """(INSTRUCTION, arguments) per line, continuation lines joined."""
+    text = (_ROOT / dockerfile).read_text(encoding="utf-8").replace("\\\n", " ")
+    return [
+        (m.group(1).upper(), m.group(2).strip())
+        for m in re.finditer(r"^\s*([A-Za-z]+)\s+(.*)$", text, re.MULTILINE)
+        if not m.group(0).lstrip().startswith("#")
+    ]
+
+
+@pytest.mark.parametrize("dockerfile", ["Dockerfile", "Dockerfile.mcp"])
+def test_the_runtime_stage_runs_as_a_named_non_root_user(dockerfile):
+    """The last USER after the last FROM is what the container runs as. The MCP
+    image says it again rather than trusting whatever image BASE points at."""
+    steps = _instructions(dockerfile)
+    last_from = max(i for i, (op, _) in enumerate(steps) if op == "FROM")
+    users = [arg for op, arg in steps[last_from:] if op == "USER"]
+    assert users, f"{dockerfile}: the runtime stage never sets USER"
+    assert users[-1] == "appuser", f"{dockerfile}: runs as {users[-1]!r}"
+
+
+@pytest.mark.parametrize("dockerfile", ["Dockerfile", "Dockerfile.mcp"])
+def test_no_secret_is_baked_in_through_env_or_build_args(dockerfile):
+    """Credentials arrive at run time (env or Secret Manager), never at build
+    time: an ENV or ARG value is stored in the image config and its history."""
+    for op, arg in _instructions(dockerfile):
+        if op in {"ENV", "ARG"}:
+            names = re.findall(r"([A-Za-z_][A-Za-z0-9_]*)=", arg) or [arg.split()[0]]
+            leaked = [n for n in names if _SECRET_NAME.search(n)]
+            assert not leaked, f"{dockerfile}: {op} carries {leaked}"
+        if op in {"COPY", "ADD"}:
+            assert ".env" not in arg.split(), f"{dockerfile}: {op} copies an env file"
+
+
+def test_dockerignore_keeps_secrets_local_state_and_git_out_of_the_image():
+    """`COPY . .` ships whatever the context holds, so the ignore file is the
+    control. Patterns match from the context root; `**/` reaches subdirectories."""
+    patterns = {
+        line.strip()
+        for line in (_ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    required = {
+        # version control and credentials
+        ".git", ".env", ".env.*", "**/.env", "**/.env.*", "**/secrets.toml",
+        "**/*.pem", "**/*.key", "**/*credentials*.json", "**/.mcp_publisher_token",
+        "**/.mcpregistry_*",
+        # local caches and state
+        ".venv", "venv", "**/__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
+        "data/cache/kv", "data/telemetry", ".firecrawl",
+        # not needed at runtime (nothing under agent, rag, tools, ui, api or obs
+        # imports or reads them), and .gcloudignore already leaves them out
+        "tests", "evals",
+    }
+    assert not required - patterns, f".dockerignore lacks {sorted(required - patterns)}"
+    assert "data" not in patterns, "data/ must stay in: it carries the embedding cache"
+
+
+def test_gcloudignore_keeps_secrets_out_of_the_cloud_build_upload():
+    """`gcloud run deploy --source .` uploads the context to a Cloud Build bucket
+    before .dockerignore is ever read. gitignore syntax: no slash, any depth."""
+    patterns = {
+        line.strip()
+        for line in (_ROOT / ".gcloudignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    required = {".git", ".env", ".env.*", "secrets.toml", "*.pem", "*.key",
+                "*credentials*.json", ".mcp_publisher_token", ".mcpregistry_*",
+                "data/cache/kv", "data/telemetry", ".venv", "venv"}
+    assert not required - patterns, f".gcloudignore lacks {sorted(required - patterns)}"
+

@@ -16,8 +16,24 @@ __pycache__
 .ruff_cache
 .mypy_cache
 htmlcov
+.coverage
+venv
+build
+dist
+*.egg-info
+.firecrawl
+# Secrets: a pattern with no slash matches that name at any depth here
+# (gitignore syntax), so one line per shape covers every directory.
 .env
 .env.*
+secrets.toml
+*.pem
+*.key
+*credentials*.json
+.mcp_publisher_token
+.mcpregistry_*
+# Local key/value cache (this machine's cached answers and fits).
+data/cache/kv
 docs
 MASTER-PLAN*.md
 INTELLIGENCE_SYSTEM_BLUEPRINT.md
