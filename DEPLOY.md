@@ -286,55 +286,70 @@ US$19.44 per 30 days (INR 1,824) and 2 vCPU + 4 GiB is US$38.88 (INR 3,647),
 before any free tier (not checked here). Either one alone is more than the INR
 900 credit, so while the credit pays, run `--min-instances 0`.
 
-## Hardening the GCP side (prepared, not run)
+## Hardening the GCP side
 
-`scripts/harden_gcp.sh` holds every command below. It changes the project and
-its billing account, so it refuses to start unless `HARDEN_GCP_CONFIRMED=yes`
-is set, and it must not run before Aswani has said yes to it. Nothing in it
-has been run.
+Aswani chose Cloud Storage for the shared cache and approved these changes on
+2026-11-11, when they were created. `scripts/harden_gcp.sh setup` is the record
+of them: every step describes before it creates, so running it again changes
+nothing that exists. Like every step of the script, it refuses to start unless
+`HARDEN_GCP_CONFIRMED=yes` is set.
 
-Read-only state on 2026-11-11 (`gcloud run services list` and two
-`gcloud run services describe --format` reads, names only):
+| what | as created on 2026-11-11 |
+| --- | --- |
+| runtime identity | `climate-risk-runtime@climate-risk-agent.iam.gserviceaccount.com` |
+| `crgModelInvoker` | custom role, `aiplatform.endpoints.predict` only, bound on the project |
+| `crgCacheReadWrite` | custom role, `storage.objects.get`, `.create` and `.delete`, bound on the bucket only |
+| `gs://climate-risk-agent-cache` | `us-central1`, uniform bucket-level access, public access prevention, soft delete off, objects deleted at 400 days |
+| budget "climate-risk-agent INR 900" | gross cost (`exclude-all-credits`), this project only, alerts at 50, 90 and 100 percent |
 
-- service `climate-risk-agent` in `us-central1`, plus `vera-bot` in
-  `asia-south1` in the same project, which draws from the same credit;
-- runtime identity: `714882950125-compute@developer.gserviceaccount.com`, the
-  Compute Engine default service account. Cloud Run's own docs say to "avoid
-  the default service account": depending on organization policy it "might
-  automatically be granted the Editor role";
-- environment variable names: `GOOGLE_GENAI_USE_VERTEXAI`,
-  `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `CRG_GENERATE_MODEL`,
-  `CRG_EMBED_MODEL`. No `UPSTASH_*`, no API key, no secret.
+The bucket binding failed once with "does not exist in the resource's
+hierarchy": the new custom role had not propagated yet. It worked on retry, so
+the script retries that step, up to six times, 30 s apart.
+
+Not done yet: the deploy. It needs the Cloud Storage cache backend that reads
+`CRG_CACHE_GCS_BUCKET`, so `candidate` refuses to run from a checkout without
+it. The service then moves to the new identity in two steps: `candidate`
+deploys a revision that takes no traffic, under the tag `candidate`; once that
+revision checks out at its tagged URL, `promote` sends it all traffic.
+
+Read-only state before the changes (2026-11-11, names only): service
+`climate-risk-agent` in `us-central1` (plus `vera-bot` in `asia-south1` in the
+same project, inside the same budget), running as
+`714882950125-compute@developer.gserviceaccount.com`, the Compute Engine default
+service account, which Cloud Run's docs say to avoid since it "might
+automatically be granted the Editor role"; environment variable names
+`GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`,
+`CRG_GENERATE_MODEL`, `CRG_EMBED_MODEL`.
 
 Least privilege, from the code. The runtime calls two Vertex methods,
 `generateContent` (answers) and `embedContent` (google-genai 2.11.0 sends
 `gemini-embedding-2` there), and the REST reference for each says it "Requires
 the following IAM permission on the `model` resource: `aiplatform.endpoints.predict`".
 That permission is `SUPPORTED` in custom roles
-(https://cloud.google.com/iam/docs/custom-roles-permissions-support), so the
-runtime gets a custom role holding it alone. A mounted secret needs "Secret
-Manager Secret Accessor (`roles/secretmanager.secretAccessor`)" on the service
-identity, granted per secret rather than on the project. Logs need nothing:
-stdout and stderr "will be picked up automatically by Cloud Logging". No other
-Google API is used (only `google.genai` and `google.auth` are imported).
+(https://cloud.google.com/iam/docs/custom-roles-permissions-support). The cache
+reads, writes and deletes objects in one bucket, so its role is bound there and
+nowhere else. Vertex authenticates as the runtime identity and the bucket needs
+no key, so there is no secret to store. Logs need nothing: stdout and stderr
+"will be picked up automatically by Cloud Logging". No other Google API is used
+(only `google.genai` and `google.auth` are imported).
 
-The commands, in the order the script runs them (flags checked against the
-help text of gcloud 593.0.0):
+The commands, in the order the script runs them (flags checked against the help
+text of gcloud 593.0.0):
 
 ```bash
 PROJECT=climate-risk-agent
 REGION=us-central1
 SERVICE=climate-risk-agent
 SA="climate-risk-runtime@${PROJECT}.iam.gserviceaccount.com"
+BUCKET=climate-risk-agent-cache
 
-# 1. Secret Manager is not enabled on the project yet.
-gcloud services enable secretmanager.googleapis.com --project="$PROJECT"
-
-# 2. A dedicated runtime identity.
+# setup. Each create below runs only when the describe or list before it
+# (gcloud iam service-accounts describe, gcloud iam roles describe,
+# gcloud projects get-iam-policy, gcloud storage buckets describe,
+# gcloud storage buckets get-iam-policy, gcloud billing budgets list)
+# finds nothing.
 gcloud iam service-accounts create climate-risk-runtime --project="$PROJECT" \
   --display-name="climate-risk-agent runtime (Cloud Run)"
-
-# 3. A role with only the permission the code needs, bound to that identity.
 gcloud iam roles create crgModelInvoker --project="$PROJECT" \
   --title="Climate risk agent model invoker" \
   --description="generateContent and embedContent on Vertex AI publisher models, nothing else" \
@@ -342,61 +357,62 @@ gcloud iam roles create crgModelInvoker --project="$PROJECT" \
 gcloud projects add-iam-policy-binding "$PROJECT" \
   --member="serviceAccount:${SA}" \
   --role="projects/${PROJECT}/roles/crgModelInvoker" --condition=None
+printf '{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 400}}]}\n' > lifecycle.json
+gcloud storage buckets create "gs://${BUCKET}" --project="$PROJECT" \
+  --location="$REGION" --uniform-bucket-level-access --public-access-prevention \
+  --soft-delete-duration=0 --lifecycle-file=lifecycle.json
+gcloud iam roles create crgCacheReadWrite --project="$PROJECT" \
+  --title="Climate risk agent cache read and write" \
+  --description="Read, write and delete cache objects; bound on the cache bucket only" \
+  --permissions=storage.objects.get,storage.objects.create,storage.objects.delete --stage=GA
+# retried: a role made a moment ago can be refused until it propagates
+gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" --project="$PROJECT" \
+  --member="serviceAccount:${SA}" --role="projects/${PROJECT}/roles/crgCacheReadWrite"
+BILLING_ACCOUNT=$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)')
+gcloud billing budgets create --billing-account="$BILLING_ACCOUNT" \
+  --display-name="climate-risk-agent INR 900" --budget-amount=900INR \
+  --credit-types-treatment=exclude-all-credits --filter-projects="projects/${PROJECT}" \
+  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 \
+  --threshold-rule=percent=1.0
 
-# 4. The Upstash token as a secret, typed at a hidden prompt so it never lands
-#    in shell history or a file, readable by the runtime identity only.
-read -rs -p "Upstash REST token: " UPSTASH_TOKEN; echo
-printf '%s' "$UPSTASH_TOKEN" | gcloud secrets create upstash-redis-rest-token \
-  --project="$PROJECT" --replication-policy=automatic --data-file=-
-unset UPSTASH_TOKEN
-gcloud secrets add-iam-policy-binding upstash-redis-rest-token --project="$PROJECT" \
-  --member="serviceAccount:${SA}" --role="roles/secretmanager.secretAccessor"
-
-# 5. Redeploy from a checkout that has rag/spend_guard.py, on the new identity,
-#    with the token mounted by version (env vars resolve at instance start, so
-#    Google recommends pinning a version over `latest`), the spend limits
-#    stated, no minimum instance, and at most two instances.
-#    The first line repeats the service's settings from the deploy command at
-#    the top of this file, so this command stands on its own.
+# candidate: a new revision on the new identity, with no traffic. The first
+# flags repeat the service's settings from the deploy command at the top.
 gcloud run deploy "$SERVICE" --source . --region="$REGION" --project="$PROJECT" \
   --execution-environment=gen2 --port=7860 --allow-unauthenticated \
   --memory=2Gi --cpu=1 --concurrency=8 \
-  --service-account="$SA" \
-  --update-secrets=UPSTASH_REDIS_REST_TOKEN=upstash-redis-rest-token:1 \
-  --update-env-vars=UPSTASH_REDIS_REST_URL="$UPSTASH_URL",CRG_DAILY_MODEL_BUDGET_USD=0.15,CRG_SESSION_FRESH_REPORTS=5 \
-  --min-instances=0 --max-instances=2
+  --service-account="$SA" --min-instances=0 --max-instances=1 \
+  --update-env-vars=CRG_CACHE_GCS_BUCKET="$BUCKET" \
+  --no-traffic --tag=candidate
 
-# 6. A budget alert on the billing account behind the project: INR 900, at
-#    50, 90 and 100 percent. exclude-all-credits measures gross cost; with the
-#    default, which counts credits, spend paid by the credit nets to zero and
-#    no alert fires until the credit is gone.
-BILLING_ACCOUNT=$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)')
-gcloud billing budgets create --billing-account="$BILLING_ACCOUNT" \
-  --display-name="climate-risk-agent credit INR 900" \
-  --budget-amount=900INR --credit-types-treatment=exclude-all-credits \
-  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 \
-  --threshold-rule=percent=1.0
+# promote: only after the candidate's tagged URL has been checked.
+gcloud run services update-traffic "$SERVICE" --region="$REGION" --project="$PROJECT" \
+  --to-tags=candidate=100
 ```
 
 Notes on what the commands do and do not do:
 
+- `--no-traffic` keeps traffic where it was ("the revision being deployed will
+  not receive traffic") and `--tag` gives the new revision its own URL.
+  `--to-tags=candidate=100` then moves traffic to exactly the revision that was
+  checked; `--to-latest` would instead let every later deploy take traffic at
+  once.
 - `--budget-amount=900INR`: "If a currency type is included, it must be the
-  currency associated with the billing account", so the command fails rather
-  than set a 900 US dollar budget if the account is not billed in INR.
-- A budget sends notifications ("Default notifications are sent to those with
-  Billing Account Administrator and Billing Account User IAM roles"). It does
-  not stop any spending; the spend guard and `--max-instances` do the capping.
-- No project filter: the INR 900 credit sits on the billing account, so the
-  budget counts everything the account pays for, `vera-bot` included. Add
-  `--filter-projects=projects/climate-risk-agent` to watch this project alone.
-- Upstash is optional. Without it, drop the `--update-secrets` flag and the two
-  `UPSTASH_` steps: the spend guard then counts per instance, so the daily
-  bound is `CRG_DAILY_MODEL_BUDGET_USD` times the instances (at most 2 here).
-- Not done by the script: removing roles from the Compute Engine default
-  service account. Nothing here shows which roles it holds or what else uses
-  it (`vera-bot` may), so that stays a separate, checked step.
+  currency associated with the billing account", so a budget in any other
+  currency fails rather than being created in the wrong one.
+- `exclude-all-credits` measures gross cost: counting credits (the default)
+  nets credit-paid spend to zero, and no alert would fire until the credit is
+  gone. A budget sends notifications ("Default notifications are sent to those
+  with Billing Account Administrator and Billing Account User IAM roles"); it
+  does not stop any spending. The spend guard and `--max-instances=1` do the
+  capping.
+- `crgCacheReadWrite` grants no `storage.objects.list`. If the Cloud Storage
+  backend ever needs to list objects, that permission has to be added to the
+  role on purpose.
+- Not done by the script: removing roles from the Compute Engine default service
+  account. Nothing here shows which roles it holds or what else uses it
+  (`vera-bot` may), so that stays a separate, checked step.
 - Fallback if the custom role misses a permission the SDK turns out to need:
-  bind `roles/aiplatform.user` instead of `crgModelInvoker` in step 3.
+  bind `roles/aiplatform.user` instead of `crgModelInvoker`.
 
 ## Streamlit Community Cloud (free alternative)
 

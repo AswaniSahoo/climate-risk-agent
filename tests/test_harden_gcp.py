@@ -26,19 +26,59 @@ def test_the_gcp_script_refuses_to_run_without_an_explicit_yes(tmp_path):
 
 
 def test_the_script_matches_the_commands_deploy_md_shows():
-    """DEPLOY.md is what gets read before the yes; the script must do what it says."""
+    """DEPLOY.md is what gets read before the yes; the script must do what it says.
+    The resources are the ones created on 2026-11-11 (Cloud Storage, not Upstash)."""
     deploy = (SCRIPT.parents[1] / "DEPLOY.md").read_text(encoding="utf-8")
     script = SCRIPT.read_text(encoding="utf-8")
     for fragment in (
-        "gcloud services enable secretmanager.googleapis.com",
+        "HARDEN_GCP_CONFIRMED=yes",
         "--permissions=aiplatform.endpoints.predict --stage=GA",
-        "--role=\"roles/secretmanager.secretAccessor\"",
-        "--replication-policy=automatic --data-file=-",
-        "--min-instances=0 --max-instances=2",
-        "--budget-amount=900INR --credit-types-treatment=exclude-all-credits",
+        "--permissions=storage.objects.get,storage.objects.create,storage.objects.delete",
+        "--uniform-bucket-level-access --public-access-prevention",
+        "--soft-delete-duration=0",
+        '{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 400}}]}',
+        "gcloud storage buckets add-iam-policy-binding",
+        "--budget-amount=900INR",
+        "--credit-types-treatment=exclude-all-credits",
+        "--filter-projects=",
         "--threshold-rule=percent=0.5 --threshold-rule=percent=0.9",
         "--threshold-rule=percent=1.0",
-        "HARDEN_GCP_CONFIRMED=yes",
+        "--min-instances=0 --max-instances=1",
+        "CRG_CACHE_GCS_BUCKET=",
+        "--no-traffic --tag=candidate",
+        "--to-tags=candidate=100",
     ):
         assert fragment in script, f"script lacks {fragment}"
         assert fragment in deploy, f"DEPLOY.md lacks {fragment}"
+
+
+def test_every_create_is_preceded_by_a_describe():
+    """Running it again must change nothing that already exists."""
+    script = SCRIPT.read_text(encoding="utf-8")
+    for describe, create in (
+        ("gcloud iam service-accounts describe", "gcloud iam service-accounts create"),
+        ("gcloud iam roles describe \"$MODEL_ROLE\"", "gcloud iam roles create \"$MODEL_ROLE\""),
+        ("gcloud iam roles describe \"$CACHE_ROLE\"", "gcloud iam roles create \"$CACHE_ROLE\""),
+        ("gcloud projects get-iam-policy", "gcloud projects add-iam-policy-binding"),
+        ("gcloud storage buckets describe", "gcloud storage buckets create"),
+        ("gcloud storage buckets get-iam-policy", "gcloud storage buckets add-iam-policy-binding"),
+        ("gcloud billing budgets list", "gcloud billing budgets create"),
+    ):
+        assert describe in script and create in script, (describe, create)
+        assert script.index(describe) < script.index(create), f"{create} before {describe}"
+
+
+def test_the_bucket_binding_retries_while_the_new_role_propagates():
+    """On 2026-11-11 the first binding failed with "does not exist in the
+    resource's hierarchy" because the new custom role had not propagated."""
+    script = SCRIPT.read_text(encoding="utf-8")
+    binding = script.index("gcloud storage buckets add-iam-policy-binding")
+    loop = script.rfind("for attempt in", 0, binding)
+    assert loop != -1 and "sleep" in script[binding: binding + 900]
+
+
+def test_no_upstash_and_no_secret_manager_step():
+    """Aswani chose Cloud Storage over Upstash; there is no secret to mount."""
+    script = SCRIPT.read_text(encoding="utf-8").lower()
+    for gone in ("upstash", "secretmanager", "gcloud secrets", "--update-secrets"):
+        assert gone not in script, gone
