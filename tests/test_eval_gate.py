@@ -43,7 +43,7 @@ def retrieval_artifact(r3: float, *, run_utc: str, eval_set: str | None = "dev",
 
 
 def e2e_artifact(*, run_utc: str, false_answers: list[str] | None = None,
-                 eval_set: str | None = "dev") -> dict:
+                 eval_set: str | None = "dev", errors: list[str] | None = None) -> dict:
     matrix: dict[str, list[str]] = {"correct_answer": ["SP-01"], "correct_refuse": ["OSH-01"]}
     if false_answers:  # the runner omits the key when the cell is empty
         matrix["false_answer"] = false_answers
@@ -57,6 +57,8 @@ def e2e_artifact(*, run_utc: str, false_answers: list[str] | None = None,
     }
     if eval_set is not None:
         payload["eval_set"] = eval_set
+    if errors is not None:
+        payload["errors"] = errors
     return payload
 
 
@@ -137,6 +139,62 @@ def test_one_false_answer_blocks_release(tmp_path):
     assert "false_answer = 1" in result.failures[0]
     assert "SP-02" in result.failures[0]
 
+
+
+# --- check: an incomplete run cannot pass ---------------------------------
+# On 2026-11-11 a held-out run capped at 12 model calls errored on nearly every
+# question and this gate still printed PASSED, because errors were not read.
+
+def test_an_errored_question_blocks_release(tmp_path):
+    result = evaluate(
+        retrieval=write(tmp_path / "r-new.json",
+                        retrieval_artifact(0.90, run_utc="2026-09-01T10:00:00+00:00")),
+        e2e=write(tmp_path / "e-new.json",
+                  e2e_artifact(run_utc="2026-09-01T11:00:00+00:00",
+                               errors=["CID-08: Gemini call failed: The read operation timed out"])),
+        baseline=None,
+    )
+    assert not result.ok
+    assert "1 question errored" in result.failures[0]
+    assert "CID-08" in result.failures[0]
+    assert "rerun" in result.failures[0]
+
+
+def test_max_errors_allows_exactly_that_many(tmp_path):
+    def run(errors: list[str]):
+        return evaluate(
+            retrieval=write(tmp_path / "r-new.json",
+                            retrieval_artifact(0.90, run_utc="2026-09-01T10:00:00+00:00")),
+            e2e=write(tmp_path / "e-new.json",
+                      e2e_artifact(run_utc="2026-09-01T11:00:00+00:00", errors=errors)),
+            baseline=None,
+            max_errors=1,
+        )
+    assert run(["SP-01: timeout"]).ok
+    assert not run(["SP-01: timeout", "SP-02: timeout"]).ok
+
+
+def test_an_empty_or_absent_errors_list_passes(tmp_path):
+    for errors in (None, []):
+        result = evaluate(
+            retrieval=write(tmp_path / "r-new.json",
+                            retrieval_artifact(0.90, run_utc="2026-09-01T10:00:00+00:00")),
+            e2e=write(tmp_path / "e-new.json",
+                      e2e_artifact(run_utc="2026-09-01T11:00:00+00:00", errors=errors)),
+            baseline=None,
+        )
+        assert result.ok
+
+
+def test_cli_fails_an_errored_run_unless_max_errors_allows_it(tmp_path):
+    results = tmp_path / "results"
+    write(results / "retrieval-2026-09-01.json",
+          retrieval_artifact(0.90, run_utc="2026-09-01T10:00:00+00:00"))
+    write(results / "e2e-gemini-2.5-flash-2026-09-01.json",
+          e2e_artifact(run_utc="2026-09-01T11:00:00+00:00", errors=["RT-01: cap reached"]))
+
+    assert main(["--results-dir", str(results), "--eval-set", "dev"]) == 1
+    assert main(["--results-dir", str(results), "--eval-set", "dev", "--max-errors", "1"]) == 0
 
 @pytest.mark.parametrize(
     "current, regressed",

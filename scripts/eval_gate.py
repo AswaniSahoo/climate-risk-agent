@@ -5,18 +5,24 @@ blocker, full stop"). Prose does not fail a build. This turns the rule into an
 exit code, and adds the second half a human would otherwise eyeball: silent
 retrieval decay.
 
-Three checks, all against the committed artifacts in evals/results/:
+Four checks, all against the committed artifacts in evals/results/:
 
   1. false answers    : e2e `matrix.false_answer` must be empty. Confabulation
                         blocks a release. Note the runners OMIT the key when the
                         cell is empty, so "missing" means zero, but a payload
                         with no `matrix` at all is malformed and fails.
-  2. retriever present : the retrieval artifact must contain the hybrid column.
+  2. complete run     : e2e `errors` must hold at most `--max-errors` entries
+                        (default 0). A question whose call failed was never
+                        measured, so the matrix counts fewer questions than it
+                        appears to. On 2026-11-11 a held-out run capped at 12
+                        model calls errored on nearly every question and still
+                        passed, because this gate did not read `errors`.
+  3. retriever present : the retrieval artifact must contain the hybrid column.
                         Its absence means the dense path was skipped, i.e. the
                         embedding cache was missing and the run silently
                         measured BM25-only. That is a cost/validity guard, not
                         a quality one.
-  3. R@3 regression   : headline R@3 must not fall more than `--max-r3-drop`
+  4. R@3 regression   : headline R@3 must not fall more than `--max-r3-drop`
                         below the last committed run of the SAME eval set with
                         the SAME retriever and the SAME arm. Comparing
                         hybrid-to-bm25, dev-to-test, or the shipped default to a
@@ -41,6 +47,7 @@ RESULTS_DIR = Path("evals/results")
 HEADLINE_LABEL = "HEADLINE (answer)"
 DEFAULT_RETRIEVER = "hybrid"
 DEFAULT_MAX_R3_DROP = 0.03  # 3 percentage points
+DEFAULT_MAX_ERRORS = 0  # a release gate needs a complete run
 _EPS = 1e-9
 
 _PACK_HINT = (
@@ -130,6 +137,14 @@ def false_answer_ids(payload: dict) -> list[str]:
     return list(matrix.get("false_answer", []))
 
 
+def errored_ids(payload: dict) -> list[str]:
+    """Question IDs whose call failed. Absent key or empty list = a complete run."""
+    errors = payload.get("errors") or []
+    if not isinstance(errors, list):
+        raise GateError("e2e artifact `errors` is not a list")
+    return [str(entry).split(":", 1)[0].strip() for entry in errors]
+
+
 def headline_r_at_3(payload: dict, retriever: str) -> float | None:
     """Headline (answerable-question) R@3 for one retriever, or None if absent."""
     rows = payload.get("retrievers", {}).get(retriever)
@@ -153,6 +168,7 @@ def evaluate(
     baseline: tuple[Path, dict] | None,
     retriever: str = DEFAULT_RETRIEVER,
     max_r3_drop: float = DEFAULT_MAX_R3_DROP,
+    max_errors: int = DEFAULT_MAX_ERRORS,
 ) -> GateResult:
     result = GateResult()
     retrieval_path, retrieval_payload = retrieval
@@ -168,14 +184,28 @@ def evaluate(
             f"false_answer = {len(bad)} in {e2e_path.name} ({detail}). Confabulation blocks release"
         )
 
-    # --- check 2: the hybrid column exists (cache/cost guard) ------------------
+    # --- check 2: a complete run ----------------------------------------------
+    errored = errored_ids(e2e_payload)
+    too_many = len(errored) > max_errors
+    result.rows.append(
+        ("errored questions (e2e)", str(len(errored)), f"at most {max_errors}",
+         "FAIL" if too_many else "PASS")
+    )
+    if too_many:
+        noun = "question" if len(errored) == 1 else "questions"
+        result.failures.append(
+            f"{len(errored)} {noun} errored in {e2e_path.name} ({', '.join(errored)}). "
+            "An incomplete run measured fewer questions than it reports: rerun it"
+        )
+
+    # --- check 3: the hybrid column exists (cache/cost guard) ------------------
     current = headline_r_at_3(retrieval_payload, retriever)
     if current is None:
         result.rows.append((f"headline R@3 ({retriever})", "missing", "required", "FAIL"))
         result.failures.append(f"{retrieval_path.name}: {_PACK_HINT}")
         return result
 
-    # --- check 3: R@3 regression vs the last committed run of the same set -----
+    # --- check 4: R@3 regression vs the last committed run of the same set -----
     if baseline is None:
         result.rows.append((f"headline R@3 ({retriever})", _pct(current), "no baseline", "PASS"))
         result.notes.append("no earlier committed run for this eval set, regression check skipped")
@@ -294,6 +324,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--eval-set", default="dev", choices=["dev", "test"])
     parser.add_argument("--retriever", default=DEFAULT_RETRIEVER)
     parser.add_argument("--max-r3-drop", type=float, default=DEFAULT_MAX_R3_DROP)
+    parser.add_argument("--max-errors", type=int, default=DEFAULT_MAX_ERRORS,
+                        help="errored e2e questions allowed before the gate fails (default 0)")
     parser.add_argument("--retrieval", type=Path, help="override the retrieval artifact")
     parser.add_argument("--e2e", type=Path, help="override the e2e artifact")
     parser.add_argument("--summary", type=Path, help="append the markdown table to this file")
@@ -313,6 +345,7 @@ def main(argv: list[str] | None = None) -> int:
             baseline=baseline,
             retriever=args.retriever,
             max_r3_drop=args.max_r3_drop,
+            max_errors=args.max_errors,
         )
     except GateError as exc:
         print(f"EVAL GATE ERROR: {exc}", file=sys.stderr)
