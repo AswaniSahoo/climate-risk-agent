@@ -63,7 +63,7 @@ pyyaml==6.0.3
 referencing==0.37.0
 requests==2.34.2
 requests-toolbelt==1.0.0
-rpds-py==2026.6.3
+rpds-py==2026.9.1
 scipy==1.17.1 ; python_full_version < '3.12'
 scipy==1.18.0 ; python_full_version >= '3.12'
 shapely==2.1.2
