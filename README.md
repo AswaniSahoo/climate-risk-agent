@@ -84,23 +84,25 @@ Dev-set retrieval, all 60 questions (49 answerable), measured 2026-09-02:
 
 Per slice, hybrid R@3: single-page 92% (n=12), regional table 90% (n=10), multi-page 80% (n=10), premise injection 75% (n=4), `cid-table` 67% (n=15). `cid-table` is the weakest slice and is why the headline is 82% across all 60 questions where it was 91% across the original 45.
 
-Dev-set end-to-end, all 60 questions (gemini-2.5-flash, top_k 8, scope guard stage 2 off, measured 2026-09-02):
+Dev-set end-to-end, all 60 questions (gemini-2.5-flash on Vertex, top_k 8, scope guard stage 2 off, fenced prompt, measured 2026-11-11):
 
 | cell | count |
 | --- | --- |
-| correct answer | 48 |
+| correct answer | 46 |
 | correct refusal | 11 |
-| false refusal | 1 |
+| false refusal | 3 |
 | **false answer** | **0** |
 
-Citation validity 41/48 (85%). Numeric provenance 42/48 (88%). Grounded refusals 3/4. Cost $0.20 for the run, about $0.0034 per question, p50 latency 5.5 s across 55 model calls with 6 retried rate limits and no failures.
+Citation validity 39/46 (85%). Numeric provenance 41/46 (89%). Grounded refusals 3/4. Same-day repeats moved false refusals between 2 and 4 under both the fenced and the previous prompt, and no run gave a false answer ([evals/results/prompt-fence-ab-2026-11-11.md](evals/results/prompt-fence-ab-2026-11-11.md)). The 2026-09-02 run, before the fence and on another backend, had 48, 11, 1 and 0.
 
-Held-out results (second exposure, on the exact configuration deployed):
+Held-out results, on the configuration this release deploys:
 
 - Retrieval, hybrid, on the 70 answerable questions (measured 2026-09-07): R@3 87%, R@5 91%, R@10 96%, that is 61, 64 and 67 of 70.
-- End-to-end, all 105 questions (gemini-2.5-flash, top_k 8, measured 2026-07-22): 49 correct answers, 35 correct refusals, 21 false refusals, **0 false answers**. All 35 questions built to be refused were refused; the price is 21 of the 70 answerable questions refused as well.
-- Citation validity 47/49 correct answers (96%). Numeric provenance 43/49 (88%).
-- The IPCC answer step cost $0.29 for the run, about $0.003 per question, p50 generation latency 3.9 s.
+- End-to-end, all 105 questions (gemini-2.5-flash on Vertex, top_k 8, fenced prompt, measured 2026-11-11): 52 correct answers, 35 correct refusals, 18 false refusals, **0 false answers**. All 35 questions built to be refused were refused; the price is 18 of the 70 answerable questions refused as well.
+- Citation validity 50/52 correct answers (96%). Numeric provenance 42/52 (81%), down from 88% in the previous run.
+- The IPCC answer step cost $0.26 for the run, about $0.0025 per question, p50 generation latency 3.2 s.
+- The previous run (2026-07-22, before the fence): 49 correct answers, 35 correct refusals, 21 false refusals, 0 false answers, citation validity 47/49, numeric provenance 43/49.
+- Exposures: end-to-end runs on 2026-07-18, 2026-07-22 and 2026-11-11, retrieval on 2026-09-07, and Jev triage on 2026-11-11 (37 questions). A first 2026-11-11 attempt stopped after 12 model calls on a local call cap and was discarded, so those questions reached the model twice that day.
 
 **Reranking and query rewriting: measured, kept off.** Both are wired as `HybridRetriever` keyword arguments and both default to off. Measured on the 45-question dev set (34 answerable), before the `cid-table` questions landed:
 
