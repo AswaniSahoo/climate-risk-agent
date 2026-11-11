@@ -11,6 +11,7 @@ The vectors are also packed into one file (scripts/pack_vectors.py), because a
 Cloud Run gen2 container spent 17.5 s reading them as 2,730 files. The check
 then holds the pack to the files, bit for bit.
 """
+import fnmatch
 import hashlib
 import json
 import re
@@ -225,3 +226,16 @@ def test_the_image_packs_the_vectors_after_the_chunk_cache_and_checks_them_last(
     checking = next(i for i, run in enumerate(runs) if "scripts.check_baked_index" in run)
 
     assert chunk_cache < packing < checking == len(runs) - 1
+
+
+def test_a_local_copy_of_the_asset_stays_out_of_the_build_context():
+    """pack_eval_cache.py writes, and unpack_eval_cache.py reads, the asset at the
+    repo root by default. `COPY . .` would carry that 9 MB copy into the image,
+    beside the vectors the build fetches by sha256 for itself."""
+    from scripts.pack_eval_cache import ARCHIVE_NAME
+
+    root = Path(__file__).resolve().parents[1]
+    for ignore_file in (".dockerignore", ".gcloudignore"):
+        patterns = [line.strip() for line in (root / ignore_file).read_text("utf-8").splitlines()
+                    if line.strip() and not line.startswith("#")]
+        assert any(fnmatch.fnmatch(ARCHIVE_NAME, p) for p in patterns), ignore_file
