@@ -248,10 +248,32 @@ def test_dependency_audit_reads_the_lock_not_its_own_environment():
     for flag in ("--frozen", "--all-groups", "--no-emit-project",
                  "--format requirements.txt", "-o requirements-audit.txt"):
         assert flag in export.group(0), f"uv export lacks {flag}"
-    audit = re.search(r"run: uvx --from pip-audit==\d+\.\d+\.\d+ pip-audit [^\n]*", text)
+    audit = re.search(r"uvx --from pip-audit==\d+\.\d+\.\d+ pip-audit [^\n]*", text)
     assert audit, "pip-audit does not run from a pinned version"
     for flag in ("--strict", "--require-hashes", "--disable-pip", "-r requirements-audit.txt"):
         assert flag in audit.group(0), f"pip-audit lacks {flag}"
+
+
+def test_every_ignored_advisory_says_why_it_cannot_reach_us():
+    """An ignore is a claim about this codebase, so each one carries it. Only
+    pypdf is ignored, on one ground that the code itself enforces: pypdf reads
+    nothing but the IPCC PDFs pinned in rag/corpus.py, checked before parsing,
+    and each of these advisories needs an attacker-crafted PDF."""
+    from rag.corpus import CORPUS_FILES, CORPUS_SHA256
+
+    text = dict(_workflows())["security.yml"]
+    block = re.search(r"\n\s+ignored=\(\n(.*?)\n\s+\)\n", text, re.S)
+    assert block, "no ignore list in security.yml"
+    entries = [line.strip() for line in block.group(1).splitlines()
+               if line.strip() and not line.strip().startswith("#")]
+    assert entries, "an empty ignore list should be deleted, not kept"
+    for entry in entries:
+        advisory, _, reason = entry.partition("#")
+        assert re.fullmatch(r"(PYSEC|CVE|GHSA)-[\w-]+", advisory.strip()), entry
+        assert "pypdf" in reason and "pinned IPCC PDFs" in reason, f"no reason: {entry}"
+    assert len({e.partition('#')[0].strip() for e in entries}) == len(entries), "duplicate ID"
+    assert '"${ignored[@]/#/--ignore-vuln=}"' in text, "the list never reaches pip-audit"
+    assert set(CORPUS_SHA256) == set(CORPUS_FILES)  # the ground the reason stands on
 
 
 def test_no_workflow_can_reach_vertex():

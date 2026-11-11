@@ -6,6 +6,9 @@ __pycache__/
 build/
 dist/
 
+# Written by the audit step in .github/workflows/security.yml
+requirements-audit.txt
+
 # Environments
 .venv/
 venv/

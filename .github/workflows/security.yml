@@ -37,5 +37,49 @@ jobs:
       - name: Export the locked dependencies
         run: uv export --frozen --all-groups --no-emit-project --format requirements.txt -o requirements-audit.txt
 
+      # Ignored, with the reason on every line: pypdf stays at 6.14.2. pypdf
+      # 6.21.4 stops on IPCC Chapter 12 page 23 at its default parsing limits,
+      # and with them raised 15 of the 2,730 chunks change text, which would
+      # move retrieval, the embedding cache and the eval numbers. pypdf reads
+      # nothing but the three IPCC PDFs pinned by sha256 in rag/corpus.py,
+      # checked on download and again right before parsing, and every advisory
+      # below needs an attacker-crafted PDF ("An attacker who uses this
+      # vulnerability can craft a PDF which leads to ..."). Delete an entry as
+      # soon as pypdf moves past its fix.
       - name: Run pip-audit on the lock
-        run: uvx --from pip-audit==2.10.1 pip-audit --strict --require-hashes --disable-pip -r requirements-audit.txt
+        run: |
+          ignored=(
+            CVE-2026-113786  # pypdf, fixed in 6.21.1: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-113789  # pypdf, fixed in 6.21.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-113790  # pypdf, fixed in 6.21.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-113791  # pypdf, fixed in 6.21.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-113792  # pypdf, fixed in 6.20.1: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-113793  # pypdf, fixed in 6.20.1: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-113794  # pypdf, fixed in 6.20.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-113795  # pypdf, fixed in 6.20.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-115572  # pypdf, fixed in 6.21.2: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-115580  # pypdf, fixed in 6.21.2: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-115585  # pypdf, fixed in 6.21.2: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-119203  # pypdf, fixed in 6.21.4: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-119204  # pypdf, fixed in 6.21.4: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-119205  # pypdf, fixed in 6.21.4: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-119206  # pypdf, fixed in 6.21.3: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-119207  # pypdf, fixed in 6.21.3: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-119208  # pypdf, fixed in 6.21.3: needs a crafted PDF; input is the pinned IPCC PDFs only
+            CVE-2026-119209  # pypdf, fixed in 6.21.3: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-3655  # pypdf, fixed in 6.15.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-3656  # pypdf, fixed in 6.15.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-3910  # pypdf, fixed in 6.16.1: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-3911  # pypdf, fixed in 6.16.1: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-3912  # pypdf, fixed in 6.15.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-3913  # pypdf, fixed in 6.16.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-4153  # pypdf, fixed in 6.18.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-4154  # pypdf, fixed in 6.18.1: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-4155  # pypdf, fixed in 6.18.1: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-4156  # pypdf, fixed in 6.18.1: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-4157  # pypdf, fixed in 6.19.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-4158  # pypdf, fixed in 6.17.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-4159  # pypdf, fixed in 6.19.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+            PYSEC-2026-4160  # pypdf, fixed in 6.19.0: needs a crafted PDF; input is the pinned IPCC PDFs only
+          )
+          uvx --from pip-audit==2.10.1 pip-audit --strict --require-hashes --disable-pip -r requirements-audit.txt "${ignored[@]/#/--ignore-vuln=}"
