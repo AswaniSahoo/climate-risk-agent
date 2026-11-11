@@ -134,7 +134,7 @@ value distributions and the IPCC AR6 assessment tables:
 1. **Operational forecast: numerical forecast ensemble.** Fetches high-resolution weather
    models (Open-Meteo) up to 16 days out for daily temperature extremes, heavy rainfall
    accumulation, or maximum wind gusts at your exact coordinate.
-2. **Historical reanalysis: ERA5 extreme value climatology.** Fits 60+ years (1940 to 2023)
+2. **Historical reanalysis: ERA5 extreme value climatology.** Fits 63 years (1960 to 2022)
    of daily historical extremes using Generalized Extreme Value (GEV) parametric
    distributions. Calibrates local 10, 50, and 100-year return levels with 90% bootstrap
    confidence intervals and tests for non-stationary warming trends.
@@ -210,9 +210,9 @@ if not _os.environ.get("PYTEST_CURRENT_TEST"):
         with _lead:
             st.error(
                 f"**Degraded mode:** {st.session_state.dense_detail}. Retrieval is "
-                "running **BM25-only** (measured ~82% vs 87% hybrid R@3), so IPCC "
-                "citations may be sparse. This is an embedding config issue "
-                "(model / region), not a data problem.",
+                "running **BM25-only** (R@3 76% against 82% for the hybrid retriever, "
+                "measured on the 60-question dev set), so IPCC citations may be sparse. "
+                "This is an embedding config issue (model / region), not a data problem.",
                 icon=":material/warning:",
             )
 
@@ -438,7 +438,8 @@ with st.sidebar:
     horizon = st.slider("Forecast horizon (days)", 1, 16, key="horizon_input")
     use_climatology = st.checkbox(
         "Ground with ERA5 climatology (GEV return levels)", value=True,
-        help="First call fetches 60+ years of daily extremes (~3 s), then cached.",
+        help="The first report for a new place fetches 63 years of ERA5 daily extremes and "
+             "fits them: about 1 to 2 minutes, then cached.",
     )
     # Secondary on purpose: the Ask box is the page's one primary action.
     run = st.button("Assess risk", key="assess", width="stretch")
