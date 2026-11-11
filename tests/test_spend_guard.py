@@ -183,8 +183,8 @@ def test_the_embedding_probe_is_exempt_and_cached(monkeypatch, fake):
     UI's banner, and a stream of new sessions must not mean a stream of calls."""
     monkeypatch.setenv("CRG_DAILY_MODEL_BUDGET_USD", "0")
 
-    assert gc.embedding_available(dims=2) == (True, f"dense OK [{gc.EMBED_MODEL}]")
-    assert gc.embedding_available(dims=2)[0] is True
+    assert gc.embedding_available_once(dims=2) == (True, f"dense OK [{gc.EMBED_MODEL}]")
+    assert gc.embedding_available_once(dims=2)[0] is True
     assert fake.embeds == 1  # the second session read the cached result
 
 

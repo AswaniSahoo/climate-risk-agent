@@ -169,46 +169,59 @@ def test_adc_file_is_read_directly_never_via_gcloud_subprocess(monkeypatch, tmp_
     assert loaded == [str(adc)]
 
 
-# --- the startup embedding probe: once per process while it passes ----------
+# --- the startup embedding probe: one shared answer, not one per session -----
 #
 # The UI used to probe once per Streamlit SESSION (st.session_state), so every
 # new visitor paid one embedding call before seeing the page. The endpoint and
-# model are fixed per deploy, so a passing answer holds for the process; a
-# failing one is not kept, so a blip at boot does not mark every later visitor
-# degraded.
+# model are fixed per deploy, so one answer serves every session: a passing one
+# for ten minutes, a failing one for one minute, so a blip at boot stops marking
+# visitors degraded soon after it clears. The probe skips the spend guard (a
+# spent budget is not a misconfigured model), so the cache is what bounds it.
 
 @pytest.fixture
 def probe_calls(monkeypatch):
-    monkeypatch.setattr(gc, "_probe_passed", None)
+    gc._reset_probe()
+    clock = [1000.0]
+    monkeypatch.setattr(gc, "_probe_clock", lambda: clock[0])
     calls: list[list[str]] = []
 
-    def fake_embed_batch(texts, *, task_type, dims):
+    def fake_embed_texts(texts, *, task_type, dims):
         calls.append(list(texts))
         return [[0.0] * dims for _ in texts]
 
-    monkeypatch.setattr(gc, "embed_batch", fake_embed_batch)
-    return calls
+    monkeypatch.setattr(gc, "_embed_texts", fake_embed_texts)
+    from types import SimpleNamespace
+
+    return SimpleNamespace(calls=calls, clock=clock)
 
 
-def test_a_passing_probe_is_kept_for_the_life_of_the_process(probe_calls):
+def test_a_passing_probe_is_kept_for_ten_minutes(probe_calls):
     first = gc.embedding_available_once()
+    probe_calls.clock[0] += 599
     second = gc.embedding_available_once()
 
-    assert first == second
-    assert first[0] is True
-    assert len(probe_calls) == 1  # the second session paid nothing
+    assert first == second and first[0] is True
+    assert len(probe_calls.calls) == 1  # the second session paid nothing
+
+    probe_calls.clock[0] += 2  # past ten minutes: asked once more
+    assert gc.embedding_available_once()[0] is True
+    assert len(probe_calls.calls) == 2
 
 
-def test_a_failing_probe_is_asked_again_by_the_next_session(probe_calls, monkeypatch):
+def test_a_failing_probe_is_kept_for_one_minute_then_asked_again(probe_calls, monkeypatch):
     def broken(texts, *, task_type, dims):
-        probe_calls.append(list(texts))
+        probe_calls.calls.append(list(texts))
         raise gc.GeminiError("404 model not found in region")
 
-    monkeypatch.setattr(gc, "embed_batch", broken)
+    monkeypatch.setattr(gc, "_embed_texts", broken)
 
     assert gc.embedding_available_once()[0] is False
     assert gc.embedding_available_once()[0] is False
-    assert len(probe_calls) == 2  # not cached: a later session can see a recovery
+    assert len(probe_calls.calls) == 1  # inside the minute: the failure is reused
+
+    probe_calls.clock[0] += 61  # a later session can see a recovery
+    assert gc.embedding_available_once()[0] is False
+    assert len(probe_calls.calls) == 2
 
 
 def test_concurrent_first_sessions_share_one_probe(probe_calls):
@@ -218,4 +231,12 @@ def test_concurrent_first_sessions_share_one_probe(probe_calls):
         results = list(pool.map(lambda _: gc.embedding_available_once(), range(8)))
 
     assert all(ok for ok, _ in results)
-    assert len(probe_calls) == 1
+    assert len(probe_calls.calls) == 1
+
+
+def test_the_probe_itself_keeps_no_answer(probe_calls):
+    """One cache, in embedding_available_once: the probe asks every time."""
+    gc.embedding_available()
+    gc.embedding_available()
+
+    assert len(probe_calls.calls) == 2

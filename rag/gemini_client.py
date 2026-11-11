@@ -248,7 +248,7 @@ def _embed_texts(texts: list[str], *, task_type: str, dims: int) -> list[list[fl
 
 
 def embedding_available(*, dims: int = 768) -> tuple[bool, str]:
-    """Probe the embedding endpoint with a 1-token query at startup.
+    """Probe the embedding endpoint with a 1-token query.
 
     The whole point of this project's "loud fallback" rule: a wrong embedding
     region/model (e.g. requesting gemini-embedding-2 from a single region that
@@ -259,60 +259,49 @@ def embedding_available(*, dims: int = 768) -> tuple[bool, str]:
 
     It answers whether embeddings WORK, not whether today's budget has room, so
     it skips the spend guard: a spent budget must not read as a misconfigured
-    model in the UI's degraded banner. What bounds its cost instead is the
-    process-wide cache below. The UI probes once per browser session, and a
-    stream of new sessions now costs one 1-token call per ten minutes at most.
+    model in the UI's degraded banner. It keeps no answer of its own; anything
+    that asks per session goes through embedding_available_once, whose cache is
+    what bounds the cost of this unbudgeted call.
     """
-    now = time.monotonic()
-    with _probe_lock:
-        cached = _probe_results.get(dims)
-        if cached is not None and now < cached[0]:
-            return cached[1]
     try:
         _embed_texts(["healthcheck"], task_type="RETRIEVAL_QUERY", dims=dims)
     except Exception as exc:  # noqa: BLE001 (a probe must classify, never crash the app)
-        result, ttl = (False, f"dense embeddings unavailable [{EMBED_MODEL}]: {exc}"), _PROBE_FAILED_TTL_S
-    else:
-        result, ttl = (True, f"dense OK [{EMBED_MODEL}]"), _PROBE_OK_TTL_S
-    with _probe_lock:
-        _probe_results[dims] = (time.monotonic() + ttl, result)
-    return result
+        return False, f"dense embeddings unavailable [{EMBED_MODEL}]: {exc}"
+    return True, f"dense OK [{EMBED_MODEL}]"
 
 
-# A working endpoint is re-checked every ten minutes, a failing one every minute,
-# so a fix shows up quickly and a healthy service is not probed per session.
+# A passing answer is kept for ten minutes and a failing one for one minute: a
+# stream of new sessions costs at most one 1-token call per ten minutes, and a
+# blip at boot stops marking visitors degraded within a minute of recovering.
 _PROBE_OK_TTL_S = 600.0
 _PROBE_FAILED_TTL_S = 60.0
+_probe_clock = time.monotonic  # module attribute so tests can move time
 _probe_lock = threading.Lock()
 _probe_results: dict[int, tuple[float, tuple[bool, str]]] = {}
+
+
+def embedding_available_once(*, dims: int = 768) -> tuple[bool, str]:
+    """`embedding_available`, shared by every session for as long as it holds.
+
+    The UI calls this for every new Streamlit session. The endpoint and the
+    model are fixed for the life of a deploy, so one answer serves every
+    session until it expires (see the TTLs above). The probe runs while the
+    lock is held, so concurrent first sessions share one probe rather than
+    each paying for its own.
+    """
+    with _probe_lock:
+        cached = _probe_results.get(dims)
+        if cached is not None and _probe_clock() < cached[0]:
+            return cached[1]
+        result = embedding_available(dims=dims)
+        ttl = _PROBE_OK_TTL_S if result[0] else _PROBE_FAILED_TTL_S
+        _probe_results[dims] = (_probe_clock() + ttl, result)
+        return result
 
 
 def _reset_probe() -> None:
     with _probe_lock:
         _probe_results.clear()
-
-
-_probe_lock = threading.Lock()
-_probe_passed: tuple[bool, str] | None = None
-
-
-def embedding_available_once(*, dims: int = 768) -> tuple[bool, str]:
-    """`embedding_available`, asked once per process for as long as it passes.
-
-    The UI calls this for every new Streamlit session. The endpoint and the
-    model are fixed for the life of a deploy, so a passing answer is kept and
-    later sessions pay no embedding call. A failing answer is NOT kept: a blip
-    at boot must not mark every later visitor degraded, and the next session
-    probes again. The lock makes concurrent first sessions share one probe.
-    """
-    global _probe_passed
-    with _probe_lock:
-        if _probe_passed is not None:
-            return _probe_passed
-        ok, detail = embedding_available(dims=dims)
-        if ok:
-            _probe_passed = (ok, detail)
-        return ok, detail
 
 
 def generate_json(prompt: str, *, schema: dict) -> str:
