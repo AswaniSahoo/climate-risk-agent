@@ -58,6 +58,7 @@ from tools import climatology  # noqa: E402
 from tools.climatology import ClimatologyError  # noqa: E402
 from tools.geocode import GeocodeError  # noqa: E402
 from ui.report_plot import return_level_plot, specimen_plot  # noqa: E402
+from ui.session_budget import fresh_report_scope  # noqa: E402
 from ui.theme import (  # noqa: E402
     APP_CSS,
     FAVICON_SVG,
@@ -647,7 +648,7 @@ def _run_point(sel: Any, haz: Hazard, horizon_days: int) -> tuple[Any, str | Non
             on_step=on_step,
         )
 
-    with Span("report") as point_span:
+    with Span("report") as point_span, fresh_report_scope(st.session_state):
         result, message = _run_with_panel(_assess)
     for notice in notices:
         st.warning(notice, icon=":material/warning:")
@@ -707,7 +708,7 @@ if nl_triggered and nl_query.strip() and _parsed is not None:
         if _sidebar_point:
             report, failure, span = _run_point(selected, _parsed.hazard, _parsed.horizon_days)
         else:
-            with Span("report") as span:
+            with Span("report") as span, fresh_report_scope(st.session_state):
                 report, failure = _run_with_panel(
                     lambda on_step: run_agent_nl(nl_query, on_step=on_step, parsed=_parsed)
                 )
@@ -719,7 +720,7 @@ elif nl_triggered and nl_query.strip():
     from agent.nl import run_agent_nl  # noqa: E402
     from obs.telemetry import Span  # noqa: E402
 
-    with Span("report") as span:
+    with Span("report") as span, fresh_report_scope(st.session_state):
         report, failure = _run_with_panel(
             lambda on_step: run_agent_nl(nl_query, on_step=on_step)
         )

@@ -196,6 +196,33 @@ def test_a_failed_run_renders_one_sentence_and_keeps_the_traceback_off_the_page(
     assert not at.subheader  # nothing pretends a report was produced
 
 
+def test_each_run_is_metered_against_the_session_cap(stubbed, monkeypatch):
+    """ui/session_budget.py: once a session has run its quota of reports that
+    needed new model calls, the next run's model calls are refused."""
+    from rag import spend_guard
+
+    monkeypatch.setenv("CRG_SESSION_FRESH_REPORTS", "1")
+    monkeypatch.setenv("CRG_DAILY_MODEL_BUDGET_USD", "off")
+    outcomes: list[str] = []
+
+    def fresh_run_agent(**kwargs):
+        try:
+            spend_guard.reserve_generate("gemini-2.5-flash", "p")  # what an uncached run does
+            outcomes.append("sent")
+        except spend_guard.BudgetRefused as exc:
+            outcomes.append(str(exc))
+        return _report(hazard=kwargs["hazard"], horizon_days=kwargs["horizon_days"])
+
+    monkeypatch.setattr(graph_mod, "run_agent", fresh_run_agent)
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+    at.sidebar.button(key="assess").set_value(True)
+    at.run()
+
+    assert not at.exception
+    assert outcomes[0] == "sent"
+    assert "limit of 1 reports" in outcomes[1]
+
+
 def test_refusal_path_renders_as_refusal_not_risk(stubbed, monkeypatch):
     monkeypatch.setattr(
         graph_mod, "run_agent",
