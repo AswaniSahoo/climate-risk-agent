@@ -10,6 +10,7 @@ import agent.nl as nl_mod
 from agent.contracts import Hazard, RiskLevel, RiskReport
 from agent.nl import run_agent_nl
 from tools.ar6_regions import AR6Region
+from tools.climatology import ClimatologyError
 from tools.geocode import GeocodeError, GeoLocation
 
 
@@ -40,6 +41,13 @@ def happy_seams(monkeypatch):
         nl_mod, "region_for",
         lambda lat, lon: AR6Region(acronym="SAS", name="South Asia"),
     )
+
+    # The fourth seam. Left real, it sent a 63-year Open-Meteo Archive request on
+    # every run, and the test passed only because that request failed offline.
+    def no_archive(*args, **kwargs):
+        raise ClimatologyError("offline test: no archive")
+
+    monkeypatch.setattr(nl_mod, "climatology_hazard_stat", no_archive)
     return captured
 
 

@@ -10,7 +10,60 @@ try:
 except ImportError:
     pass
 
+import socket
+
 import pytest
+
+_LOOPBACK = {"", "localhost", "127.0.0.1", "::1", "0.0.0.0", "::"}
+
+
+def _is_loopback(host) -> bool:
+    name = host.decode() if isinstance(host, bytes) else host
+    return name is None or str(name) in _LOOPBACK or str(name).startswith("127.")
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    """No test may touch the network: a lookup or connect beyond loopback fails it.
+
+    The call itself raises, as an offline machine would, and the attempt is
+    recorded so the test then FAILS at teardown even if the code under test
+    swallowed the error and degraded quietly, which is how two NL tests sent a
+    real Open-Meteo Archive request on every run. HTTP seams are mocked with
+    pytest-httpx, which never opens a socket. Yields the recorded attempts.
+    """
+    attempts: list[str] = []
+    real_getaddrinfo = socket.getaddrinfo
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+
+    def getaddrinfo(host, *args, **kwargs):
+        if _is_loopback(host):
+            return real_getaddrinfo(host, *args, **kwargs)
+        attempts.append(str(host))
+        raise socket.gaierror(socket.EAI_NONAME, f"network access in a test: {host}")
+
+    def _refuse_remote(addr) -> None:
+        if isinstance(addr, (str, bytes)) or _is_loopback(addr[0]):  # unix socket or loopback
+            return
+        attempts.append(str(addr[0]))
+        raise OSError(f"network access in a test: {addr[0]}")
+
+    def connect(self, addr):
+        _refuse_remote(addr)
+        return real_connect(self, addr)
+
+    def connect_ex(self, addr):
+        _refuse_remote(addr)
+        return real_connect_ex(self, addr)
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+    yield attempts
+    if attempts:
+        pytest.fail(f"this test tried to reach the network: {sorted(set(attempts))}",
+                    pytrace=False)
 
 
 @pytest.fixture(autouse=True)
