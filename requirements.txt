@@ -79,7 +79,7 @@ typing-extensions==4.15.0
 typing-inspection==0.4.2
 tzdata==2026.3 ; sys_platform == 'emscripten' or sys_platform == 'win32'
 urllib3==2.8.0
-uuid-utils==0.16.2
+uuid-utils==1.2.0
 uvicorn==0.50.0
 watchdog==6.0.0 ; sys_platform != 'darwin'
 websockets==15.0.1
