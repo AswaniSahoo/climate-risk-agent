@@ -77,6 +77,8 @@ _DIGEST = re.compile(r"[0-9a-f]{64}")
 def pack_path(directory: Path | str) -> Path:
     """Where the pack of a vector folder lives: beside the folder, named after it."""
     folder = Path(directory)
+    if folder.name in {"", ".."}:  # "." or "..": name the pack after the folder they mean
+        folder = folder.resolve()
     return folder.with_name(folder.name + PACK_SUFFIX)
 
 

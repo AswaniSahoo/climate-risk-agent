@@ -165,6 +165,17 @@ def test_the_pack_sits_beside_the_folder_it_packs():
     assert pack_path("data/cache/embeddings") == Path("data/cache/embeddings.pack.npy")
 
 
+def test_a_cache_in_the_current_folder_still_works(tmp_path, monkeypatch):
+    """`Path(".")` has no name to put a pack beside, which must not break the cache."""
+    monkeypatch.chdir(tmp_path)
+
+    cache = DiskVectorCache(".")
+    cache.put("some-key", [0.5, 0.25])
+
+    assert cache.get("some-key") == [0.5, 0.25]
+    assert cache.pack == tmp_path.parent / f"{tmp_path.name}.pack.npy"
+
+
 def test_a_packed_vector_is_bit_for_bit_its_file_and_needs_no_file(tmp_path):
     store, keys = _vector_files(tmp_path / "embeddings")
     files = {k: np.load(_file_of(store, k)) for k in keys}
