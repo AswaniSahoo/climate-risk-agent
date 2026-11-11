@@ -487,6 +487,14 @@ def test_app_css_survives_the_sanitizer_in_st_html():
     assert "<" not in APP_CSS.replace("<style>", "").replace("</style>", "")
 
 
+def test_the_main_focus_ring_keys_on_the_test_id_alone():
+    """Streamlit 1.66.1 renders stMain as <main> where 1.59.1 used <section>, and its
+    new "Skip to main content" link moves keyboard focus there. A ring tied to the
+    element type matched nothing after the upgrade, so focus on the report was invisible."""
+    assert re.search(r'(^|[\s,{}])\[data-testid="stMain"\]:focus-visible', APP_CSS)
+    assert 'section[data-testid="stMain"]' not in APP_CSS
+
+
 def test_report_with_no_stats_renders_no_plot():
     assert return_level_plot(_report()) is None
 

@@ -298,7 +298,7 @@ button[data-testid="stBaseButton-primary"]:focus-visible {
 [data-testid="stSelectbox"] .react-aria-ComboBox > div:focus-within {
   box-shadow: 0 0 0 1px var(--cra-red);
 }
-section[data-testid="stMain"]:focus-visible,
+[data-testid="stMain"]:focus-visible,
 [data-testid="stDeckGlJsonChart"] canvas:focus-visible {
   outline: 2px solid var(--cra-red);
   outline-offset: -2px;
