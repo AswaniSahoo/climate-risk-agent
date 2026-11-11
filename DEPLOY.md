@@ -77,7 +77,22 @@ gcloud run deploy climate-risk-agent \
 - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are **optional**. Set
   both to share one cache across replicas; with neither set every instance
   keeps its own disk cache and `tools/cache_backend.py` logs which backend it
-  chose.
+  chose. On 2026-11-11 the live service carried neither name, so at
+  `--min-instances 0` its cache dies with every instance.
+- **Precomputed entries ship in the image** (`tools/cache_seed/*.json`, read
+  before Redis or disk, so they survive scale to zero). Each entry sits under
+  the exact cache key the live path builds, so it only answers the request and
+  the code version it was computed for:
+  - `scripts/precompute_climatology.py` fills `climatology.json` with ERA5 fits
+    for `scripts/precompute_cities.json`. One 1960 to 2022 archive request
+    counts as about 1,644 Open-Meteo calls against a free limit of 10,000 a
+    day, so it runs paced and budgeted; `--plan` prints the cost first.
+  - `scripts/precompute_grounding.py` fills `ipcc.json` with the IPCC answer and
+    the Ch.12 projection per (hazard, AR6 region), up to 3 model calls a pair.
+    `--presets` covers the six UI presets (6 pairs); no flag runs all 138.
+  Both keys move when their inputs change (fit code and bootstrap counts; corpus,
+  ranking code, `rag/answer.py`, `rag/cid.py`, model), so rerun the matching
+  script after such a change and check with `--check`.
 - `CRG_JEV`, `JEV_BASE_URL` and `JEV_API_KEY` are **optional** and Jev is off
   by default ([adr/0002](adr/0002-jev-question-triage-and-citation-support.md)).
   Turn Jev on only after `evals/run_jev_eval.py` meets that ADR's criteria.
