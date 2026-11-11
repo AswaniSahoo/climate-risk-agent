@@ -301,7 +301,7 @@ def research(state: AgentState) -> dict:
             chunks, hybrid = _retrieve_traced(_ipcc_retriever(), question, _IPCC_TOP_K)
             answer = answer_with_guard(question, chunks, cache=_answer_cache())
         except (CorpusError, AnswerError, GeminiError) as exc:
-            _log.warning("IPCC grounding unavailable (%s) — report ships without citations", exc)
+            _log.warning("IPCC grounding unavailable (%s), report ships without citations", exc)
             return {}
         except ValidationError as exc:
             # The model cited a chunk it was not given, or answered without citing.
@@ -363,7 +363,7 @@ def project(state: AgentState) -> dict:
             tracer = _TracingRetriever(_ipcc_retriever())
             change = projected_change_for(region, state["hazard"], retriever=tracer)
         except (CorpusError, EmbeddingError, GeminiError) as exc:
-            _log.warning("AR6 Ch.12 projection unavailable (%s) — report ships without it", exc)
+            _log.warning("AR6 Ch.12 projection unavailable (%s), report ships without it", exc)
             return {"projection_note": _NOT_FOUND_NOTE}
         if tracer.hybrid:
             from rag.answer_cache import ProjectionResult
