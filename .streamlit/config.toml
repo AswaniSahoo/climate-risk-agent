@@ -1,15 +1,69 @@
-# Climate-Risk Analyst Agent: custom theme configuration.
+# Climate-Risk Analyst Agent theme: a weather bureau's surface-analysis chart.
 #
-# Scientific climate risk intelligence palette:
-# Warm slate/charcoal dark theme (never pitch black #000000),
-# with deep forest sage primary accent and warm neutral surfaces.
-# Designed with high craft to support both dark and light modes.
+# Neutral paper and black ink with one red pencil, as a light and a dark sheet.
+# Surfaces stay neutral so that color can mean something: the map pin, the risk
+# band and the return-level plot. Both sheets are defined, so the app follows the
+# visitor's system setting and the settings menu can switch between them.
+#
+# ui/theme.py holds the same values for the app's own HTML: keep the two in step.
 
 [theme]
-base = "dark"
-primaryColor = "#3E886D"
-backgroundColor = "#111613"
-secondaryBackgroundColor = "#1A221E"
-textColor = "#ECEAE4"
 font = "sans-serif"
+codeFont = "monospace"
+baseFontSize = 15
+headingFontWeights = 500
+headingFontSizes = ["2rem", "1.5rem", "1.25rem", "1.125rem", "1rem", "1rem"]
+metricValueFontSize = "1.5rem"
+metricValueFontWeight = 500
+baseRadius = "6px"
+buttonRadius = "6px"
+showWidgetBorder = true
+showSidebarBorder = true
 
+[theme.light]
+primaryColor = "#B8321A"
+backgroundColor = "#F7F7F4"
+secondaryBackgroundColor = "#EEEEE9"
+textColor = "#1C1C1A"
+linkColor = "#1C1C1A"
+linkUnderline = true
+codeTextColor = "#1C1C1A"
+codeBackgroundColor = "#EEEEE9"
+borderColor = "#DADAD4"
+dataframeBorderColor = "#DADAD4"
+dataframeHeaderBackgroundColor = "#EEEEE9"
+redColor = "#B8321A"
+orangeColor = "#A84A08"
+yellowColor = "#8A6200"
+greenColor = "#2F6B45"
+blueColor = "#54544E"
+violetColor = "#54544E"
+grayColor = "#54544E"
+
+[theme.light.sidebar]
+backgroundColor = "#F0F0EB"
+secondaryBackgroundColor = "#F9F9F6"
+
+[theme.dark]
+primaryColor = "#E8674A"
+backgroundColor = "#161614"
+secondaryBackgroundColor = "#232321"
+textColor = "#ECECE6"
+linkColor = "#ECECE6"
+linkUnderline = true
+codeTextColor = "#ECECE6"
+codeBackgroundColor = "#232321"
+borderColor = "#31312E"
+dataframeBorderColor = "#31312E"
+dataframeHeaderBackgroundColor = "#232321"
+redColor = "#E8674A"
+orangeColor = "#E58A45"
+yellowColor = "#D4A83A"
+greenColor = "#7FB08A"
+blueColor = "#ABABA4"
+violetColor = "#ABABA4"
+grayColor = "#ABABA4"
+
+[theme.dark.sidebar]
+backgroundColor = "#111110"
+secondaryBackgroundColor = "#1E1E1C"

@@ -3,6 +3,7 @@
 The agent + climatology are monkeypatched: these pin that the UI renders every
 RiskReport path honestly (risk, citations, refusal), not the agent logic.
 """
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -20,8 +21,13 @@ from agent.contracts import (
     RiskLevel,
     RiskReport,
 )
+from agent.risk_bands import band_from_fixed_thresholds, band_from_return_period
+from tools.hazard_stats import HazardStat, Representativeness, ReturnLevel
+from ui.report_plot import forecast_peak, return_level_plot
+from ui.theme import APP_CSS
 
 _APP = "ui/app.py"
+FULL_PLOT_LEFT, FULL_PLOT_RIGHT = 44, 468  # the full-size drawing's plot area in report_plot.py
 
 
 def _report(**overrides) -> RiskReport:
@@ -84,7 +90,7 @@ def test_report_path_renders_risk_and_citations(stubbed):
 
     assert not at.exception
     rendered = " ".join(el.value for el in at.markdown) + " ".join(s.value for s in at.subheader)
-    assert "HIGH" in rendered
+    assert "High" in rendered
     assert "IPCC_AR6_WGI_Chapter11.pdf" in rendered
     assert "p124" in rendered
 
@@ -233,7 +239,7 @@ def test_sidebar_preset_location_synchronizes_coordinates(stubbed):
     assert at.session_state["place_name"] == "Berlin"
 
 
-def test_header_renders_brand_logo_and_eyebrow(stubbed):
+def test_header_renders_brand_logo_and_title(stubbed):
     """Header integrates brand logo and decision-grade badge."""
     at = AppTest.from_file(_APP, default_timeout=30)
     at.run()
@@ -242,7 +248,6 @@ def test_header_renders_brand_logo_and_eyebrow(stubbed):
     markdown_content = " ".join(m.value for m in at.markdown)
     assert "cra-brand-logo" in markdown_content
     assert "Climate-Risk Analyst Agent" in markdown_content
-    assert "DECISION-GRADE CLIMATE INTELLIGENCE" in markdown_content
 
 
 def test_place_search_synchronizes_coordinates(stubbed, monkeypatch):
@@ -293,5 +298,193 @@ def test_plain_language_ask_synchronizes_coordinates(stubbed, monkeypatch):
     assert at.session_state["lat_input"] == pytest.approx(52.52)
     assert at.session_state["lon_input"] == pytest.approx(13.40)
     assert at.session_state["place_name"] == "Berlin"
+
+
+
+def test_plain_language_ask_points_the_sidebar_at_its_place_hazard_and_horizon(
+    stubbed, monkeypatch
+):
+    """After a question, the sidebar's Place box, Hazard and horizon name what was asked."""
+    from agent.location import ResolvedPlace
+
+    monkeypatch.setattr(
+        location_mod,
+        "resolve_place",
+        lambda query: ResolvedPlace(
+            name="Chennai", country="India", latitude=13.08, longitude=80.27
+        ),
+    )
+
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.run()
+
+    at.text_input(key="nl_query").input("What is the wind risk in Chennai over the next 10 days?").run()
+    next(b for b in at.button if "Ask" in b.label).click().run()
+
+    assert not at.exception
+    assert at.session_state["place_query"] == "Chennai, India"
+    assert at.sidebar.text_input(key="place_query").value == "Chennai, India"
+    assert at.sidebar.selectbox(key="hazard_input").value == Hazard.WIND
+    assert at.sidebar.slider(key="horizon_input").value == 10
+
+def _stat(levels=((2, 33.9), (10, 36.4), (50, 38.2), (100, 38.9))):
+    return HazardStat(
+        variable="temperature_2m_max", statistic_definition="annual maximum", unit="°C",
+        source="ERA5", model="era5", native_resolution_deg=0.25, captures_diurnal_peak=True,
+        timezone="UTC", latitude=52.52, longitude=13.40, n_years=84, record_start_year=1940,
+        record_end_year=2023, record_max=38.7,
+        return_levels=[ReturnLevel(return_period_years=t, level=v) for t, v in levels],
+        is_bias_corrected=False,
+        representativeness=Representativeness.POINT_INTERPOLATED_REANALYSIS,
+        interpretation="test",
+    )
+
+
+def _graded_report(peak: float) -> RiskReport:
+    """A report graded the way the agent grades one, carrying the agent's own sentence."""
+    stat = _stat()
+    level, basis = band_from_return_period(peak, stat)
+    return _report(
+        risk_level=level, hazard_stats=[stat],
+        drivers=[RiskDriver(factor="severity_basis", detail=basis)],
+    )
+
+
+@pytest.mark.parametrize("peak", [30.0, 33.9, 34.0, 36.3, 36.4, 37.1, 38.1, 38.2, 38.8, 38.9, 41.5])
+def test_plot_marks_the_peak_in_the_band_the_agent_assigned(peak):
+    """The plot is the agent's reading drawn, so the two must never disagree."""
+    report = _graded_report(peak)
+    drawing = return_level_plot(report).split("cra-plot-compact")[0]  # the full-size one
+
+    edges = [float(x) for x in re.findall(r'class="m-edge" x1="([\d.]+)"', drawing)]
+    bounds = [FULL_PLOT_LEFT, *edges, FULL_PLOT_RIGHT]
+    highlight = re.search(r'class="m-band-on" x="([\d.]+)" y="[\d.]+" width="([\d.]+)"', drawing)
+    left, right = float(highlight.group(1)), float(highlight.group(1)) + float(highlight.group(2))
+    band = [RiskLevel.LOW, RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.SEVERE].index(
+        report.risk_level
+    )
+    assert (left, right) == pytest.approx((bounds[band], bounds[band + 1]), abs=0.2)
+
+    # The marker is a nested svg placed 8 units left of its centre.
+    marker = float(re.search(r'class="cra-station"[^>]* x="([\d.]+)"', drawing).group(1)) + 8
+    assert left - 0.2 <= marker <= right + 0.2
+
+
+_LABEL = re.compile(
+    r'<text class="(?:t-peak|t-record|t-point)" x="([\d.]+)" y="([\d.]+)"'
+    r'(?: text-anchor="(end)")?>([^<]+)</text>'
+)
+
+
+@pytest.mark.parametrize(
+    "levels, record, peaks",
+    [
+        (((2, 33.9), (10, 36.4), (50, 38.2), (100, 38.9)), 38.7, [30 + i / 2 for i in range(24)]),
+        (((2, 43.8), (10, 45.3), (50, 46.6), (100, 47.1)), 47.2, [42 + i / 4 for i in range(28)]),
+        (((2, 108.4), (10, 188.2), (50, 285.8), (100, 337.2)), 301.3, [20 + 15 * i for i in range(26)]),
+    ],
+)
+def test_plot_labels_never_overlap(levels, record, peaks):
+    """Sweep the peak across the whole curve, in both drawing sizes."""
+    stat = _stat(levels=levels)
+    stat.record_max = record
+    for peak in peaks:
+        level, basis = band_from_return_period(peak, stat)
+        plot = return_level_plot(
+            _report(
+                risk_level=level, hazard_stats=[stat],
+                drivers=[RiskDriver(factor="severity_basis", detail=basis)],
+            )
+        )
+        for drawing in plot.split('class="cra-plot-chart')[1:]:  # the full and compact sizes
+            boxes = []
+            for x, y, anchor, text in _LABEL.findall(drawing):
+                width = len(text) * 12 * 0.6
+                left = float(x) - width if anchor else float(x)
+                boxes.append((left, left + width, float(y) - 12, float(y) + 3, text))
+            assert len(boxes) == 6, "expected the peak, the record and four point labels"
+            for i, a in enumerate(boxes):
+                for b in boxes[i + 1:]:
+                    clear = a[1] <= b[0] or b[1] <= a[0] or a[3] <= b[2] or b[3] <= a[2]
+                    assert clear, f"peak {peak}: {a[4]!r} overlaps {b[4]!r}"
+
+
+def test_plot_shows_the_peak_as_the_agent_wrote_it():
+    report = _graded_report(37.1)
+
+    assert forecast_peak(report, report.hazard_stats[0]) == (37.1, "37.1")
+    assert "Forecast peak 37.1 °C" in return_level_plot(report)
+
+
+def test_absolute_cutoff_report_gets_the_curve_but_no_marker():
+    """A band not read from this curve must not be drawn as if it were."""
+    _, basis = band_from_fixed_thresholds(38.5, Hazard.HEATWAVE)
+    report = _report(
+        risk_level=RiskLevel.MODERATE, hazard_stats=[_stat()],
+        drivers=[RiskDriver(factor="severity_basis", detail=basis)],
+    )
+
+    plot = return_level_plot(report)
+
+    assert "m-curve" in plot
+    assert "Forecast peak" not in plot
+    assert "m-band-on" not in plot
+    assert "was not read from this curve" in plot
+
+
+def test_peak_in_another_unit_is_not_plotted():
+    report = _graded_report(37.1)
+    report.hazard_stats[0].unit = "K"
+
+    assert forecast_peak(report, report.hazard_stats[0]) is None
+
+
+@pytest.mark.parametrize(
+    "levels",
+    [
+        ((2, 33.9), (10, float("nan")), (50, 38.2)),  # a GEV fit that failed to converge
+        ((2, 33.9),),  # one point is not a curve
+    ],
+)
+def test_undrawable_curve_renders_no_plot(levels):
+    assert return_level_plot(_report(hazard_stats=[_stat(levels=levels)])) is None
+
+
+def test_app_css_survives_the_sanitizer_in_st_html():
+    """DOMPurify drops a whole <style> whose text looks like markup: every rule, silently."""
+    assert "<" not in APP_CSS.replace("<style>", "").replace("</style>", "")
+
+
+def test_report_with_no_stats_renders_no_plot():
+    assert return_level_plot(_report()) is None
+
+
+def test_agent_text_cannot_inject_html_into_the_report(stubbed, monkeypatch):
+    hostile = "<img src=x onerror=alert(1)>"
+    monkeypatch.setattr(
+        graph_mod, "run_agent",
+        lambda **kw: _report(
+            hazard=kw["hazard"], horizon_days=kw["horizon_days"],
+            drivers=[RiskDriver(factor=hostile, detail=hostile)],
+            citations=[Citation(source=hostile, locator=hostile)],
+        ),
+    )
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception
+    rendered = " ".join(m.value for m in at.markdown)
+    assert hostile not in rendered
+    assert "&lt;img" in rendered
+
+
+def test_a_place_name_cannot_inject_html_into_the_map_plate(stubbed):
+    at = AppTest.from_file(_APP, default_timeout=30)
+    at.session_state["place_name"] = "<script>alert(1)</script>"
+    at.run()
+
+    assert not at.exception
+    rendered = " ".join(m.value for m in at.markdown)
+    assert "<script>alert(1)</script>" not in rendered
+    assert "&lt;script&gt;" in rendered
 
 
