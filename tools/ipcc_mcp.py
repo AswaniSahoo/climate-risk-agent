@@ -2,9 +2,13 @@
 
 Second of the two split servers (weather-mcp is the other). Tools are narrow,
 typed, and read-only per the security model:
-- search_ipcc: hybrid BM25 + dense retrieval -> page-cited excerpts. No LLM, but
-  the dense half embeds the query, so this DOES need Gemini/Vertex credentials.
-- answer_ipcc: scope guard + retrieval + cited LLM answer (generation on top)
+- search_ipcc: hybrid BM25 + dense retrieval -> page-cited excerpts. No LLM. The
+  dense half embeds the query through Gemini/Vertex; without credentials the
+  retriever falls back to BM25-only and logs it (rag/retrieve.py), so the tool
+  still returns excerpts (dev-set R@3: 76% BM25-only against 82% hybrid).
+- answer_ipcc: scope guard + retrieval + cited LLM answer (generation on top).
+  Generation needs Gemini/Vertex credentials: without them, a question the
+  scope guard does not refuse raises an error unless its answer is cached.
 
 Run:  uv run mcp dev tools/ipcc_mcp.py
 """
