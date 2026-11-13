@@ -3,6 +3,7 @@
 The agent + climatology are monkeypatched: these pin that the UI renders every
 RiskReport path honestly (risk, citations, refusal), not the agent logic.
 """
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -159,6 +160,48 @@ def test_progress_panel_shows_step_labels_timings_and_cache_badges(stubbed, monk
     assert "1.4 s" in rendered
     assert "cached (redis)" in rendered
     assert "Resolving location" in rendered  # the UI's own step, same panel
+
+
+def test_each_report_run_logs_its_time_and_where_the_warm_up_was(stubbed, monkeypatch, caplog):
+    """The server log says whether a report ran before the import warm-up was done.
+
+    That line is how a Cloud Run log shows the warm-up paying off (agent/warmup.py).
+    Under pytest the page never starts the warm-up, so it reads "not started".
+    """
+    import agent.warmup as warmup
+
+    monkeypatch.setattr(warmup, "_thread", None)
+    monkeypatch.setattr(warmup, "_finished", None)
+    monkeypatch.delenv("CRG_WARMUP", raising=False)
+
+    with caplog.at_level(logging.INFO):
+        at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception
+    lines = [r.getMessage() for r in caplog.records if "warm-up" in r.getMessage()]
+    assert len(lines) == 1, lines
+    assert re.fullmatch(
+        r"report ready in \d+\.\d\d s; warm-up at start: not started; at end: not started",
+        lines[0])
+
+
+def test_a_refused_run_logs_its_outcome_and_the_warm_up_state(stubbed, monkeypatch, caplog):
+    import agent.warmup as warmup
+
+    monkeypatch.setattr(warmup, "_thread", None)
+    monkeypatch.setattr(warmup, "_finished", None)
+    monkeypatch.setenv("CRG_WARMUP", "off")
+    monkeypatch.setattr(graph_mod, "run_agent", lambda **kwargs: _report(
+        risk_level=None, refusal="outside what this agent can ground"))
+
+    with caplog.at_level(logging.INFO):
+        at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception
+    lines = [r.getMessage() for r in caplog.records if "warm-up" in r.getMessage()]
+    assert len(lines) == 1, lines
+    assert re.fullmatch(r"report refused in \d+\.\d\d s; warm-up at start: off; at end: off",
+                        lines[0])
 
 
 def test_the_first_visit_wait_is_stated_next_to_the_assess_button(stubbed):
