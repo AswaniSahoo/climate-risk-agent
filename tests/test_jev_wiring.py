@@ -31,7 +31,9 @@ from rag.scope import scope_verdict
 from tests.jev_fakes import FAKE_KEY, enable_jev, relation_reply, triage_reply
 
 SILENT_OFF_TOPIC = "What percentage of GDP will the world lose by 2100?"
-SILENT_HOT = "How hot will it get in Delhi next week?"
+# No hazard word in it, for the parser or for stage 1: "temperatures" can be hot or
+# cold, so only a reader such as Jev can say this one is about heat.
+SILENT_HEAT = "How high will temperatures climb in Delhi next week?"
 
 REFUSE_POLICY = triage_reply(
     topic={"policy_or_economics": 0.97, "climate_science": 0.03}, about=0.02,
@@ -63,13 +65,13 @@ def _jev_requests(httpx_mock) -> list[httpx.Request]:
 def test_flag_off_makes_zero_jev_calls_even_with_a_key_set(httpx_mock, monkeypatch):
     monkeypatch.setenv("TYPESAFE_API_KEY", FAKE_KEY)  # a key alone must not turn anything on
 
-    for question in (SILENT_OFF_TOPIC, SILENT_HOT, "Will temperature extremes rise in Delhi?"):
+    for question in (SILENT_OFF_TOPIC, SILENT_HEAT, "Will temperature extremes rise in Delhi?"):
         parse_query(question)
         scope_verdict(question)
         triage_query(question)
 
     assert httpx_mock.get_requests() == []
-    assert parse_query(SILENT_HOT).triage is None  # the parse is exactly what it was
+    assert parse_query(SILENT_HEAT).triage is None  # the parse is exactly what it was
 
 
 # --- 2. stage 1 stays first and final ------------------------------------------------
@@ -139,7 +141,7 @@ def test_jev_down_is_todays_behaviour_and_says_why(httpx_mock, monkeypatch):
     monkeypatch.setenv("CRG_JEV_TRIAGE_BUDGET_S", "0.05")  # keep the test fast
     httpx_mock.add_response(status_code=529, is_reusable=True)
 
-    parsed = parse_query(SILENT_HOT)
+    parsed = parse_query(SILENT_HEAT)
 
     assert parsed.hazard is None and parsed.out_of_scope is None  # as with Jev off
     assert parsed.triage is not None
@@ -153,7 +155,7 @@ def test_a_bad_key_costs_one_round_trip_then_fails_fast(httpx_mock, monkeypatch)
     enable_jev(monkeypatch)
     httpx_mock.add_response(status_code=401, json={"detail": {"error_type": "authentication_error"}})
 
-    first = parse_query(SILENT_HOT)
+    first = parse_query(SILENT_HEAT)
     second = parse_query("Will it pour in Mumbai this week?")
 
     assert first.hazard is None and second.hazard is None
@@ -169,7 +171,7 @@ def test_a_paraphrase_the_parser_misses_becomes_a_hazard_with_its_probability(
     enable_jev(monkeypatch)
     httpx_mock.add_response(json=HINT_HEAT)
 
-    parsed = parse_query(SILENT_HOT)
+    parsed = parse_query(SILENT_HEAT)
 
     assert parsed.hazard is Hazard.HEATWAVE and parsed.place == "Delhi"
     assert parsed.horizon_days == 7  # the horizon stays lexical
@@ -230,7 +232,7 @@ def test_run_agent_nl_carries_the_triage_onto_the_report(httpx_mock, monkeypatch
     monkeypatch.setattr(nl_mod, "region_for", lambda lat, lon: AR6Region(acronym="SAS",
                                                                          name="South Asia"))
 
-    report = run_agent_nl(SILENT_HOT, use_climatology=False)
+    report = run_agent_nl(SILENT_HEAT, use_climatology=False)
 
     assert captured["hazard"] is Hazard.HEATWAVE
     assert report.triage is not None and report.triage.hazard_source == "jev"
@@ -271,7 +273,7 @@ def test_the_triage_endpoint_answers_without_running_the_pipeline(httpx_mock, mo
     httpx_mock.add_response(json=HINT_HEAT)
     monkeypatch.setattr(api_app, "run_agent_nl", lambda *a, **kw: pytest.fail("no pipeline"))
 
-    response = TestClient(api_app.app).post("/triage", json={"query": SILENT_HOT})
+    response = TestClient(api_app.app).post("/triage", json={"query": SILENT_HEAT})
 
     assert response.status_code == 200
     body = response.json()

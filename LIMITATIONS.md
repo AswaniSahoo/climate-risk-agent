@@ -30,7 +30,9 @@ possible, so a downstream consumer can check it programmatically.
   evidence lives elsewhere (WG2 adaptation, WG3 mitigation, the Atlas) are out
   of corpus and should be refused; the eval's out-of-corpus slice measures this.
 - **Retrieval quality is published, not perfect.** On the held-out test set
-  (105 questions, first exposure) the hybrid BM25+dense retriever gets headline
+  (105 questions; exposed in end-to-end runs on 2026-07-18, 2026-07-22 and
+  2026-11-11, retrieval runs on 2026-07-18, 2026-09-07 (the figures here) and
+  2026-11-11, and Jev triage of 37 of them on 2026-11-11) the hybrid BM25+dense retriever gets headline
   recall@3 87% / @5 91% / @10 96% on answerable questions. On the full
   60-question dev set (49 answerable, measured 2026-09-02) it gets recall@3 82%
   / @5 90% / @10 94%, against 76% / 82% / 88% for BM25-only, which is what a

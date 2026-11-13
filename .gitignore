@@ -46,3 +46,8 @@ evals/authoring/__pycache__/
 # MCP publisher tool (downloaded binary, not source)
 mcp-publisher.exe
 mcp-publisher.tar.gz
+
+# A local copy of the eval-cache-v1 release asset (corpus chunks + embeddings, 9 MB).
+# The Dockerfile fetches the published asset by sha256; this copy never belongs in a
+# commit, and .dockerignore keeps it out of the build context too.
+eval-cache-v*.tar.gz

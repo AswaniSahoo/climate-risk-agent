@@ -18,7 +18,7 @@
       "environmentVariables": [
         {
           "name": "GEMINI_API_KEY",
-          "description": "AI Studio API key. Either this or the Vertex variables must be set: retrieval is hybrid, so the dense half embeds every query.",
+          "description": "AI Studio API key, or set the Vertex variables instead. Without either, search_ipcc falls back to BM25-only retrieval and answer_ipcc cannot generate answers; its scope guard still refuses out-of-scope questions.",
           "isRequired": false,
           "isSecret": true,
           "format": "string"

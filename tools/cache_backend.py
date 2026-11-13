@@ -918,8 +918,8 @@ def _backend_from_env(env: Mapping[str, str]) -> CacheBackend:
         _log.info("cache backend: Upstash Redis (REST) with disk fallback at %s", root)
         return FallbackCache(UpstashRedisCache(url, token), disk)
     _log.info(
-        "cache backend: disk at %s (set UPSTASH_REDIS_REST_URL + "
-        "UPSTASH_REDIS_REST_TOKEN to share one cache across replicas)",
+        "cache backend: disk at %s (set CRG_CACHE_GCS_BUCKET, or UPSTASH_REDIS_REST_URL + "
+        "UPSTASH_REDIS_REST_TOKEN, to share one cache across replicas)",
         root,
     )
     return disk

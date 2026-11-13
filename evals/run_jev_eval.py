@@ -92,15 +92,16 @@ def probe_rows() -> list[dict[str, Any]]:
 
 def lexical_baseline(row: dict[str, Any]) -> None:
     """What today's code decides with every model off, written onto the row."""
-    from agent.nl import _HAZARD_PATTERNS
+    from agent.nl import lexical_hazard
     from rag.scope import has_supported_signal, out_of_scope_hazard
 
     out = out_of_scope_hazard(row["question"])
     row["stage1_out_of_scope"] = out
     row["stage1_refused"] = out is not None
     row["silent_bucket"] = out is None and not has_supported_signal(row["question"])
-    row["lexical_hazard"] = next(
-        (h.value for h, p in _HAZARD_PATTERNS.items() if p.search(row["question"])), None)
+    # the front door's own lexical reading, so a vocabulary change is scored as shipped
+    hazard = lexical_hazard(row["question"])
+    row["lexical_hazard"] = hazard.value if hazard else None
 
 
 def scope_scores(rows: list[dict[str, Any]], refused_key: str) -> dict[str, Any]:
