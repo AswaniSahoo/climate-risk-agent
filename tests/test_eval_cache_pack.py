@@ -296,3 +296,18 @@ def test_stale_vectors_are_cleared_before_the_new_ones_land(fake_repo):
     assert not stale.exists()
     assert len(list(fake_repo["embed_dir"].glob("*.npy"))) == 3  # only what was packed
 
+
+
+def test_a_vector_pack_left_from_an_earlier_install_is_removed(fake_repo):
+    """The pack (rag/embed.py) is read BEFORE the vector files, so one left from an
+    earlier asset would keep answering beside the vectors this install brings."""
+    from rag.embed import pack_path, write_pack
+
+    pack(fake_repo["archive"])
+    stale_pack = pack_path(fake_repo["embed_dir"])
+    write_pack(stale_pack, {"f" * 64: np.zeros(768, dtype=np.float32)})
+
+    unpack_eval_cache.unpack(fake_repo["archive"])
+
+    assert not stale_pack.exists()
+    assert len(list(fake_repo["embed_dir"].glob("*.npy"))) == 3

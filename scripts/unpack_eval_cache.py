@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from rag.corpus import CHUNK_CACHE, _fingerprint
-from rag.embed import DIMS, MODEL
+from rag.embed import DIMS, MODEL, pack_path
 from scripts.pack_eval_cache import (
     ARCHIVE_NAME,
     ASSET_NAME,
@@ -167,6 +167,10 @@ def unpack(archive_path: Path) -> dict:
             # not overwritten by the move — they linger and keep answering.
             for stale in EMBED_CACHE_DIR.glob("*.npy"):
                 stale.unlink()
+            # Same for the vector pack, which rag/embed.py reads BEFORE the files:
+            # one left from an earlier install would keep answering beside the
+            # vectors this one brings. scripts/pack_vectors.py builds a fresh one.
+            pack_path(EMBED_CACHE_DIR).unlink(missing_ok=True)
 
             moved = 0
             try:

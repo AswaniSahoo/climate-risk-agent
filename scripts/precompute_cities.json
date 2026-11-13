@@ -1,5 +1,5 @@
 {
- "_note": "Cities whose ERA5 hazard fits scripts/precompute_climatology.py ships in tools/cache_seed/climatology.json. Entries with preset=true are the UI preset buttons at the exact coordinates the button sends (ui/app.py LOCATIONS; tests/test_precompute_climatology.py keeps the two in step). Every other entry is a place name as a person would type it; `--resolve` pins the coordinates the Open-Meteo geocoder returns for that query, which is what the typed-place path then asks for, so the fit key matches. The six presets come first, then large Indian cities, then large world cities; order is the order a paced run fills them in. To extend: append {\"name\", \"country\", \"query\"} and run --resolve.",
+ "_note": "Cities whose ERA5 hazard fits scripts/precompute_climatology.py ships in tools/cache_seed/climatology.json. Entries with preset=true are the UI preset buttons at the exact coordinates the button sends (ui/app.py LOCATIONS; tests/test_precompute_climatology.py keeps the two in step). Every other entry is a place name as a person would type it; `--resolve` pins the coordinates the Open-Meteo geocoder returns for that query, which is what the typed-place path then asks for, so the fit key matches. The six presets come first, then the same six names as a person types them (a typed \"Berlin\" geocodes to 52.52437,13.41053, not the button's 52.52,13.4, so its fits sit under a key of their own), then large Indian cities, then large world cities; order is the order a paced run fills them in. To extend: append {\"name\", \"country\", \"query\"} and run --resolve.",
  "cities": [
   {
    "name": "Rourkela",
@@ -77,6 +77,13 @@
    "query": "Kolkata",
    "latitude": 22.56263,
    "longitude": 88.36304
+  },
+  {
+   "name": "Berlin",
+   "country": "Germany",
+   "query": "Berlin",
+   "latitude": 52.52437,
+   "longitude": 13.41053
   },
   {
    "name": "Bengaluru",
@@ -630,13 +637,6 @@
    "query": "Melbourne",
    "latitude": -37.814,
    "longitude": 144.96332
-  },
-  {
-   "name": "Berlin",
-   "country": "Germany",
-   "query": "Berlin",
-   "latitude": 52.52437,
-   "longitude": 13.41053
   },
   {
    "name": "Rome",

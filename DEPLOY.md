@@ -15,9 +15,12 @@ Open http://localhost:7860.
   whatever `data/cache` the build context holds, fetches the `eval-cache-v1`
   release asset pinned by sha256 (`ARG EVAL_CACHE_SHA256` in the Dockerfile; a
   mismatch fails the build), installs it through `scripts/unpack_eval_cache.py`
-  (which refuses a manifest that does not match this repo), and its last step,
-  `scripts/check_baked_index.py`, fails the build unless every chunk in the
-  baked `chunks.json` has its document vector on disk (2,730 of 2,730 today),
+  (which refuses a manifest that does not match this repo), packs the vectors
+  into one file, `data/cache/embeddings.pack.npy` (`scripts/pack_vectors.py`;
+  the runtime reads it instead of 2,730 vector files, which took 17.5 s on
+  Cloud Run gen2), and its last step, `scripts/check_baked_index.py`, fails the
+  build unless every chunk in the baked `chunks.json` has its document vector
+  on disk (2,730 of 2,730 today) and the same vector in the pack, bit for bit,
   so no cold container ever embeds the corpus through the API.
 - Without Gemini auth the retrieval layer falls back to BM25-only **loudly**
   (measured on the 60-question dev set: 76% vs 82% headline R@3) and `answer_ipcc`-style LLM answers are
@@ -44,7 +47,7 @@ gcloud run deploy climate-risk-agent \
   --execution-environment gen2 \
   --port 7860 \
   --allow-unauthenticated \
-  --min-instances 1 \
+  --min-instances 0 \
   --memory 2Gi --cpu 1 --concurrency 8 \
   --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=climate-risk-agent,GOOGLE_CLOUD_LOCATION=global,CRG_GENERATE_MODEL=gemini-2.5-flash,CRG_EMBED_MODEL=gemini-embedding-2
 ```
@@ -60,13 +63,15 @@ gcloud run deploy climate-risk-agent \
   locally. The Dockerfile now pins both base images by digest.
 - `--region us-central1` is where the *Cloud Run service* (the container host)
   runs, independent of the Vertex model endpoint (`global`).
-- **`--min-instances 1`** keeps one warm instance, so demo clicks never pay a
-  cold start. It is the largest line on the bill (see Cost below); drop it to 0
-  once the measured cold start is acceptable.
+- **`--min-instances 0`** lets the service scale to zero, so idle time costs
+  about $0 (see Cost below). The first request after idle pays a cold start,
+  whose length is not recorded in this repo (`scripts/measure_coldstart.py`
+  times one).
 - Cold start itself is now attacked at the image, not the instance count: the
   Dockerfile is two-stage (no uv or package cache in the runtime layer) and the
-  UI boots without scipy, langgraph or google-genai, which are imported only
-  when a report is actually requested.
+  UI boots without scipy, langgraph or google-genai, so the first page never
+  waits for them; once it is drawn, one background thread imports langgraph and
+  scipy for the first report (`agent/warmup.py`; `CRG_WARMUP=off` turns it off).
 - `--port 7860` matches the container's `EXPOSE` / Streamlit port.
 - The command above sets no `--service-account`, so the service runs as the
   Compute Engine default service account (it does today: checked read-only on
@@ -86,7 +91,9 @@ gcloud run deploy climate-risk-agent \
   both to share one cache across replicas; with neither set every instance
   keeps its own disk cache and `tools/cache_backend.py` logs which backend it
   chose. On 2026-11-11 the live service carried neither name, so at
-  `--min-instances 0` its cache dies with every instance. They also give
+  `--min-instances 0` each instance's disk cache dies with it; only the entries
+  shipped in the image (below) and a bucket set by `CRG_CACHE_GCS_BUCKET` (next
+  item) outlive an instance. The Upstash pair also gives
   the spend guard one budget for every instance (see "Spend guard"); the
   token is a secret, so it never goes in `--set-env-vars`.
 - **Shared cache on Cloud Storage: option A, chosen over Upstash by Aswani
@@ -209,23 +216,25 @@ GiB-second, so an always-on instance costs:
 
 | min-instance shape | idle cost per instance per month |
 | --- | --- |
-| 2 vCPU + 4 GiB (the shape deployed today) | about $39 |
+| 2 vCPU + 4 GiB (the shape deployed on 2026-07-23) | about $39 |
 | 1 vCPU + 2 GiB | about $19 |
 | `--min-instances 0` | about $0 |
 
-The service deployed on 2026-07-23 runs one min instance at the first row's
-shape, so its monthly floor is about $39 before a single request is served. The
-command above already asks for the second row.
+The service deployed on 2026-07-23 ran one min instance at the first row's
+shape, a monthly floor of about $39 before a single request was served. Read on
+2026-11-13 (`gcloud run services describe` and `revisions describe`), the
+revision serving all traffic runs the second row's shape with no minimum
+instance and maxScale 1, so its idle floor is the last row's.
 
-Measured over 30 days: 2,640 requests, memory p99 at 13% of the 4 GiB
-allocation, CPU p99 at 1%. The shape is provisioned for a load that is not
-there.
+Measured over 30 days on that earlier shape: 2,640 requests, memory p99 at 13%
+of the 4 GiB allocation, CPU p99 at 1%. It was provisioned for a load that was
+not there.
 
-Two steps, in order. Resize now, to the 1 vCPU + 2 GiB row, which the p99
-figures already cover. Then set `--min-instances 0` once the two-stage image's
-cold start is measured under 30 s (`scripts/measure_coldstart.py` times it
-against a 1 vCPU / 2 GiB container), because below that a scale-to-zero demo
-still opens fast enough not to read as broken.
+Both steps are done: the resize to the 1 vCPU + 2 GiB row, which the p99
+figures already cover, and `--min-instances 0`. The condition set for the
+second step, a cold start measured under 30 s (`scripts/measure_coldstart.py`
+times it against a 1 vCPU / 2 GiB container), has no recorded result in this
+repo, so the cold start a scale-to-zero demo pays is not known here.
 
 ## Spend guard
 
@@ -355,11 +364,14 @@ The bucket binding failed once with "does not exist in the resource's
 hierarchy": the new custom role had not propagated yet. It worked on retry, so
 the script retries that step, up to six times, 30 s apart.
 
-Not done yet: the deploy. It needs the Cloud Storage cache backend that reads
-`CRG_CACHE_GCS_BUCKET`, so `candidate` refuses to run from a checkout without
-it. The service then moves to the new identity in two steps: `candidate`
-deploys a revision that takes no traffic, under the tag `candidate`; once that
-revision checks out at its tagged URL, `promote` sends it all traffic.
+The Cloud Storage cache backend that reads `CRG_CACHE_GCS_BUCKET` is in
+`tools/cache_backend.py`, and `candidate` refuses to run from a checkout
+without it. Read on 2026-11-13, revision `climate-risk-agent-00033-vuy` carries
+the tag `candidate` and no traffic, and `climate-risk-agent-00031-nil` serves
+all of it; which code 00031-nil runs is not recorded here. The service moves
+to the new identity in two steps: `candidate` deploys a revision that takes no
+traffic, under the tag `candidate`; once that revision checks out at its tagged
+URL, `promote` sends it all traffic.
 
 Read-only state before the changes (2026-11-11, names only): service
 `climate-risk-agent` in `us-central1` (plus `vera-bot` in `asia-south1` in the

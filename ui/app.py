@@ -595,21 +595,42 @@ def _run_with_panel(work: Any) -> tuple[Any, str | None]:
     plain sentence when it did not. The traceback goes to the log, never onto
     the page, which is the whole point of `error_sentence`.
     """
+    from agent.warmup import status as warmup_status
+
     started = time.perf_counter()
+    warm_at_start = warmup_status()  # read before the run: a run can wait on the warm-up
     with st.status("Building your report…", expanded=True) as status:
         try:
             result = work(_StepPanel(status))
         except Exception as exc:
             _log.exception("report run failed")
+            _log_run("failed", time.perf_counter() - started, warm_at_start)
             sentence = error_sentence(exc)
             status.update(label=sentence, state="error", expanded=True)
             return None, sentence
+        elapsed = time.perf_counter() - started
         if getattr(result, "refusal", None):
+            _log_run("refused", elapsed, warm_at_start)
             title = "Refused: the question is outside what this agent can ground"
         else:
-            title = f"Report ready in {format_elapsed(time.perf_counter() - started)}"
+            _log_run("ready", elapsed, warm_at_start)
+            title = f"Report ready in {format_elapsed(elapsed)}"
         status.update(label=title, state="complete", expanded=False)
         return result, None
+
+
+def _log_run(outcome: str, seconds: float, warm_at_start: str) -> None:
+    """One server-log line per run: its outcome, its time, and where the warm-up was.
+
+    The warm-up (agent/warmup.py) is for the first report a process serves. The
+    state at the start says whether the run could have waited on it; the state at
+    the end says whether it had finished by then. Together they show in the Cloud
+    Run log whether a first report ran beside the warm-up.
+    """
+    from agent.warmup import status as warmup_status
+
+    _log.info("report %s in %.2f s; warm-up at start: %s; at end: %s",
+              outcome, seconds, warm_at_start, warmup_status())
 
 
 def _run_point(sel: Any, haz: Hazard, horizon_days: int) -> tuple[Any, str | None, Any]:
@@ -972,8 +993,25 @@ if report is not None:
             st.markdown(f"- **{p.source}**: `{p.url}` at {p.retrieved_at:%Y-%m-%d %H:%M} UTC")
             st.json(p.params, expanded=False)
 
+    _report_json = report.model_dump_json(indent=2)
     with st.expander("Raw RiskReport JSON (the contract)", icon=":material/code:"):
-        st.code(report.model_dump_json(indent=2), language="json")
+        st.code(_report_json, language="json")
+
+    # Keep the report, or flag a wrong number in it (ui/report_export.py). Saving
+    # must not rerun the page: on_click="ignore" hands over the file and stops.
+    from ui.report_export import data_correctness_url, report_file_name
+
+    _save_col, _flag_col = st.columns(2)
+    _save_col.download_button(
+        "Download this report (JSON)", data=_report_json, file_name=report_file_name(report),
+        mime="application/json", on_click="ignore", icon=":material/download:",
+        key="download_report",
+    )
+    if report.refusal is None:  # a refusal has no number or citation to flag
+        _flag_col.link_button(
+            "Report a wrong number or citation", data_correctness_url(report),
+            icon=":material/flag:", help="Opens the data-correctness issue form on GitHub.",
+        )
 
 # First visit, or nothing came back: the method in three lines and the example report.
 if report is None and failure is None:
@@ -991,3 +1029,11 @@ if report is None and failure is None:
     if _side is not None:
         with _side, st.container(border=True, key="cra_specimen"):
             st.markdown(specimen_card(*specimen_plot()), unsafe_allow_html=True)
+
+# Warm the report path's heavy imports on one background thread, once per process, now that
+# the page is drawn (agent/warmup.py). Skipped under pytest, like the self-tests above:
+# tests/test_import_hygiene.py checks that importing this script loads none of them.
+if not _os.environ.get("PYTEST_CURRENT_TEST"):
+    from agent.warmup import start as _start_warmup  # noqa: E402
+
+    _start_warmup()

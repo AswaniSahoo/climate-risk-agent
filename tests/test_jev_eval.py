@@ -54,6 +54,19 @@ def test_todays_baseline_is_measured_offline():
     assert sum(r["silent_bucket"] for r in rows) == 16
 
 
+def test_the_lexical_baseline_is_the_front_doors_own_reading():
+    """Scored as the front door reads with every model off: everyday words count, and a
+    word beside a hazard the guard names, or a marine heatwave, names none of ours."""
+    rows = [{"question": q} for q in (
+        "How windy will it get in Berlin over the next 7 days?",
+        "Will hot, dry and windy weather raise the wildfire risk near Athens?",
+        "What is the marine heatwave risk near Perth next week?",
+    )]
+    for row in rows:
+        ev.lexical_baseline(row)
+    assert [r["lexical_hazard"] for r in rows] == ["wind", None, None]
+
+
 def test_scores_count_both_error_kinds():
     rows = [
         {"id": "a", "should_refuse": True, "refused": True},
