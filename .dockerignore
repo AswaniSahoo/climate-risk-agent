@@ -67,6 +67,10 @@ assets/*
 # Downloaded publisher binary for the MCP registry, not part of the app.
 mcp-publisher*
 
+# A local copy of the eval-cache asset: pack_eval_cache.py writes it here and
+# unpack_eval_cache.py reads it from here. The build fetches its own, by sha256.
+eval-cache-v*.tar.gz
+
 # Local run logs and the local key/value cache (cached answers and fits from
 # this machine's runs): the app recreates both on first write.
 data/telemetry

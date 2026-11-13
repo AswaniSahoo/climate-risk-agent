@@ -102,7 +102,7 @@ Held-out results, on the configuration this release deploys:
 - Citation validity 50/52 correct answers (96%). Numeric provenance 42/52 (81%), down from 88% in the previous run.
 - The IPCC answer step cost $0.26 for the run, about $0.0025 per question, p50 generation latency 3.2 s.
 - The previous run (2026-07-22, before the fence): 49 correct answers, 35 correct refusals, 21 false refusals, 0 false answers, citation validity 47/49, numeric provenance 43/49.
-- Exposures: end-to-end runs on 2026-07-18, 2026-07-22 and 2026-11-11, retrieval on 2026-09-07, and Jev triage on 2026-11-11 (37 questions). A first 2026-11-11 attempt stopped after 12 model calls on a local call cap and was discarded, so those questions reached the model twice that day.
+- Exposures: end-to-end runs on 2026-07-18, 2026-07-22 and 2026-11-11, retrieval runs on 2026-07-18, 2026-09-07 and 2026-11-11 (`evals/results/retrieval-test-*.json`), and Jev triage on 2026-11-11 (37 questions). A first 2026-11-11 attempt stopped after 12 model calls on a local call cap and was discarded, so those questions reached the model twice that day.
 
 **Reranking and query rewriting: measured, kept off.** Both are wired as `HybridRetriever` keyword arguments and both default to off. Measured on the 45-question dev set (34 answerable), before the `cid-table` questions landed:
 
@@ -126,18 +126,20 @@ No arm beat the baseline at any k, and the cheapest of them costs about 100 time
 
 Zero false answers in every arm, and no arm gained anything, so the default stays off. The embed arm's one false refusal carries lexical hazard vocabulary and never reached stage 2. `embed` is the arm to promote, once a held-out run confirms the matrix holds. The full reasoning is in [LIMITATIONS.md](LIMITATIONS.md).
 
-**Jev question triage and citation check: measured, kept off.** `CRG_JEV=off|triage|verify|all` (default `off`) lets TypeSafe's Jev, a model that answers typed questions with probabilities instead of text, do two jobs. Triage reads the questions stage 1 cannot see: it can refuse a confident off-topic one before retrieval, or name the hazard in a paraphrase such as "How hot will it get in Delhi next week?", which the front door refuses today. The citation check asks, for each cited page, whether it supports the IPCC statement, and annotates the report with a strength per citation. Stage 1 stays first and final, code decides on fixed thresholds, and any Jev failure falls back to today's behaviour ([adr/0002](adr/0002-jev-question-triage-and-citation-support.md)). Measured on 2026-11-11 on the dev set and the 14 stage-2 paraphrase probes, through the Experiential Labs gateway (`JEV_BASE_URL=https://api.experientiallabs.ai`, model `jev-latest`; [report](evals/results/jev-dev-2026-11-11.md)):
+**Jev question triage and citation check: measured, kept off.** `CRG_JEV=off|triage|verify|all` (default `off`) lets TypeSafe's Jev, a model that answers typed questions with probabilities instead of text, do two jobs. Triage reads the questions stage 1 cannot see: it can refuse a confident off-topic one before retrieval, or name the hazard in a question whose words name none, which the front door refuses with the flag off. The citation check asks, for each cited page, whether it supports the IPCC statement, and annotates the report with a strength per citation. Stage 1 stays first and final, code decides on fixed thresholds, and any Jev failure falls back to today's behaviour ([adr/0002](adr/0002-jev-question-triage-and-citation-support.md)). Measured on 2026-11-11 on the dev set and the 14 stage-2 paraphrase probes, through the Experiential Labs gateway (`JEV_BASE_URL=https://api.experientiallabs.ai`, model `jev-latest`; [report](evals/results/jev-dev-2026-11-11.md)):
 
-| measure | today, lexical only | with Jev |
+| measure | lexical only, 2026-11-11 | with Jev |
 | --- | --- | --- |
 | scope decided right, dev set | 58/60, no false refusals | 60/60, no false refusals |
 | scope decided right, the 14 paraphrase probes | 7/14 | 14/14 |
 | hazard named by the front door, dev questions with one | 39/42 | 41/42, none wrong |
 | hazard named, in-scope paraphrase probes | 1/7 | 6/7, none wrong |
 
+Since 2026-11-12 the lexical parser also reads everyday words (windy, gusty, gale, hot, scorching, sweltering, deluge, cloudburst), but only where the scope guard names no unsupported hazard. With the flag off the front door now names 41/42 dev and 6/7 probe hazards, the sets the words were chosen on and the same items as with Jev, and 63/77 on the held-out set against 57/77, none wrong and no out-of-scope refusal lost ([report](evals/results/hazard-words-2026-11-12.md)).
+
 The two policy questions that only Gemini refused today (an NDC pledge and GDP lost to warming) are now refused before retrieval, and no decision changed with the option order reversed or across two uncached runs. Each triage call added a median 640 ms and a p95 of 2,055 ms, and only for questions with no hazard word. On 110 mechanically labelled citation pairs, Jev's top answer matched the label on 105 and its strength label on 101 (AUC 0.9955); two of the misses point at what look like wrong Chapter 12 labels in the dev set rather than at Jev. 244 calls cost $0.009 at the list price, and the gateway's free plan reported $0. Re-run with `uv run python -m evals.run_jev_eval --task all --order-check --repeats 2` (dev set only, $2 and token caps, paced for the gateway's 10-a-minute plan). With the flag on, `POST /triage` reads a question (hazard, horizon, place, and the refusal `/query` would give) without running the report, and the UI reads the question before the run, refuses an out-of-scope one at once, shows a hazard Jev named with its probability and any other hazard one click away, and labels each citation's evidence ([docs/jev-ui-integration.md](docs/jev-ui-integration.md)).
 
-**Both stay off.** Aswani accepted triage's gateway latency, but the one-time held-out check (`evals/run_jev_heldout.py`, 2026-11-11, [report](evals/results/jev-triage-test-2026-11-11.md)), which sent only the 37 of 105 held-out questions that triage itself would send, failed the ADR's hard gate of no new false refusal: SP2-08, an answerable question on 2020 COVID-19 emission cuts, air pollution and radiative forcing, was refused at the guard as air quality. Otherwise it held: no wrong hazard (73/77 named, against 57/77 today), 98/105 decided right at scope against 97/105, and 36 of 37 decisions kept with the options reversed. Its p95 latency per call was 2,855 ms, against 2,055 ms on the dev set. Of the two suspect citation labels, CID-06's parsed sentence states river flooding, not heavy precipitation, and CID-11's ESAF clause states cyclone landfalls, not mean wind speed; `rag/cid.py` misread the second, and now leaves such a clause out. With the labels corrected, a re-run met both accuracy gates (12 of 14 true Chapter 12 claims strong, 18 of 18 flipped claims and premises contradicted, 37 of 38 cross pairs weak, AUC 0.998, [report](evals/results/jev-dev-2026-11-11-verify-relabelled.md)), but the check on real Gemini answers has not run. Both runs together cost $0.008 at the list price.
+**Both stay off.** Aswani accepted triage's gateway latency, but the one-time held-out check (`evals/run_jev_heldout.py`, 2026-11-11, [report](evals/results/jev-triage-test-2026-11-11.md)), which sent only the 37 of 105 held-out questions that triage itself would send, failed the ADR's hard gate of no new false refusal: SP2-08, an answerable question on 2020 COVID-19 emission cuts, air pollution and radiative forcing, was refused at the guard as air quality. Otherwise it held: no wrong hazard (73/77 named, against 57/77 for the lexical parser that day), 98/105 decided right at scope against 97/105, and 36 of 37 decisions kept with the options reversed. Its p95 latency per call was 2,855 ms, against 2,055 ms on the dev set. Of the two suspect citation labels, CID-06's parsed sentence states river flooding, not heavy precipitation, and CID-11's ESAF clause states cyclone landfalls, not mean wind speed; `rag/cid.py` misread the second, and now leaves such a clause out. With the labels corrected, a re-run met both accuracy gates (12 of 14 true Chapter 12 claims strong, 18 of 18 flipped claims and premises contradicted, 37 of 38 cross pairs weak, AUC 0.998, [report](evals/results/jev-dev-2026-11-11-verify-relabelled.md)), but the check on real Gemini answers has not run. Both runs together cost $0.008 at the list price.
 
 Every eval artifact records the model that produced it, because a model swap is
 invisible to a test suite. When the answering model was changed without
@@ -167,7 +169,7 @@ Three caveats travel with these numbers. The reference series is the model's own
 
 ## Operations
 
-- One shared cache sits behind the climatology fit, the forecast and the answer cache: Upstash Redis over REST when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set, disk otherwise. `tools/cache_backend.py` logs the backend it chose, and `scripts/prewarm.py` fills it before a demo.
+- One shared cache sits behind the climatology fit, the forecast and the answer cache. Entries shipped in `tools/cache_seed/` answer first. Behind them: with `CRG_CACHE_GCS_BUCKET` set, this instance's disk and then that Cloud Storage bucket; otherwise Upstash Redis over REST, with disk as its fallback, when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set; otherwise disk alone. `tools/cache_backend.py` logs the backend it chose, and `scripts/prewarm.py` fills it before a demo.
 - Structured logging and per-request telemetry, measured at the single SDK seam every model call passes through: latency, tokens, retries and cost. Reasoning tokens are counted as billed output, and a model with no price entry reports its cost as unknown rather than as zero. The in-memory event ring is bounded; the JSONL sink keeps the long history.
 - Cloud Run idle cost per min-instance shape, the measured 30-day load and the resize plan are in [DEPLOY.md](DEPLOY.md).
 - Async FastAPI service (`POST /report`, `POST /query`, and `POST /triage` for reading a question without running it) with per-request API-key access control and a `/metrics` endpoint.
@@ -194,8 +196,9 @@ served it.
 
 The first report for a new place takes roughly 1 to 2 minutes, because 60+ years
 of ERA5 daily extremes are fetched and the GEV fitted once for that point.
-Afterwards the fit is cached, Redis when configured and disk otherwise, and
-repeat visits return in well under a second.
+Afterwards the fit is cached, on disk and in the Cloud Storage bucket when
+`CRG_CACHE_GCS_BUCKET` is set, in Redis when that is configured instead, and on
+disk otherwise, and repeat visits return in well under a second.
 
 With Docker:
 
@@ -238,9 +241,11 @@ closed-world hint, publishes an `outputSchema`, and is listed in a deterministic
 order. Two tests boot each server as a real subprocess and speak the protocol to
 it, rather than calling the tool functions in-process.
 
-Retrieval is hybrid, so both IPCC tools embed the query and need credentials in
-the server process: either `GOOGLE_GENAI_USE_VERTEXAI=true` with
-`GOOGLE_CLOUD_PROJECT`, or `GEMINI_API_KEY`.
+Retrieval is hybrid, so both IPCC tools embed the query with credentials in the
+server process: either `GOOGLE_GENAI_USE_VERTEXAI=true` with
+`GOOGLE_CLOUD_PROJECT`, or `GEMINI_API_KEY`. Without them `search_ipcc` still
+answers, BM25-only and logged as such (dev-set R@3 76% against 82% hybrid), and
+`answer_ipcc` can only refuse out-of-scope questions or return a cached answer.
 
 A client does not hand the server your shell. It passes a short allow-list of
 variables (`PATH`, `APPDATA`, `TEMP`, ...) so that a server cannot harvest your
@@ -257,9 +262,14 @@ To explore the tools by hand: `uv run mcp dev tools/ipcc_mcp.py`.
 
 The IPCC RAG server is published on the
 [official MCP registry](https://registry.modelcontextprotocol.io) as
-`io.github.AswaniSahoo/climate-ipcc-rag` (v0.1.0), backed by a public OCI image
-on GHCR (`ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0`). Any MCP client that
-supports Docker/OCI transport can install it directly from the registry.
+`io.github.AswaniSahoo/climate-ipcc-rag` (v0.1.0). The listing points at the OCI
+image `ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0` on GHCR, which is not
+publicly pullable at the moment: an anonymous pull is refused (checked
+2026-11-13), so installing the server from the registry fails today. Run it
+from a clone instead: `uv sync`, then the `climate-ipcc-rag` entry in the client
+config above (`uv run --no-sync python -m tools.ipcc_mcp`). To run the image,
+build it locally with the two `docker build` commands in
+[DEPLOY.md](DEPLOY.md#publish-the-mcp-server-to-the-official-mcp-registry).
 
 ![IPCC RAG MCP server listed on the official MCP registry with status Active, showing title, description, and linked repository](assets/mcp-registry-listing.png)
 

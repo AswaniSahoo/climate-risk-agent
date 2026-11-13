@@ -51,6 +51,8 @@ AGENTS.md
 .mcp.json
 *.pkl
 mcp-publisher*
+# local copy of the eval-cache asset: the build fetches its own, by sha256
+eval-cache-v*.tar.gz
 data/telemetry
 # the UI reads the favicon (brand logo); the rest of assets/ is README screenshots
 assets/*

@@ -208,6 +208,17 @@ def test_env_without_credentials_selects_disk(tmp_path, caplog):
     assert "disk" in caplog.text
 
 
+def test_the_disk_only_hint_names_the_cloud_storage_bucket_first(tmp_path, caplog):
+    """Production shares its cache through a Cloud Storage bucket, so the startup
+    hint names that setting before the Upstash pair."""
+    with caplog.at_level(logging.INFO):
+        _backend_from_env({"CRG_CACHE_DIR": str(tmp_path)})
+
+    hint = next(r.getMessage() for r in caplog.records if "cache backend: disk at" in r.getMessage())
+    assert "CRG_CACHE_GCS_BUCKET" in hint
+    assert hint.index("CRG_CACHE_GCS_BUCKET") < hint.index("UPSTASH_REDIS_REST_URL")
+
+
 def test_env_with_credentials_selects_redis_with_disk_fallback(tmp_path, caplog):
     env = {
         "CRG_CACHE_DIR": str(tmp_path),
