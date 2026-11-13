@@ -18,7 +18,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from tools.hazard_stats import ReturnLevel, _fit
+from tools import hazard_stats
+from tools.hazard_stats import ReturnLevel, _fit, _gev_logpdf_standard, _gev_support
 
 # scipy is imported inside the functions below, not here: ~12 s on a cold
 # interpreter, and nothing in the UI's boot path fits a GEV.
@@ -53,6 +54,28 @@ class GevTrendFit:
         return self.mu0 + self.slope * (x - self.x_mean)
 
 
+def _gev_loglik(y: np.ndarray, c, loc, sigma) -> float:
+    """genextreme.logpdf(y, c, loc=loc, scale=sigma).sum(), operation for operation.
+
+    The unrolled form of scipy's rv_continuous.logpdf (see tools/hazard_stats.py
+    for why, and for the version it is pinned to): NaN where scipy puts its
+    badvalue, -inf outside the support, the density on the rest, summed the same.
+    """
+    x = (y - loc) / sigma
+    valid = bool(np.isfinite(c)) and sigma > 0  # scipy's cond0: _argcheck(c) & (scale > 0)
+    out = np.full(x.shape, -np.inf)
+    if not valid:
+        out[:] = np.nan
+        return out.sum()
+    a, b = _gev_support(c)
+    with np.errstate(invalid="ignore"):
+        inside = (a <= x) & (x <= b)
+    out[np.isnan(x)] = np.nan
+    if inside.any():
+        out[inside] = _gev_logpdf_standard(x[inside], c) - np.log(sigma)
+    return out.sum()
+
+
 def _mle(
     y: np.ndarray, xc: np.ndarray, x0: Sequence[float]
 ) -> tuple[np.ndarray, float]:
@@ -65,10 +88,15 @@ def _mle(
     from scipy.optimize import minimize
     from scipy.stats import genextreme
 
+    unrolled = hazard_stats.unrolled_active()
+
     def nll(params: np.ndarray) -> float:
         c, mu0, slope, log_sigma = params
         sigma = float(np.exp(log_sigma))
-        ll = genextreme.logpdf(y, c, loc=mu0 + slope * xc, scale=sigma).sum()
+        if unrolled:
+            ll = _gev_loglik(y, c, mu0 + slope * xc, sigma)
+        else:
+            ll = genextreme.logpdf(y, c, loc=mu0 + slope * xc, scale=sigma).sum()
         return float(-ll) if np.isfinite(ll) else float("inf")
 
     result = minimize(

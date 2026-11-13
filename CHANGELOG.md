@@ -51,6 +51,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   sweltering, deluge and cloudburst, only where the scope guard names no unsupported hazard,
   and never "storm". Lexical hazard naming went from 57/77 to 63/77 on the held-out set, none
   wrong (evals/results/hazard-words-2026-11-12.md).
+- Made each GEV likelihood call about four times cheaper: `tools/hazard_stats.py` and
+  `tools/gev_trend.py` fit through an unrolled genextreme likelihood that runs scipy
+  1.17.1's own elementwise operations (74 to 92 us down to 18 to 20 us per call on 63
+  annual maxima, measured 2026-11-12). `tests/test_gev_unrolled.py` holds it to scipy bit
+  for bit; on any other scipy version every fit takes scipy's own path. The Berlin rows of
+  `tools/cache_seed/climatology.json` were refit under the new code fingerprint. The
+  fingerprint is part of every hazard-fit cache key, so every other cached fit (disk or
+  bucket) misses after this deploys and is refit, with a fresh ERA5 fetch, on its first
+  request; `scripts/prewarm.py` refills them ahead of visitors.
+- Added an import warm-up (`agent/warmup.py`): once the UI's first page is drawn, one
+  background thread imports the report path's heavy modules (`agent.graph`, `agent.nl`,
+  `scipy.stats`), so the first report a process serves should not wait for them; the API
+  starts it too, where it only adds `scipy.stats`. A report that arrives mid-import waits
+  on Python's import lock and gets the same module. Each UI run logs its time and the
+  warm-up's state at its start and end; `CRG_WARMUP=off` turns it off.
 
 ## [1.0.0] - 2026-09-08
 

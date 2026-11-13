@@ -59,7 +59,10 @@ async def _lifespan(app: FastAPI):
     # model/region is unreachable, instead of silently serving BM25-only.
     # Skipped under pytest so the TestClient startup stays hermetic/offline.
     if not os.environ.get("PYTEST_CURRENT_TEST"):
+        from agent.warmup import start as _start_warmup
         from rag.gemini_client import embedding_available
+
+        _start_warmup()  # the report path's heavy imports, in the background (agent/warmup.py)
 
         ok, detail = embedding_available()
         if ok:

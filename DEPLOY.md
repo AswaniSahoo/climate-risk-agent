@@ -68,8 +68,9 @@ gcloud run deploy climate-risk-agent \
   once the measured cold start is acceptable.
 - Cold start itself is now attacked at the image, not the instance count: the
   Dockerfile is two-stage (no uv or package cache in the runtime layer) and the
-  UI boots without scipy, langgraph or google-genai, which are imported only
-  when a report is actually requested.
+  UI boots without scipy, langgraph or google-genai, so the first page never
+  waits for them; once it is drawn, one background thread imports langgraph and
+  scipy for the first report (`agent/warmup.py`; `CRG_WARMUP=off` turns it off).
 - `--port 7860` matches the container's `EXPOSE` / Streamlit port.
 - The command above sets no `--service-account`, so the service runs as the
   Compute Engine default service account (it does today: checked read-only on

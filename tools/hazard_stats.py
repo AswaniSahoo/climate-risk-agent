@@ -10,8 +10,10 @@ annual maxima is a separate layer (wired next).
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from enum import Enum
+from functools import lru_cache
 
 import numpy as np
 from pydantic import BaseModel
@@ -20,12 +22,125 @@ from pydantic import BaseModel
 # on a cold interpreter and the Streamlit UI process only needs it once a
 # report is actually requested. Import is cached, so the cost lands once.
 
+_log = logging.getLogger(__name__)
+
+# --- the unrolled genextreme likelihood ----------------------------------------
+#
+# A fit with its bootstrap calls the GEV likelihood 50,000 to 100,000 times on
+# about 63 annual maxima, and scipy's generic distribution machinery spends 74 to
+# 92 us a call on argument checks, broadcasting and masks around a few dozen
+# multiplications: 5 to 9 s a hazard on one core (measured 2026-11-12). The
+# functions below run the same elementwise operations scipy runs for genextreme,
+# in the same order and on the same floats (scipy/stats/_continuous_distns.py
+# genextreme_gen._get_support and _logpdf; scipy/stats/_distn_infrastructure.py
+# rv_continuous.logpdf, fit, _penalized_nnlf, _nnlf_and_penalty and _sum_finite),
+# so the optimizer sees the same number at every step and lands on the same
+# parameters, at 18 to 20 us a call. Same start, same fmin and minimize calls,
+# same draws: the fits and their bands are bit-identical to scipy's own, which
+# tests/test_gev_unrolled.py checks against scipy itself.
+#
+# That holds for the scipy it was verified on and no other: on any other version
+# `unrolled_active` is False and every fit takes scipy's own path.
+UNROLLED_FOR_SCIPY = "1.17.1"
+
+_XMIN = np.finfo(float).tiny  # scipy/stats/_constants.py _XMIN
+_LOGXMAX = np.log(np.finfo(float).max)  # and _LOGXMAX
+
+
+@lru_cache(maxsize=1)
+def unrolled_active() -> bool:
+    """True on the scipy the unrolled likelihood was verified on. Says so once if not."""
+    import scipy
+
+    if scipy.__version__ == UNROLLED_FOR_SCIPY:
+        return True
+    _log.warning(
+        "scipy %s is not %s, the version the unrolled GEV likelihood was verified on bit for "
+        "bit: fitting through scipy's own likelihood (about 4x slower) until "
+        "tests/test_gev_unrolled.py passes on %s and UNROLLED_FOR_SCIPY moves to it",
+        scipy.__version__, UNROLLED_FOR_SCIPY, scipy.__version__,
+    )
+    return False
+
+
+@lru_cache(maxsize=1)
+def _log1p():
+    """scipy.special.log1p, the one genextreme calls (np.log1p may differ in the last bit)."""
+    from scipy.special import log1p
+
+    return log1p
+
+
+def _gev_support(c):
+    """genextreme._get_support(c): the interval [a, b] the density lives on."""
+    b = np.where(c > 0, 1.0 / np.maximum(c, _XMIN), np.inf)
+    a = np.where(c < 0, 1.0 / np.minimum(c, -_XMIN), -np.inf)
+    return a, b
+
+
+def _gev_logpdf_standard(x: np.ndarray, c) -> np.ndarray:
+    """genextreme._logpdf(x, c) for one shape c, on standardised points inside the support."""
+    log1p = _log1p()
+    if c == 0:  # scipy fills these in where c == 0, the Gumbel limit
+        cx = np.zeros_like(x)
+        lpex2 = -x
+    else:
+        cx = c * x
+        lpex2 = log1p(-c * x) / c
+    lex2 = log1p(-cx)
+    pex2 = np.exp(lpex2)
+    if c == 0:
+        lpex2 = np.where(x == -np.inf, 0.0, lpex2)  # scipy's putmask, after pex2 is taken
+    good = ~((cx == 1) | (cx == -np.inf))
+    out = np.full(x.shape, -np.inf)
+    out[good] = -pex2[good] + lpex2[good] - lex2[good]
+    if c == 1:
+        out[x == 1] = 0.0
+    return out
+
+
+def _gev_penalized_nnlf(theta: np.ndarray, data: np.ndarray) -> float:
+    """genextreme._penalized_nnlf(theta, data): the objective genextreme.fit minimises."""
+    c, loc, scale = theta[0], theta[-2], theta[-1]
+    if not np.isfinite(c) or scale <= 0:
+        return np.inf
+    x = (data - loc) / scale
+    n_log_scale = len(x) * np.log(scale)
+    a, b = _gev_support(c)
+    with np.errstate(invalid="ignore"):
+        outside = ~((a <= x) & (x <= b))
+    n_bad = np.count_nonzero(outside)
+    if n_bad > 0 and np.size(x) != 1:  # scipy's argsreduce keeps a size-1 array whole
+        x = np.extract(~outside, np.broadcast_to(x, outside.shape))
+    term = _gev_logpdf_standard(x, c)
+    finite = np.isfinite(term)
+    total = 0 + np.sum(term[finite])  # scipy sums a one-term list with sum(), from 0
+    n_bad += 0 + (finite.size - np.count_nonzero(finite))
+    return -total + n_bad * _LOGXMAX * 100 + n_log_scale
+
+
+def _fit_unrolled(data) -> tuple:
+    """genextreme.fit(data) step for step, through `_gev_penalized_nnlf`."""
+    from scipy import optimize
+    from scipy.stats import FitError, genextreme
+
+    data = np.asarray(data).ravel()
+    if not np.isfinite(data).all():
+        raise ValueError("The data contains non-finite values.")
+    x0 = list(genextreme._fitstart(data))
+    vals = tuple(optimize.fmin(_gev_penalized_nnlf, x0, args=(data,), disp=0))
+    if not (np.isfinite(vals[0]) and vals[-1] > 0):
+        raise FitError("Optimization converged to parameters that are outside the range "
+                       "allowed by the distribution.")
+    return vals
+
 
 def _fit(annual_maxima: "Sequence[float] | np.ndarray") -> tuple[float, float, float]:
     """Fit a GEV to the annual maxima; returns (shape c, loc, scale)."""
     from scipy.stats import genextreme
 
-    c, loc, scale = genextreme.fit(np.asarray(annual_maxima, dtype=float))
+    data = np.asarray(annual_maxima, dtype=float)
+    c, loc, scale = _fit_unrolled(data) if unrolled_active() else genextreme.fit(data)
     return float(c), float(loc), float(scale)
 
 
@@ -158,11 +273,12 @@ def return_levels_with_ci(
     quantiles = {int(t): 1.0 - 1.0 / t for t in return_periods}
     point = {t: float(genextreme.ppf(q, c, loc, scale)) for t, q in quantiles.items()}
 
+    refit = _fit_unrolled if unrolled_active() else genextreme.fit
     rng = np.random.default_rng(seed)
     boot_levels: dict[int, list[float]] = {t: [] for t in quantiles}
     for _ in range(n_boot):
         resample = genextreme.rvs(c, loc=loc, scale=scale, size=data.size, random_state=rng)
-        bc, bloc, bscale = genextreme.fit(resample)
+        bc, bloc, bscale = refit(resample)
         for t, q in quantiles.items():
             boot_levels[t].append(float(genextreme.ppf(q, bc, bloc, bscale)))
 
