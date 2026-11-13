@@ -33,6 +33,7 @@ jobs:
           version: "0.13.7"
           checksum: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
           enable-cache: true
+          prune-cache: true
 
       - name: Set up Python
         run: uv python install 3.11
@@ -57,6 +58,7 @@ jobs:
           version: "0.13.7"
           checksum: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
           enable-cache: true
+          prune-cache: true
 
       - name: Set up Python
         run: uv python install 3.11
@@ -81,6 +83,7 @@ jobs:
           version: "0.13.7"
           checksum: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
           enable-cache: true
+          prune-cache: true
 
       - name: Set up Python
         run: uv python install 3.11

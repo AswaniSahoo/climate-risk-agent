@@ -84,6 +84,7 @@ jobs:
           # enable-cache defaults to "auto", which DISABLES caching on tag
           # pushes. This workflow is a tag push, so ask for it explicitly.
           enable-cache: true
+          prune-cache: true
 
       - name: Install dependencies
         run: uv sync --frozen

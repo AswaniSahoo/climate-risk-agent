@@ -29,6 +29,7 @@ jobs:
           version: "0.13.7"
           checksum: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
           enable-cache: true
+          prune-cache: true
 
       # A bare `uvx pip-audit` audits the environment uvx built for pip-audit
       # itself, not this project. Export the lock instead (every group, with
