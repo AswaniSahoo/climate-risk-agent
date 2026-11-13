@@ -8,6 +8,69 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- Added a daily model spend limit at the one Gemini seam (`rag/spend_guard.py`,
+  `CRG_DAILY_MODEL_BUDGET_USD`, default US$0.15 per UTC day): every call reserves its
+  worst-case cost before it starts, a refused call takes the degraded path its caller
+  already has, and the report says when a spend limit refused the IPCC answer. The eval
+  runners and the grounding precompute run without it unless it is set.
+- Added a per-session cap in the UI (`ui/session_budget.py`, `CRG_SESSION_FRESH_REPORTS`,
+  default 5): after that many reports that needed new model calls, a session's reports
+  still run, with model calls paused.
+- Added a per-client request limit on `POST /report`, `/query` and `/triage`
+  (`CRG_API_RATE_LIMIT` per `CRG_API_RATE_WINDOW_S`, default 10 per 60 s) that answers 429
+  with Retry-After, and compared the API key in constant time.
+- Added a Cloud Storage cache tier (`CRG_CACHE_GCS_BUCKET`): reads go to this instance's
+  disk, then the bucket, and writes go to both; a bucket error is logged and the bucket is
+  left alone for 60 s. A compare-and-swap counter on the object's generation holds the
+  spend guard's and the archive budget's counts, so every instance counts against one
+  budget. With the setting absent, Upstash or disk applies as before.
+- Added an Open-Meteo Archive budget (`tools/archive_budget.py`, `CRG_ARCHIVE_DAILY_CALLS`
+  default 8,000 and `CRG_ARCHIVE_HOURLY_CALLS` default 4,000 weighted calls): a request that
+  would pass either limit is refused, any HTTP 429 stops every archive request until the
+  next full hour, and the report says when ERA5 history was skipped.
+- Added precomputed cache entries shipped in the image (`tools/cache_seed/`), read before
+  every other tier under the exact key the live path builds, and the two scripts that fill
+  them (`scripts/precompute_climatology.py`, `scripts/precompute_grounding.py`). They hold
+  the Berlin ERA5 fits for heatwave, extreme rainfall and wind, 111 IPCC groundings computed
+  with the fenced prompt and 138 Chapter 12 projections. CI fails when a shipped entry stops
+  matching the key the code builds (`tests/test_seed_freshness.py`).
+- Cached the IPCC grounding and the Chapter 12 projection per (hazard, AR6 region), and the
+  UI now probes the embedding endpoint once per process instead of once per session.
+- Fenced the question and every excerpt in the answer, rerank and claim-judge prompts
+  (`rag/prompt_safety.py`): every delimiter is removed from untrusted text before it is
+  interpolated. Cached answers are now keyed by the prompt version, which counts
+  `rag/prompt_safety.py` as part of the prompt.
+- Re-measured end to end on the fenced prompt: held-out 52 correct answers, 35 correct
+  refusals, 18 false refusals and 0 false answers (the previous run had 21 false refusals);
+  the same-day dev A/B is in `evals/results/prompt-fence-ab-2026-11-11.md`.
+- Pinned a sha256 for each IPCC PDF (`rag/corpus.py`), checked on download, on existing
+  copies and again right before pypdf parses them.
+- Added a vector pack: the image build writes the 2,730 corpus vectors into one file
+  (`scripts/pack_vectors.py`) that the runtime reads before the per-vector files, which took
+  17.5 s to read one by one in the first live answer of a process on Cloud Run. The image
+  bakes those vectors from the pinned `eval-cache-v1` release asset, sha256-checked, and the
+  build fails unless every chunk has its vector, the same in the pack and the files.
+- Changed the MCP image to run as `appuser`, and kept secrets, local caches, tests and evals
+  out of the Docker build context.
+- Pinned every CI action by commit SHA and uv by version and checksum, defaulted the workflow token to read-only and
+  scoped the Gemini key to the steps that use it; the security audit now reads the exported
+  `uv.lock`, and Dependabot proposes weekly updates for the pinned actions and `uv.lock`.
+- Added `--max-errors` to the release gate (`scripts/eval_gate.py`, default 0): a release
+  fails when an end-to-end question errored, unless the flag allows it.
+- Added `scripts/harden_gcp.sh`, the record of the 2026-11-11 GCP setup (a least-privilege
+  runtime identity, the cache bucket and an INR 900 budget alert) as describe-before-create
+  steps, which deploys through a no-traffic `candidate` revision before `promote`; every
+  step refuses to start unless `HARDEN_GCP_CONFIRMED=yes`.
+- Credited Open-Meteo beside the numbers with its licence link, said the return levels and
+  trend are fitted here from the ERA5 series, and added the Copernicus notice that modified
+  ERA5 data needs, on the page and in the README.
+- Moved Streamlit to 1.66.1 and bumped cryptography, filelock, certifi, anyio, pyasn1,
+  urllib3, langgraph-sdk, gitpython and the mcp 2.2 stack to fixed releases.
+- Added two actions under every report (`ui/report_export.py`): download the RiskReport as
+  a JSON file named after the place, hazard and horizon, without rerunning the page, and
+  open the data-correctness issue form on GitHub titled with that report.
+- Corrected the MCP docs on credentials: without a Gemini or Vertex key `search_ipcc`
+  falls back to BM25-only and `answer_ipcc` can only refuse or return a cached answer.
 - Enhanced dark mode styling and brand logo in Streamlit navigation header.
 - Synchronized location search and suggestion chips with interactive deck.gl map markers.
 - Added automated offline testing stubs for natural language queries.
