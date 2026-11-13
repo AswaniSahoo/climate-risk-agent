@@ -15,6 +15,7 @@ path on any scipy but the pinned one, until this file passes and the pin moves.
 """
 import json
 import logging
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -40,7 +41,9 @@ def scipy_path(monkeypatch):
 
 def _both(fn, monkeypatch):
     """`fn()` through the unrolled likelihood, then through scipy's own."""
-    assert hs.unrolled_active(), "these tests need the pinned scipy"
+    if not hs.unrolled_active():
+        pytest.skip(f"scipy {scipy.__version__} is not the pinned {hs.UNROLLED_FOR_SCIPY}: every "
+                    "fit takes scipy's own path here, so there is no second path to compare")
     fast = fn()
     with monkeypatch.context() as m:
         m.setattr(hs, "unrolled_active", lambda: False)
@@ -82,6 +85,11 @@ def _same(a: float, b: float) -> bool:
 
 # --- the pin --------------------------------------------------------------------
 
+# uv.lock resolves scipy 1.17.1 below Python 3.12 and 1.18.0 from 3.12 on. The
+# Dockerfile and CI run 3.11, so that is where a scipy bump must fail loudly; on a
+# newer local Python the other scipy is expected and production never runs it.
+@pytest.mark.skipif(sys.version_info >= (3, 12),
+                    reason="uv.lock resolves another scipy from Python 3.12 on; the image and CI run 3.11")
 def test_the_unrolled_likelihood_is_pinned_to_the_scipy_it_was_verified_on():
     assert scipy.__version__ == hs.UNROLLED_FOR_SCIPY, (
         f"scipy is {scipy.__version__}, the unrolled GEV likelihood was verified against "
@@ -202,6 +210,9 @@ def test_the_fixtures_include_a_significant_trend_and_a_fit_that_leaves_the_supp
     """Without these the two tests above would never exercise the drifting
     bootstrap a real warming series takes, or the penalty branch."""
     assert gt.fit_gev_trend(SYNTHETIC["drifting"], YEARS).significant
+    if not hs.unrolled_active():
+        pytest.skip("the penalty-branch spy sits on the unrolled likelihood, which this scipy "
+                    "never calls")
 
     seen = []
     real = hs._gev_penalized_nnlf
