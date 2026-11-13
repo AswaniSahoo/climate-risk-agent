@@ -993,8 +993,25 @@ if report is not None:
             st.markdown(f"- **{p.source}**: `{p.url}` at {p.retrieved_at:%Y-%m-%d %H:%M} UTC")
             st.json(p.params, expanded=False)
 
+    _report_json = report.model_dump_json(indent=2)
     with st.expander("Raw RiskReport JSON (the contract)", icon=":material/code:"):
-        st.code(report.model_dump_json(indent=2), language="json")
+        st.code(_report_json, language="json")
+
+    # Keep the report, or flag a wrong number in it (ui/report_export.py). Saving
+    # must not rerun the page: on_click="ignore" hands over the file and stops.
+    from ui.report_export import data_correctness_url, report_file_name
+
+    _save_col, _flag_col = st.columns(2)
+    _save_col.download_button(
+        "Download this report (JSON)", data=_report_json, file_name=report_file_name(report),
+        mime="application/json", on_click="ignore", icon=":material/download:",
+        key="download_report",
+    )
+    if report.refusal is None:  # a refusal has no number or citation to flag
+        _flag_col.link_button(
+            "Report a wrong number or citation", data_correctness_url(report),
+            icon=":material/flag:", help="Opens the data-correctness issue form on GitHub.",
+        )
 
 # First visit, or nothing came back: the method in three lines and the example report.
 if report is None and failure is None:

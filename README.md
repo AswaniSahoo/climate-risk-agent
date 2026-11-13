@@ -102,7 +102,7 @@ Held-out results, on the configuration this release deploys:
 - Citation validity 50/52 correct answers (96%). Numeric provenance 42/52 (81%), down from 88% in the previous run.
 - The IPCC answer step cost $0.26 for the run, about $0.0025 per question, p50 generation latency 3.2 s.
 - The previous run (2026-07-22, before the fence): 49 correct answers, 35 correct refusals, 21 false refusals, 0 false answers, citation validity 47/49, numeric provenance 43/49.
-- Exposures: end-to-end runs on 2026-07-18, 2026-07-22 and 2026-11-11, retrieval on 2026-09-07, and Jev triage on 2026-11-11 (37 questions). A first 2026-11-11 attempt stopped after 12 model calls on a local call cap and was discarded, so those questions reached the model twice that day.
+- Exposures: end-to-end runs on 2026-07-18, 2026-07-22 and 2026-11-11, retrieval runs on 2026-07-18, 2026-09-07 and 2026-11-11 (`evals/results/retrieval-test-*.json`), and Jev triage on 2026-11-11 (37 questions). A first 2026-11-11 attempt stopped after 12 model calls on a local call cap and was discarded, so those questions reached the model twice that day.
 
 **Reranking and query rewriting: measured, kept off.** Both are wired as `HybridRetriever` keyword arguments and both default to off. Measured on the 45-question dev set (34 answerable), before the `cid-table` questions landed:
 
@@ -169,7 +169,7 @@ Three caveats travel with these numbers. The reference series is the model's own
 
 ## Operations
 
-- One shared cache sits behind the climatology fit, the forecast and the answer cache: Upstash Redis over REST when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set, disk otherwise. `tools/cache_backend.py` logs the backend it chose, and `scripts/prewarm.py` fills it before a demo.
+- One shared cache sits behind the climatology fit, the forecast and the answer cache. Entries shipped in `tools/cache_seed/` answer first. Behind them: with `CRG_CACHE_GCS_BUCKET` set, this instance's disk and then that Cloud Storage bucket; otherwise Upstash Redis over REST, with disk as its fallback, when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set; otherwise disk alone. `tools/cache_backend.py` logs the backend it chose, and `scripts/prewarm.py` fills it before a demo.
 - Structured logging and per-request telemetry, measured at the single SDK seam every model call passes through: latency, tokens, retries and cost. Reasoning tokens are counted as billed output, and a model with no price entry reports its cost as unknown rather than as zero. The in-memory event ring is bounded; the JSONL sink keeps the long history.
 - Cloud Run idle cost per min-instance shape, the measured 30-day load and the resize plan are in [DEPLOY.md](DEPLOY.md).
 - Async FastAPI service (`POST /report`, `POST /query`, and `POST /triage` for reading a question without running it) with per-request API-key access control and a `/metrics` endpoint.
@@ -196,8 +196,9 @@ served it.
 
 The first report for a new place takes roughly 1 to 2 minutes, because 60+ years
 of ERA5 daily extremes are fetched and the GEV fitted once for that point.
-Afterwards the fit is cached, Redis when configured and disk otherwise, and
-repeat visits return in well under a second.
+Afterwards the fit is cached, on disk and in the Cloud Storage bucket when
+`CRG_CACHE_GCS_BUCKET` is set, in Redis when that is configured instead, and on
+disk otherwise, and repeat visits return in well under a second.
 
 With Docker:
 
@@ -240,9 +241,11 @@ closed-world hint, publishes an `outputSchema`, and is listed in a deterministic
 order. Two tests boot each server as a real subprocess and speak the protocol to
 it, rather than calling the tool functions in-process.
 
-Retrieval is hybrid, so both IPCC tools embed the query and need credentials in
-the server process: either `GOOGLE_GENAI_USE_VERTEXAI=true` with
-`GOOGLE_CLOUD_PROJECT`, or `GEMINI_API_KEY`.
+Retrieval is hybrid, so both IPCC tools embed the query with credentials in the
+server process: either `GOOGLE_GENAI_USE_VERTEXAI=true` with
+`GOOGLE_CLOUD_PROJECT`, or `GEMINI_API_KEY`. Without them `search_ipcc` still
+answers, BM25-only and logged as such (dev-set R@3 76% against 82% hybrid), and
+`answer_ipcc` can only refuse out-of-scope questions or return a cached answer.
 
 A client does not hand the server your shell. It passes a short allow-list of
 variables (`PATH`, `APPDATA`, `TEMP`, ...) so that a server cannot harvest your
@@ -259,9 +262,14 @@ To explore the tools by hand: `uv run mcp dev tools/ipcc_mcp.py`.
 
 The IPCC RAG server is published on the
 [official MCP registry](https://registry.modelcontextprotocol.io) as
-`io.github.AswaniSahoo/climate-ipcc-rag` (v0.1.0), backed by a public OCI image
-on GHCR (`ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0`). Any MCP client that
-supports Docker/OCI transport can install it directly from the registry.
+`io.github.AswaniSahoo/climate-ipcc-rag` (v0.1.0). The listing points at the OCI
+image `ghcr.io/aswanisahoo/climate-ipcc-rag-mcp:0.1.0` on GHCR, which is not
+publicly pullable at the moment: an anonymous pull is refused (checked
+2026-11-13), so installing the server from the registry fails today. Run it
+from a clone instead: `uv sync`, then the `climate-ipcc-rag` entry in the client
+config above (`uv run --no-sync python -m tools.ipcc_mcp`). To run the image,
+build it locally with the two `docker build` commands in
+[DEPLOY.md](DEPLOY.md#publish-the-mcp-server-to-the-official-mcp-registry).
 
 ![IPCC RAG MCP server listed on the official MCP registry with status Active, showing title, description, and linked repository](assets/mcp-registry-listing.png)
 

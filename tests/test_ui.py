@@ -625,3 +625,27 @@ def test_a_report_with_era5_numbers_says_they_are_fitted_and_credits_copernicus(
     assert "ERA5 reanalysis, served through the Open-Meteo archive under the same licence." in credit
     assert "fitted here from that ERA5 series" in credit  # the change, said out loud
     assert "Contains modified Copernicus Climate Change Service information" in credit
+
+
+def test_a_report_can_be_saved_as_json_and_flagged_without_opening_an_expander(stubbed):
+    """Review 1.5: nothing could be saved or flagged. Both sit under the report."""
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception
+    saves = at.get("download_button")
+    assert [b.proto.label for b in saves] == ["Download this report (JSON)"]
+    assert saves[0].proto.ignore_rerun  # saving the file must not rerun the page
+    flags = [b for b in at.get("link_button") if "/issues/new?" in b.proto.url]
+    assert len(flags) == 1
+    assert "template=data_correctness.md" in flags[0].proto.url
+
+
+def test_a_refusal_can_be_saved_but_offers_no_flag_link(stubbed, monkeypatch):
+    monkeypatch.setattr(graph_mod, "run_agent", lambda **kwargs: _report(
+        risk_level=None, refusal="outside what this agent can ground"))
+
+    at = _run_clicked(AppTest.from_file(_APP, default_timeout=30))
+
+    assert not at.exception
+    assert [b.proto.label for b in at.get("download_button")] == ["Download this report (JSON)"]
+    assert not [b for b in at.get("link_button") if "/issues/new?" in b.proto.url]
