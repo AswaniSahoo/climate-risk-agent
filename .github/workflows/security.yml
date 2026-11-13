@@ -1,4 +1,4 @@
-﻿name: security
+name: security
 
 on:
   schedule:
@@ -24,11 +24,12 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.7"
           checksum: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
           enable-cache: true
+          prune-cache: true
 
       # A bare `uvx pip-audit` audits the environment uvx built for pip-audit
       # itself, not this project. Export the lock instead (every group, with
