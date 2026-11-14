@@ -366,9 +366,11 @@ the script retries that step, up to six times, 30 s apart.
 
 The Cloud Storage cache backend that reads `CRG_CACHE_GCS_BUCKET` is in
 `tools/cache_backend.py`, and `candidate` refuses to run from a checkout
-without it. Read on 2026-11-13, revision `climate-risk-agent-00033-vuy` carries
-the tag `candidate` and no traffic, and `climate-risk-agent-00031-nil` serves
-all of it; which code 00031-nil runs is not recorded here. The service moves
+without it. Read on 2026-11-14, no revision carries the tag `candidate`.
+`climate-risk-agent-00036-gag` (tag `rel-570e5da`, built from commit 570e5da)
+serves all traffic, `climate-risk-agent-00013-dcf` keeps the tag `good` as the
+rollback, and `climate-risk-agent-00034-gul` (tag `rel-189f4c6`) is the
+previous release, with no traffic. The service moves
 to the new identity in two steps: `candidate` deploys a revision that takes no
 traffic, under the tag `candidate`; once that revision checks out at its tagged
 URL, `promote` sends it all traffic.
