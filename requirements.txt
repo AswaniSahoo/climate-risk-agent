@@ -39,7 +39,7 @@ mcp-types==2.3.0
 narwhals==2.23.0
 numpy==2.4.6 ; python_full_version < '3.12'
 numpy==2.5.1 ; python_full_version >= '3.12'
-opentelemetry-api==1.45.1
+opentelemetry-api==1.45.2
 orjson==3.11.9
 ormsgpack==1.12.2
 packaging==26.2
