@@ -100,7 +100,7 @@ Held-out results, on the configuration this release deploys:
 - Retrieval, hybrid, on the 70 answerable questions (measured 2026-09-07): R@3 87%, R@5 91%, R@10 96%, that is 61, 64 and 67 of 70.
 - End-to-end, all 105 questions (gemini-2.5-flash on Vertex, top_k 8, fenced prompt, measured 2026-11-11): 52 correct answers, 35 correct refusals, 18 false refusals, **0 false answers**. All 35 questions built to be refused were refused; the price is 18 of the 70 answerable questions refused as well.
 - Citation validity 50/52 correct answers (96%). Numeric provenance 42/52 (81%), down from 88% in the previous run.
-- The IPCC answer step cost $0.26 for the run, about $0.0025 per question, p50 generation latency 3.2 s.
+- The IPCC answer step cost $0.26 for the run, about $0.0025 per question, p50 generation latency 4.1 s.
 - The previous run (2026-07-22, before the fence): 49 correct answers, 35 correct refusals, 21 false refusals, 0 false answers, citation validity 47/49, numeric provenance 43/49.
 - Exposures: end-to-end runs on 2026-07-18, 2026-07-22 and 2026-11-11, retrieval runs on 2026-07-18, 2026-09-07 and 2026-11-11 (`evals/results/retrieval-test-*.json`), and Jev triage on 2026-11-11 (37 questions). A first 2026-11-11 attempt stopped after 12 model calls on a local call cap and was discarded, so those questions reached the model twice that day.
 
