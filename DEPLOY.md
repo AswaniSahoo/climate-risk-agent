@@ -167,6 +167,19 @@ gcloud run deploy climate-risk-agent \
   | unset, or `https://api.typesafe.ai` | TypeSafe direct | `jev-1.14.0` (pinned version) | 64k tokens a request |
   | `https://api.experientiallabs.ai` | Experiential Labs gateway, relaying to TypeSafe | `jev-latest` (the only Jev name it grants) | 32k tokens a request |
 
+  Before step 4 below turns Jev on through the gateway: since its terms of
+  2026-11-17, all free-plan content enters a Data Licensing Program that sells
+  de-identified prompts and outputs to third parties "including AI developers",
+  and "participation is a condition of the free plan and cannot be disabled at
+  the account level" (https://www.experientiallabs.ai/privacy, read 2026-11-19).
+  The program "applies only to Program Content submitted on or after the
+  effective date of this version of these Terms", which is November 17, 2026
+  (https://www.experientiallabs.ai/terms, section 7.4, read 2026-11-19). On the
+  free plan, users' questions that reach Jev would enter it. A paid plan can turn
+  content storage off, and TypeSafe direct says it "will not train or fine tune
+  any artificial intelligence or machine learning models on Input"
+  (https://typesafe.ai/legal/privacy-policy, read 2026-11-19).
+
   The key for the chosen provider goes in `JEV_API_KEY` (`TYPESAFE_API_KEY` is
   still read as a fallback). It is a secret, so it goes through Secret Manager,
   never `--set-env-vars` (documented here, not run):
