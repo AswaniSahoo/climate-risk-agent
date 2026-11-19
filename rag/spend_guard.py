@@ -176,10 +176,11 @@ def api_rate_limit(env: Mapping[str, str] = os.environ) -> tuple[int, int] | Non
 def unlimited_unless_set(env: MutableMapping[str, str] = os.environ) -> bool:
     """For the eval runners: no daily budget unless one was set explicitly.
 
-    An eval measures every question, and a refusal halfway through would be
-    scored as answers the model got wrong (scripts/eval_gate.py does not read
-    `errors`). Its cost is bounded by its fixed question count instead. Returns
-    True when it turned the budget off.
+    An eval measures every question, and a refusal halfway through would leave
+    questions unmeasured: the e2e runner records each refused call under
+    `errors`, and scripts/eval_gate.py fails a run with more of them than
+    `--max-errors` (default 0). Its cost is bounded by its fixed question count
+    instead. Returns True when it turned the budget off.
     """
     if "CRG_DAILY_MODEL_BUDGET_USD" in env:
         return False

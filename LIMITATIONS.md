@@ -32,16 +32,19 @@ possible, so a downstream consumer can check it programmatically.
 - **Retrieval quality is published, not perfect.** On the held-out test set
   (105 questions; exposed in end-to-end runs on 2026-07-18, 2026-07-22 and
   2026-11-11, retrieval runs on 2026-07-18, 2026-09-07 (the figures here) and
-  2026-11-11, and Jev triage of 37 of them on 2026-11-11) the hybrid BM25+dense retriever gets headline
-  recall@3 87% / @5 91% / @10 96% on answerable questions. On the full
-  60-question dev set (49 answerable, measured 2026-09-02) it gets recall@3 82%
-  / @5 90% / @10 94%, against 76% / 82% / 88% for BM25-only, which is what a
-  keyless deployment falls back to. That dev-set headline was 91% on the set's
-  first 45 questions; adding the 15 `cid-table` questions moved it to 82%,
-  because that slice is the hardest in the set. Per-slice numbers, including the
-  ones we are not proud of (test-set premise-injection R@3 = 59% and test-set
-  regional-table 77%; dev-set `cid-table` at hybrid R@3 67% / @5 80% / @10 93%,
-  n=15, MRR 0.57), are in the eval output. Rerun it with
+  2026-11-11, Jev triage of 37 of them on 2026-11-11, and an offline
+  lexical-parser confirmation run at 2026-11-11T20:02Z,
+  `evals/results/hazard-words-2026-11-12.md`) the hybrid BM25+dense retriever
+  gets headline recall@3 87% / @5 91% / @10 96% on answerable questions. On the
+  full 60-question dev set (49 answerable, measured 2026-09-02) it gets
+  recall@3 82% / @5 90% / @10 94%, against 76% / 82% / 88% for BM25-only, which
+  is what a keyless deployment falls back to. That dev-set headline was 88% on
+  the set's first 45 questions (30 of 34 answerable); adding the 15 `cid-table`
+  questions moved it to 82%, because that slice is the hardest in the set.
+  Per-slice numbers, including the ones we are not proud of (test-set
+  premise-injection R@3 = 59% and test-set regional-table 77%; dev-set
+  `cid-table` at hybrid R@3 67% / @5 80% / @10 93%, n=15, MRR 0.57), are in
+  the eval output. Rerun it with
   `uv run python -m evals.run_retrieval_eval`.
 - **Dev and test sets are split (eval v2).** The dev set
   (`evals/gold_set.json`, 60 questions: the original 45 plus 15 `cid-table` ones
@@ -63,14 +66,17 @@ possible, so a downstream consumer can check it programmatically.
   anchors (`rag/scope_anchors.json`) in embedding space and refuses only when
   the nearest out-of-scope anchor clears a floor of 0.60 and beats the best
   in-scope anchor by 0.04, otherwise deferring to today's behaviour. Stage 1's
-  verdict is never overridden, and stage 2 can only add a refusal, never remove
-  one. Thresholds are calibrated, not guessed
-  (`evals/results/scope-stage2-calibration.json`: 0 false refusals at every grid
-  point tested).
+  verdict is never overridden: stage 2 can add a refusal, never lift one that
+  stage 1 made. It can also name a supported hazard (`hazard_hint`), and the
+  front door then takes that as the parsed hazard, so a question it would
+  refuse for naming no hazard gets a report instead. Thresholds are
+  calibrated, not guessed (`evals/results/scope-stage2-calibration.json`: 0
+  false refusals at every grid point tested).
   Measured on the dev set, `uv run python -m evals.run_e2e_eval --scope-stage2 <arm>`
   (gemini-2.5-flash, top_k 8, 2026-09-02; correct answer / correct refusal /
-  false refusal / false answer): the shipped `off` arm is **48/11/1/0** on all
-  60 questions. The three-arm comparison below was run before the 15 `cid-table`
+  false refusal / false answer): the shipped `off` arm was **48/11/1/0** on all
+  60 questions then, and is 46/11/3/0 on the latest run (2026-11-11, fenced
+  prompt). The three-arm comparison below was run before the 15 `cid-table`
   questions landed and is still at n=45: `off` 34/11/0/0 · `embed` 33/11/1/0 ·
   `llm` 34/11/0/0. Zero false answers in every arm. The embed arm's single
   false refusal (RT-07) carries lexical hazard
@@ -109,10 +115,20 @@ possible, so a downstream consumer can check it programmatically.
   is therefore the AR6 reference region containing the point, never the city,
   and the section is absent, with the report saying regional projections were
   not found in the corpus, whenever no qualifying sentence is retrieved, which
-  is the case for roughly a quarter of region/hazard pairs and for every ocean
-  point. Where one sentence carries two calibrated phrases and no clause
-  boundary separates them, `confidence_language` is reported as null rather
-  than guessed; the quoted sentence is always shown so a reader can check the
+  is the case for 104 of the 138 region/hazard pairs in the shipped precompute
+  (`tools/cache_seed/ipcc.json`; 34 have one) and for every ocean point. How a
+  shared list reads depends on how it is written. The clause split
+  (`_CLAUSE_SPLIT` in `rag/cid.py`) cuts, among other places, after a closing
+  bracket followed by a comma or semicolon and at ", and ", so in "West Africa
+  (WAF), South Asia (SAS)" each region lands in a clause of its own, without
+  the shared verb and phrase, and gets nothing. Acronyms inside one bracket
+  stay one clause, which `_focus` accepts for every region it names: the
+  shipped extreme precipitation projections for NEU, WCE and EEU all quote one
+  sentence ("... in the northern, central and eastern European regions (NEU,
+  WCE, EEU) and in the Alpine area."). Where one sentence carries two
+  calibrated phrases and no clause boundary separates them,
+  `confidence_language` is reported as null rather than guessed; the quoted
+  sentence is always shown so a reader can check the
   attribution. Ch.12 also mixes observed trends with projections in a single
   sentence, so a "projected change" statement can be quoting an observed one:
   read the sentence, not just the direction badge.
@@ -156,8 +172,8 @@ possible, so a downstream consumer can check it programmatically.
   measured on 2026-11-11 on the 60 dev questions and 14 authored paraphrase
   probes, through the Experiential Labs gateway. Triage met every quality gate
   there (60/60 and 14/14 on scope, no false refusal, no wrong hazard) but not
-  the latency gate (p95 2,055 ms against 1,000 ms), a trade-off Aswani
-  accepted. Its one-time held-out check then refused one answerable question
+  the latency gate (live-call p95 1,881 ms against 1,000 ms), a trade-off
+  Aswani accepted. Its one-time held-out check then refused one answerable question
   at the guard (SP2-08, on emission cuts, air pollution and radiative forcing,
   read as air quality), which fails a hard gate. The citation check met its
   accuracy gates only after two wrong dev labels were corrected (12 of 14 true
@@ -169,9 +185,11 @@ possible, so a downstream consumer can check it programmatically.
   gateway, which records prompts (its wording is quoted below), so a later
   held-out run cannot assume those providers never saw them.
 - **What leaves this system.** With triage on, the first 1,000 characters of a
-  question that names no hazard word are sent out; questions the lexical stage
-  settles are not. With verify on, the IPCC statement Gemini wrote, which can
-  name the queried place, is sent with the public IPCC passages it cites.
+  question are sent out when it names no hazard word, or names one that stage
+  1 accepts but the front door cannot map to a hazard ("temperature extremes");
+  questions the lexical stage settles are not. With verify on, the IPCC
+  statement Gemini wrote, which can name the queried place, is sent with the
+  public IPCC passages it cites.
 - **Where it goes depends on `JEV_BASE_URL`.** Unset, requests go straight to
   TypeSafe and only TypeSafe's terms apply. Set to
   `https://api.experientiallabs.ai`, they go to the Experiential Labs gateway,
@@ -262,3 +280,14 @@ possible, so a downstream consumer can check it programmatically.
   wind climatology is a gust fit; the sustained speed is displayed but never
   compared to a gust return level. The absolute fallback still grades the
   sustained speed, which is what its Beaufort-derived cutoffs describe.
+
+## Known gaps
+
+Code that falls short of what the design intends, stated as the code behaves today.
+
+- Per-request cost counts an unpriced model as $0: `estimate_cost_usd` skips its tokens with only a log warning (obs/telemetry.py:193-217), `Span.summary()` reports that total (obs/telemetry.py:245-257) and the UI shows it as "Est. cost" (ui/app.py:981). The `/metrics` rollup and each e2e artifact's `telemetry` block (evals/run_e2e_eval.py:226, `summarize(snapshot())`) name the model under `cost_incomplete_unpriced_models` (obs/telemetry.py:286-288); the offline daily rollup (obs/report.py:39-54) prints the $0 without it.
+- The UI's first session waits on google-genai: ui/app.py:212-216 calls `embedding_available_once()` (rag/gemini_client.py:283-299), which imports `google.genai` (rag/gemini_client.py:126) and makes a live embedding call before the rest of the page is drawn; tests/test_import_hygiene.py:37 sets `PYTEST_CURRENT_TEST`, which skips that probe.
+- The preset buttons are labelled "cached" (ui/app.py:455; the comment at ui/app.py:80-81 calls their ERA5 caches pre-warmed), but the image ships ERA5 fits for Berlin only (tools/cache_seed/climatology.json, 3 entries).
+- The `/triage` docstring says no Gemini call happens there (api/app.py:193-195), but with `CRG_SCOPE_STAGE2` set, stage 2 embeds or classifies the question with Gemini (rag/scope.py:194-220).
+- E2e artifacts are named by set, model, arm and date only (evals/run_e2e_eval.py:275-277), so a second run on the same day, model and arm overwrites the first; retrieval artifact names also leave out the model (evals/run_retrieval_eval.py:265).
+- The `answer_with_guard` docstring still says temperature 0 makes the answer deterministic (rag/answer.py:152-154), against its own correction four lines later (rag/answer.py:158-159). It is left as is because the source bytes of rag/answer.py are hashed into every answer and grounding cache key (rag/answer_cache.py:66, 97), so even a comment edit retires all 111 shipped grounding entries (tests/test_seed_freshness.py) until `scripts/precompute_grounding.py` is rerun.

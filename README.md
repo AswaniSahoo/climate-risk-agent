@@ -19,7 +19,7 @@ Ask a plain-language question about heat, extreme rain or wind anywhere on Earth
 - Puts a live forecast next to 60+ years of ERA5 annual maxima at that point, and cites the IPCC AR6 pages it used by number.
 - Bands the risk on that location's own return-level curve instead of a fixed threshold.
 - Reports a confidence that says what it is made of: measured forecast skill at that lead day, the climatology fit, and whether a citation backed the answer.
-- Quotes the AR6 Chapter 12 projected change for the reference region containing the point, verbatim.
+- Quotes the AR6 Chapter 12 projected change for the reference region containing the point, verbatim, where a Chapter 12 sentence states one that the parser can attribute to that region (34 of the 138 region and hazard pairs in the shipped precompute).
 
 ![Climate-Risk Agent UI: Decision-grade climate intelligence interface with brand logo, interactive deck.gl location map, suggestion chips, and ERA5 GEV risk assessment](assets/ui-report.png)
 
@@ -28,8 +28,8 @@ Ask a plain-language question about heat, extreme rain or wind anywhere on Earth
 - **ERA5 GEV hazard statistics.** Every hazard number comes from a Generalized Extreme Value distribution fitted to 60+ years of ERA5 annual maxima at the query location. Every return level ships with a 90% bootstrap confidence interval.
 - **Risk levels are local rarity, not a fixed threshold.** The band is the return period of the forecast peak on that location's own curve: below the 2-year level is low, 2 to 10 years moderate, 10 to 50 high, at or above 50 severe. The same 46 °C peak can band low where an ordinary year already reaches it and severe where it is unprecedented, off the same code. Each report carries the sentence the band was decided on, naming the bracketing levels and the estimated return period. A location with no fitted climatology falls back to absolute cutoffs and says so rather than passing them off as local.
 - **Non-stationary GEV.** Alongside the stationary fit, a drifting-location GEV checks whether the climate at that location is actually warming, using a likelihood-ratio test to decide. When the trend is real, return levels are reported "effective" at the latest year rather than averaged across six decades. Berlin comes back at about +0.75 °C per decade (p < 0.0001) with effective levels. Delhi comes back stationary, with no significant trend at either Delhi point the app uses (p = 0.46 at the UI's preset Delhi point, p = 0.84 at the geocoded city point about 5 km away), which agrees with the published literature on aerosol masking suppressing South Asian heat trends. The slopes, p-values, exact coordinates and code version are in [`evals/results/warming-trend-2026-10-21.json`](evals/results/warming-trend-2026-10-21.json), written by `scripts/measure_warming_trend.py` from a fresh ERA5 1960 to 2022 fit.
-- **IPCC AR6 RAG with citations that have to hold up.** Every citation is checked structurally against the pages actually retrieved for that question. If the model cannot point to a real retrieved page, it refuses rather than cite one anyway.
-- **Projected change, quoted rather than generated.** Each report carries the AR6 WG1 Chapter 12 climatic impact-driver projection for the reference region containing the point: one verbatim Ch.12 sentence, its direction, the IPCC's own calibrated confidence phrase, and the warming level or period it names. All of it is extracted by regex from retrieved chunks, with no model in the loop. When the chapter assesses no such change for that region and hazard, the section is absent and the report says regional projections were not found in the corpus.
+- **IPCC AR6 RAG with citations that have to hold up.** Every citation is checked structurally against the pages actually retrieved for that question. If the model cites an excerpt it was not given, or answers without citing one, the answer is discarded: the report ships without an IPCC statement or citations, never with a citation that failed the check.
+- **Projected change, quoted rather than generated.** Where Chapter 12 states one, a report carries the AR6 WG1 Chapter 12 climatic impact-driver projection for the reference region containing the point: one verbatim Ch.12 sentence, its direction, the IPCC's own calibrated confidence phrase, and the warming level or period it names. All of it is extracted by regex from retrieved chunks, with no model in the loop. A clause counts only when it names the region, a direction and a confidence phrase itself. The clause split cuts a list written as "Name (ACR), Name (ACR)" into one clause per region, so those regions lose the shared verb and phrase and get nothing; acronyms inside one bracket stay one clause, which then counts for each region it names: the shipped extreme precipitation projections for NEU, WCE and EEU all quote one sentence ("... in the northern, central and eastern European regions (NEU, WCE, EEU) and in the Alpine area."). In the shipped precompute (`tools/cache_seed/ipcc.json`) 34 of 138 region and hazard pairs have a projection; for the rest the section is absent and the report says no regional projection was found in the corpus.
 
 The same report, scrolled down: the ERA5 return-level table with bootstrap confidence intervals, the warming-trend banner, and the measured cost and latency for that run.
 
@@ -37,27 +37,28 @@ The same report, scrolled down: the ERA5 return-level table with bootstrap confi
 
 ## How it works
 
-A free-text question moves through parsing, geocoding and AR6 region mapping before it reaches the agent. From there a five-node LangGraph agent (plan, call, research, project, synthesize) either produces a typed `RiskReport` or refuses.
+A free-text question moves through parsing, geocoding and AR6 region mapping before it reaches the agent, and that is where an unanswerable question is refused: an unsupported hazard, no hazard the parser can identify, or no place it can find or resolve each returns a typed refusal before any forecast is fetched (`POST /report`, which takes a hazard directly, answers HTTP 422 for one outside the three). The ERA5 climatology is fitted next, also before the agent, and handed to it. From there a five-node LangGraph agent (plan, call, research, project, synthesize) produces a typed `RiskReport`. `plan` would refuse a hazard with no data path, but all three hazards the contract accepts have one, so today it never does.
 
 ```mermaid
 flowchart LR
     Q[free-text question] --> PARSE[parse<br/>location · hazard · horizon]
+    PARSE -->|unsupported or no hazard, no place| REFUSE[refusal<br/>valid typed output]
     PARSE --> GEO[geocode<br/>Open-Meteo]
+    GEO -->|place not found| REFUSE
     GEO --> REGION[map to IPCC AR6 region<br/>reference regions v4]
-    REGION --> PLAN[agent: plan<br/>scope check]
-    PLAN -->|unsupported hazard| REFUSE[refusal<br/>valid typed output]
-    PLAN --> CALL[agent: call<br/>forecast]
+    PLAN[agent: plan<br/>data-path check] --> CALL[agent: call<br/>forecast]
     CALL --> RESEARCH[agent: research]
     RESEARCH --> PROJECT[agent: project<br/>AR6 Ch.12 CID projection]
     PROJECT --> SYNTH[agent: synthesize]
     SYNTH --> REPORT[RiskReport<br/>typed · cited · grounded]
 
-    subgraph HAZARD [ERA5 to GEV hazard statistics]
+    subgraph HAZARD [ERA5 to GEV hazard statistics, fitted before the agent]
         ERA5[ERA5<br/>60+ yr annual maxima] --> GEV[stationary + drifting-location GEV]
         GEV --> LRT[likelihood-ratio test<br/>is the trend real?]
         LRT --> LEVELS[return levels + 90% bootstrap CI<br/>effective at latest year if trend holds]
     end
-    CALL -.-> HAZARD
+    REGION --> HAZARD
+    HAZARD --> PLAN
     HAZARD -.-> SYNTH
 
     subgraph RAG [IPCC AR6 RAG]
@@ -82,7 +83,7 @@ Dev-set retrieval, all 60 questions (49 answerable), measured 2026-09-02:
 | dense only | 61% | 69% | 86% | 0.59 |
 | hybrid (shipped) | 82% | 90% | 94% | 0.70 |
 
-Per slice, hybrid R@3: single-page 92% (n=12), regional table 90% (n=10), multi-page 80% (n=10), premise injection 75% (n=4), `cid-table` 67% (n=15). `cid-table` is the weakest slice and is why the headline is 82% across all 60 questions where it was 91% across the original 45.
+Per slice, hybrid R@3: single-page 92% (n=12), regional table 90% (n=10), multi-page 80% (n=10), premise injection 75% (n=4), `cid-table` 67% (n=15). `cid-table` is the weakest slice and is why the headline is 82% across all 60 questions where it was 88% across the original 45 (30 of 34 answerable).
 
 Dev-set end-to-end, all 60 questions (gemini-2.5-flash on Vertex, top_k 8, scope guard stage 2 off, fenced prompt, measured 2026-11-11):
 
@@ -102,7 +103,7 @@ Held-out results, on the configuration this release deploys:
 - Citation validity 50/52 correct answers (96%). Numeric provenance 42/52 (81%), down from 88% in the previous run.
 - The IPCC answer step cost $0.26 for the run, about $0.0025 per question, p50 generation latency 4.1 s.
 - The previous run (2026-07-22, before the fence): 49 correct answers, 35 correct refusals, 21 false refusals, 0 false answers, citation validity 47/49, numeric provenance 43/49.
-- Exposures: end-to-end runs on 2026-07-18, 2026-07-22 and 2026-11-11, retrieval runs on 2026-07-18, 2026-09-07 and 2026-11-11 (`evals/results/retrieval-test-*.json`), and Jev triage on 2026-11-11 (37 questions). A first 2026-11-11 attempt stopped after 12 model calls on a local call cap and was discarded, so those questions reached the model twice that day.
+- Exposures: end-to-end runs on 2026-07-18, 2026-07-22 and 2026-11-11, retrieval runs on 2026-07-18, 2026-09-07 and 2026-11-11 (`evals/results/retrieval-test-*.json`), Jev triage on 2026-11-11 (37 questions), and an offline lexical-parser confirmation run at 2026-11-11T20:02Z ([report](evals/results/hazard-words-2026-11-12.md); no question left the machine). A first 2026-11-11 attempt stopped after 12 model calls on a local call cap and was discarded, so those questions reached the model twice that day.
 
 **Reranking and query rewriting: measured, kept off.** Both are wired as `HybridRetriever` keyword arguments and both default to off. Measured on the 45-question dev set (34 answerable), before the `cid-table` questions landed:
 
@@ -137,9 +138,9 @@ Zero false answers in every arm, and no arm gained anything, so the default stay
 
 Since 2026-11-12 the lexical parser also reads everyday words (windy, gusty, gale, hot, scorching, sweltering, deluge, cloudburst), but only where the scope guard names no unsupported hazard. With the flag off the front door now names 41/42 dev and 6/7 probe hazards, the sets the words were chosen on and the same items as with Jev, and 63/77 on the held-out set against 57/77, none wrong and no out-of-scope refusal lost ([report](evals/results/hazard-words-2026-11-12.md)).
 
-The two policy questions that only Gemini refused today (an NDC pledge and GDP lost to warming) are now refused before retrieval, and no decision changed with the option order reversed or across two uncached runs. Each triage call added a median 640 ms and a p95 of 2,055 ms, and only for questions with no hazard word. On 110 mechanically labelled citation pairs, Jev's top answer matched the label on 105 and its strength label on 101 (AUC 0.9955); two of the misses point at what look like wrong Chapter 12 labels in the dev set rather than at Jev. 244 calls cost $0.009 at the list price, and the gateway's free plan reported $0. Re-run with `uv run python -m evals.run_jev_eval --task all --order-check --repeats 2` (dev set only, $2 and token caps, paced for the gateway's 10-a-minute plan). With the flag on, `POST /triage` reads a question (hazard, horizon, place, and the refusal `/query` would give) without running the report, and the UI reads the question before the run, refuses an out-of-scope one at once, shows a hazard Jev named with its probability and any other hazard one click away, and labels each citation's evidence ([docs/jev-ui-integration.md](docs/jev-ui-integration.md)).
+The two policy questions that only Gemini refused today (an NDC pledge and GDP lost to warming) are now refused before retrieval, and no decision changed with the option order reversed or across two uncached runs. Live Jev calls took a median 627 ms and a p95 of 1,881 ms (all 244 calls of the dev run, triage and citation check together; the report does not split them), and triage calls Jev only for a question with no hazard word, or with one the front door cannot map to a hazard ("temperature extremes"). On 110 mechanically labelled citation pairs, Jev's top answer matched the label on 105 and its strength label on 101 (AUC 0.9955); two of the misses point at what look like wrong Chapter 12 labels in the dev set rather than at Jev. 244 calls cost $0.009 at the list price, and the gateway's free plan reported $0. Re-run with `uv run python -m evals.run_jev_eval --task all --order-check --repeats 2` (dev set only, $2 and token caps, paced for the gateway's 10-a-minute plan). With the flag on, `POST /triage` reads a question (hazard, horizon, place, and the refusal `/query` would give) without running the report, and the UI reads the question before the run, refuses an out-of-scope one at once, shows a hazard Jev named with its probability and any other hazard one click away, and labels each citation's evidence ([docs/jev-ui-integration.md](docs/jev-ui-integration.md)).
 
-**Both stay off.** Aswani accepted triage's gateway latency, but the one-time held-out check (`evals/run_jev_heldout.py`, 2026-11-11, [report](evals/results/jev-triage-test-2026-11-11.md)), which sent only the 37 of 105 held-out questions that triage itself would send, failed the ADR's hard gate of no new false refusal: SP2-08, an answerable question on 2020 COVID-19 emission cuts, air pollution and radiative forcing, was refused at the guard as air quality. Otherwise it held: no wrong hazard (73/77 named, against 57/77 for the lexical parser that day), 98/105 decided right at scope against 97/105, and 36 of 37 decisions kept with the options reversed. Its p95 latency per call was 2,855 ms, against 2,055 ms on the dev set. Of the two suspect citation labels, CID-06's parsed sentence states river flooding, not heavy precipitation, and CID-11's ESAF clause states cyclone landfalls, not mean wind speed; `rag/cid.py` misread the second, and now leaves such a clause out. With the labels corrected, a re-run met both accuracy gates (12 of 14 true Chapter 12 claims strong, 18 of 18 flipped claims and premises contradicted, 37 of 38 cross pairs weak, AUC 0.998, [report](evals/results/jev-dev-2026-11-11-verify-relabelled.md)), but the check on real Gemini answers has not run. Both runs together cost $0.008 at the list price.
+**Both stay off.** Aswani accepted triage's gateway latency, but the one-time held-out check (`evals/run_jev_heldout.py`, 2026-11-11, [report](evals/results/jev-triage-test-2026-11-11.md)), which sent only the 37 of 105 held-out questions that triage itself would send, failed the ADR's hard gate of no new false refusal: SP2-08, an answerable question on 2020 COVID-19 emission cuts, air pollution and radiative forcing, was refused at the guard as air quality. Otherwise it held: no wrong hazard (73/77 named, against 57/77 for the lexical parser that day), 98/105 decided right at scope against 97/105, and 36 of 37 decisions kept with the options reversed. Its p95 latency per call was 2,855 ms, against 1,881 ms for the dev run's calls. Of the two suspect citation labels, CID-06's parsed sentence states river flooding, not heavy precipitation, and CID-11's ESAF clause states cyclone landfalls, not mean wind speed; `rag/cid.py` misread the second, and now leaves such a clause out. With the labels corrected, a re-run met both accuracy gates (12 of 14 true Chapter 12 claims strong, 18 of 18 flipped claims and premises contradicted, 37 of 38 cross pairs weak, AUC 0.998, [report](evals/results/jev-dev-2026-11-11-verify-relabelled.md)), but the check on real Gemini answers has not run. Both runs together cost $0.008 at the list price.
 
 Every eval artifact records the model that produced it, because a model swap is
 invisible to a test suite. When the answering model was changed without
@@ -148,7 +149,7 @@ unit tests did not: see [adr/0001-answering-model-selection.md](adr/0001-answeri
 
 Refusals are scored on a 4-cell confusion matrix (correct answer, correct refusal, false refusal, false answer). One false answer on that matrix blocks release.
 
-**The gate:** it is an exit code, not an eyeball. The build fails on any false answer, on headline R@3 falling more than 3 points below the last committed run, or on the hybrid retriever being missing from the artifact, which would mean the run silently measured BM25-only. See [DEPLOY.md](DEPLOY.md).
+**The gate:** it is an exit code, not an eyeball. The build fails on any false answer, on any e2e question whose call errored (`--max-errors`, default 0), on headline R@3 falling more than 3 points below the last committed run of the same eval set, retriever and arm, or on the hybrid retriever being missing from the artifact, which would mean the run silently measured BM25-only. See [DEPLOY.md](DEPLOY.md).
 
 ## Forecast skill
 
@@ -165,17 +166,17 @@ Every hazard number rests on a forecast, and a peak predicted six days out is no
 
 The report spends those numbers rather than displaying them. Confidence is `min(0.75, 0.3 * w + climatology bonus + 0.1 if IPCC-cited)`, where `w = min(hit rate over lead days 1..L) / hit rate at day 1` is the share of day-1 extreme detection still standing at lead day `L`. A day-1 heat report keeps the full 0.3 forecast term; a day-7 one keeps 0.56 of it. Every report carries a `forecast_skill` driver naming the number that did it: "Day-7 temperature forecasts hit the local extreme 47% of the time (GFS Global vs its own day-0 run, 13 cities, 2024-2025), so forecast evidence is down-weighted to 0.56 of its day-1 value." The running minimum in `w` is deliberate. Precipitation detection measures 1.7% at day 6 and 3.5% at day 7, which is sampling noise on ~458 extreme days rather than a forecast improving with lead time, and the minimum is what keeps confidence monotone, so a longer horizon is never reported as surer.
 
-Three caveats travel with these numbers. The reference series is the model's own latest run rather than station observations, so they are run-to-run consistency errors and a floor on true forecast error. The model is pinned to GFS Global because Open-Meteo's default `best_match` splices different models across lead offsets and fabricates biases that read like skill: at Delhi it placed the day-1 wind forecast 5.3 km/h off while the day-7 forecast landed within 0.1 km/h. And GFS drops from hourly to 3-hourly output past forecast hour 120, which flattens daily rainfall totals, so the collapse in precipitation detection after day 4 is partly output resolution and not only the forecast missing the storm.
+Three caveats travel with these numbers. The reference series is the model's own latest run rather than station observations, so they are run-to-run consistency errors and a floor on true forecast error. The measurement is pinned to GFS Global because Open-Meteo's default `best_match` splices different models across lead offsets and fabricates biases that read like skill: at Delhi it placed the day-1 wind forecast 5.3 km/h off while the day-7 forecast landed within 0.1 km/h. The live forecast is not pinned (`tools/forecast.py` sends no `models`, so Open-Meteo serves `best_match`), so the weight approximates the skill of the forecast the agent actually uses. And GFS drops from hourly to 3-hourly output past forecast hour 120, which flattens daily rainfall totals, so the collapse in precipitation detection after day 4 is partly output resolution and not only the forecast missing the storm.
 
 ## Operations
 
 - One shared cache sits behind the climatology fit, the forecast and the answer cache. Entries shipped in `tools/cache_seed/` answer first. Behind them: with `CRG_CACHE_GCS_BUCKET` set, this instance's disk and then that Cloud Storage bucket; otherwise Upstash Redis over REST, with disk as its fallback, when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set; otherwise disk alone. `tools/cache_backend.py` logs the backend it chose, and `scripts/prewarm.py` fills it before a demo.
-- Structured logging and per-request telemetry, measured at the single SDK seam every model call passes through: latency, tokens, retries and cost. Reasoning tokens are counted as billed output, and a model with no price entry reports its cost as unknown rather than as zero. The in-memory event ring is bounded; the JSONL sink keeps the long history.
+- Structured logging and per-request telemetry, measured at the two seams model calls pass through (`rag/gemini_client.py` for Gemini, `rag/jev_client.py` for Jev): latency, tokens, retries and cost. Reasoning tokens are counted as billed output. A model with no price entry is logged as an unknown cost and listed under `cost_incomplete_unpriced_models` in the `/metrics` rollup, but the per-request telemetry that the API responses and the UI show counts it as $0 (a known gap, see [LIMITATIONS.md](LIMITATIONS.md#known-gaps)). The in-memory event ring is bounded; the JSONL sink keeps the long history.
 - Cloud Run idle cost per min-instance shape, the measured 30-day load and the resize plan are in [DEPLOY.md](DEPLOY.md).
 - Async FastAPI service (`POST /report`, `POST /query`, and `POST /triage` for reading a question without running it) with per-request API-key access control and a `/metrics` endpoint.
 - Two MCP servers (weather, IPCC RAG) exposing the same tools over the Model Context Protocol.
 - `CRG_BOOTSTRAP_N` sets the GEV bootstrap refits per fit (defaults: 300 stationary, 200 trend-adjusted); it is read at import, is part of the hazard-fit cache key, and trades confidence-interval precision for fit time.
-- Docker image measured at 0.31 GB locally. `ci.yml` runs ruff, mypy and pytest on every push and pull request; `evals.yml` runs both evals on a `v*` tag push or on demand, against a pre-built embedding cache downloaded as a release asset, so cutting a release never re-embeds the corpus.
+- Docker image measured at 0.31 GB locally. `ci.yml` runs ruff, mypy and pytest on every push to `main` and every pull request; `evals.yml` runs both evals on a `v*` tag push or on demand, against a pre-built embedding cache downloaded as a release asset, so cutting a release never re-embeds the corpus.
 
 ## Run it
 
@@ -186,7 +187,9 @@ uv run streamlit run ui/app.py
 
 Ask in plain language, or use the sidebar to pick any point on Earth: type a
 place name to geocode it, or enter latitude and longitude directly. Example
-buttons load the pre-warmed demo cities. A map shows the selected point
+buttons load six preset cities. The image ships ERA5 fits for the Berlin preset
+only, so the others fit on first use unless a cache already holds them
+(`scripts/prewarm.py` fills one before a demo). A map shows the selected point
 (display-only) along with its IPCC AR6 region, or a notice when the point has
 none.
 
@@ -228,18 +231,18 @@ Both servers speak stdio. From the repo root, point any MCP client at them:
 }
 ```
 
-| Server | Tools |
-| --- | --- |
-| climate-weather | `forecast`, `hazard_climatology` |
-| climate-ipcc-rag | `search_ipcc`, `answer_ipcc` |
+| Client config key | Server name | Tools |
+| --- | --- | --- |
+| climate-weather | `weather` | `forecast`, `hazard_climatology` |
+| climate-ipcc-rag | `ipcc-rag` | `search_ipcc`, `answer_ipcc` |
 
 ![search_ipcc called from the MCP Inspector, returning IPCC AR6 excerpts with source file and page number](assets/mcp-inspector-search.png)
 
-Both servers target MCP protocol 2026-07-28 (`mcp` 2.0.0), the current revision.
-Every tool is annotated read-only with a human-readable title and an open- or
-closed-world hint, publishes an `outputSchema`, and is listed in a deterministic
-order. Two tests boot each server as a real subprocess and speak the protocol to
-it, rather than calling the tool functions in-process.
+Both servers target MCP protocol 2026-07-28 (`mcp` 2.3.0 in `uv.lock`), the
+current revision. Every tool is annotated read-only with a human-readable title
+and an open- or closed-world hint, publishes an `outputSchema`, and is listed in
+a deterministic order. Two tests boot each server as a real subprocess and speak
+the protocol to it, rather than calling the tool functions in-process.
 
 Retrieval is hybrid, so both IPCC tools embed the query with credentials in the
 server process: either `GOOGLE_GENAI_USE_VERTEXAI=true` with

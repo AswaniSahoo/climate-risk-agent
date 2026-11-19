@@ -56,9 +56,13 @@ What the code does today, measured offline on 2026-11-11 with every model off
   identify a supported hazard in the question". The misses on the dev set are
   SP-03 and MP-10 ("temperature extremes", which stage 1 accepts but the front
   door's patterns cannot map to a hazard) and RT-10 ("hot-extreme (TXx/TNn)").
+  Since 2026-11-12 the lexical parser also reads everyday words such as "hot"
+  (`evals/results/hazard-words-2026-11-12.md`): with the flag off it now names
+  41/42 dev and 6/7 probe hazards, the Delhi question gets a heat report, and
+  SP-03 is the one dev miss.
 - **Citations are validated at page level only.** Dev citation validity is
-  41/48 and held-out 96% (README); LIMITATIONS.md says claim-level entailment
-  "is not yet automated".
+  39/46 on the latest run (2026-11-11; 41/48 on 2026-09-02) and held-out 96%
+  (README); LIMITATIONS.md says claim-level entailment "is not yet automated".
 
 ## Options evaluated
 
@@ -81,16 +85,19 @@ Two corrections to the brief, from reading the code: refusals for known
 out-of-scope words are already instant on the front door (it refuses before
 geocoding), so the latency win is on the IPCC path only; and the sidebar bug
 needs the parse wired to the widgets, which the lexical parser already supplies
-for 39 of 42 dev questions. Jev widens that to paraphrases; it is not what
-fixes the bug.
+for 39 of 42 dev questions (41 of 42 since 2026-11-12). Jev widens that to
+paraphrases; it is not what fixes the bug.
 
 Rejected parts of (a): a **horizon bucket** (dates and numbers are a documented
 weakness, the dev set has no horizon labels to measure against, and the regex
 handles "next N days"); an **injection class** (no labelled injection items to
 measure on, TypeSafe's terms bar probing their system, and TypeSafe itself says
 adversarial content moves the answer, so it could never be a security layer).
-On the front door path the user's text never reaches Gemini anyway: the IPCC
-question is built from the hazard enum and the geocoded place label.
+On the front door path the user's text never reaches the answering prompt
+anyway: the IPCC question is built from the hazard enum and the AR6 region
+label (the place label only for a point outside every AR6 land region). With
+`CRG_SCOPE_STAGE2` set, stage 2 does send the question to Gemini, to embed or
+classify it.
 
 **(b) Citation support check.** For each sentence of the report's IPCC
 statement and each cited passage, Jev answers TypeSafe's own citation-check
@@ -215,8 +222,9 @@ PIN-01, "Are storms getting stronger?" (noul 0.59). Jev on its own, without
 stage 1, also scored 60/60 and 14/14 on scope, and its top hazard pick was
 right on 42/42 and 7/7.
 
-Latency per call, pacing waits excluded: triage p50 640 ms, p95 2,055 ms (30
-of 134 over 1 s, slowest 4,047 ms); citation check p50 606 ms, p95 1,748 ms.
+Latency per live call, pacing waits excluded, triage and citation check
+together (the report does not split them): p50 627.0 ms, p95 1,881.3 ms, 48 of
+244 calls over 1 s; first tries only, p50 626.2 ms and p95 1,792.2 ms.
 
 Citation check, 110 pairs:
 
@@ -234,7 +242,8 @@ Against the criteria fixed above:
 
 - Triage: 1 met, 2 met, 3 met, 4 met (0 of 30 decisions changed with the topic
   options reversed, and 0 of 30 across two uncached runs). **5 not met**:
-  triage p95 is 2,055 ms against the 1,000 ms gate, though no call failed. 6,
+  the live-call p95 is 1,881.3 ms against the 1,000 ms gate, though no call
+  failed. 6,
   the held-out run, had not been done then ("Held-out check" below).
 - Citation check: 1 met (17 of 19, 89%, contradicted). **2 not met**: 11 of 15
   `cid_true` pairs are strong, 73% against 80%; the `cross` (37 of 38) and AUC
@@ -245,8 +254,9 @@ Decision after measurement: both stay off by default.
 
 - **Triage.** It passed every quality gate on this data. The latency gate was
   written against TypeSafe's "about 100 ms" direct calls, which this run could
-  not test. Through this gateway, turning triage on would add a median 0.64 s
-  and a p95 about 2 s to questions that name no hazard word, which is the only
+  not test. Through this gateway, turning triage on would add a median about
+  0.63 s and a p95 about 1.9 s (the run's calls pooled) to questions that name
+  no hazard word, or name one the front door cannot map, which is the only
   traffic Jev sees. Whether that is worth the fixes above is a product call
   for Aswani; it is not a reason to re-read the criterion.
 - **Citation check.** It misses criterion 2, but two of its four non-strong
@@ -400,8 +410,8 @@ checked against real answers.
 - A triage request for a 100-character question is 2,477 bytes on the wire,
   and the measured average was 1,020 input tokens per triage request and 728
   per citation pair: $0.000043 and $0.000031 each at the list price.
-- Privacy: with triage on, the text of a question that has no hazard word is
-  sent out; with verify on, the Gemini statement, which can name the queried
+- Privacy: with triage on, the text of a question that has no hazard word, or
+  one the front door cannot map to a hazard, is sent out; with verify on, the Gemini statement, which can name the queried
   place, and public IPCC passages are sent. On the gateway route they reach
   Experiential Labs first, which records prompts and responses, and then
   TypeSafe. Both providers' wording is quoted in LIMITATIONS.md.

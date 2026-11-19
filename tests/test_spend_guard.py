@@ -343,9 +343,9 @@ _ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
 
 
 def test_an_eval_run_has_no_budget_unless_one_is_set():
-    """A refusal halfway through an eval would score as failed answers, and
-    scripts/eval_gate.py does not read `errors`; the eval's own cost is bounded
-    by its fixed question count."""
+    """A refusal halfway through an eval would leave questions unmeasured (the
+    e2e runner records them under `errors`, which scripts/eval_gate.py fails
+    on); the eval's own cost is bounded by its fixed question count."""
     env: dict[str, str] = {}
     assert sg.unlimited_unless_set(env) is True and env["CRG_DAILY_MODEL_BUDGET_USD"] == "off"
 

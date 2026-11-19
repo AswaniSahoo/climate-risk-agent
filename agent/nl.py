@@ -248,8 +248,10 @@ class TriageOutcome(BaseModel):
 
     What a client can show the moment a question is typed: the parsed hazard,
     horizon and place to pre-fill its controls, and either the refusal the
-    full run would give or `None`. Costs no geocoding, forecast or Gemini call;
-    at most one Jev request, and none when the lexical parser settles it.
+    full run would give or `None`. Costs no geocoding or forecast, and no
+    Gemini call unless CRG_SCOPE_STAGE2 is set (stage 2 then embeds or
+    classifies a question that names no hazard); at most one Jev request, and
+    none when the lexical parser settles it.
     """
 
     query: str

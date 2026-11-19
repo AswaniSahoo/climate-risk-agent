@@ -37,7 +37,11 @@ upload, and the container starts on hybrid retrieval instead of re-embedding
 the corpus (and hitting 429s) on every cold start.
 
 Auth and models run on **Vertex AI via the `global` endpoint** (ADC through the
-Cloud Run service account, so there is no API key to manage):
+Cloud Run service account, so there is no API key to manage). The command below
+is the redeploy once the service runs as `climate-risk-runtime`, that is after
+`promote`. The first move to that identity goes through `candidate` and then
+`promote` ("Hardening the GCP side" below), so the new identity is checked at a
+tagged URL before it takes any traffic. After that:
 
 ```bash
 # Deploy from source; Cloud Build runs the docker build, then Cloud Run hosts it.
@@ -47,11 +51,18 @@ gcloud run deploy climate-risk-agent \
   --execution-environment gen2 \
   --port 7860 \
   --allow-unauthenticated \
-  --min-instances 0 \
+  --service-account climate-risk-runtime@climate-risk-agent.iam.gserviceaccount.com \
+  --min-instances 0 --max-instances 1 \
   --memory 2Gi --cpu 1 --concurrency 8 \
-  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=climate-risk-agent,GOOGLE_CLOUD_LOCATION=global,CRG_GENERATE_MODEL=gemini-2.5-flash,CRG_EMBED_MODEL=gemini-embedding-2
+  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=climate-risk-agent,GOOGLE_CLOUD_LOCATION=global,CRG_GENERATE_MODEL=gemini-2.5-flash,CRG_EMBED_MODEL=gemini-embedding-2,CRG_CACHE_GCS_BUCKET=climate-risk-agent-cache
 ```
 
+- **`--set-env-vars` replaces the whole list.** The gcloud reference says "All
+  existing environment variables will be removed first", so a variable added
+  later with `--update-env-vars` (the Jev settings below, for example) is
+  dropped by this command unless it is listed here too. The identity, the
+  instance cap and the bucket match the `candidate` deploy in
+  `scripts/harden_gcp.sh` ("Hardening the GCP side" below).
 - **`GOOGLE_CLOUD_LOCATION=global` is required.** `gemini-embedding-2` is served
   on `global` / `us` / `eu`, **not** the single region `us-central1`; a regional
   endpoint 404s the embedding call and the app silently drops to BM25-only.
@@ -68,19 +79,31 @@ gcloud run deploy climate-risk-agent \
   whose length is not recorded in this repo (`scripts/measure_coldstart.py`
   times one).
 - Cold start itself is now attacked at the image, not the instance count: the
-  Dockerfile is two-stage (no uv or package cache in the runtime layer) and the
-  UI boots without scipy, langgraph or google-genai, so the first page never
-  waits for them; once it is drawn, one background thread imports langgraph and
-  scipy for the first report (`agent/warmup.py`; `CRG_WARMUP=off` turns it off).
+  Dockerfile is two-stage (no uv or package cache in the runtime layer), and
+  importing the UI script loads no scipy, langgraph or google-genai
+  (`tests/test_import_hygiene.py`); once the page is drawn, one background
+  thread imports langgraph and scipy for the first report (`agent/warmup.py`;
+  `CRG_WARMUP=off` turns it off). google-genai is not deferred: a process's
+  first session runs the embedding self-test (`embedding_available_once`, see
+  "Spend guard"), which imports it and makes one live embedding call before the
+  rest of the page is drawn. The import test sets `PYTEST_CURRENT_TEST`, which
+  skips that probe (LIMITATIONS.md, "Known gaps").
 - `--port 7860` matches the container's `EXPOSE` / Streamlit port.
-- The command above sets no `--service-account`, so the service runs as the
-  Compute Engine default service account (it does today: checked read-only on
-  2026-11-11). The code needs one permission, `aiplatform.endpoints.predict`;
-  "Hardening the GCP side" below moves the service to a dedicated identity
-  that holds only that. `roles/aiplatform.user` also works, but it carries
-  464 permissions.
-- The startup self-test logs `DENSE DEGRADED` (and the UI shows a banner) if the
-  embedding endpoint is unreachable: a misconfig is loud, never silent.
+- `--service-account` runs the service as the dedicated identity that
+  "Hardening the GCP side" below created; the first switch to it is that
+  section's `candidate` and `promote` steps, not this command. For Vertex the
+  code needs one permission, `aiplatform.endpoints.predict`, and that identity
+  holds only that, plus object access on the cache bucket. Without the flag
+  the service runs as the Compute Engine default service account, as it did
+  when checked read-only on 2026-11-11. `roles/aiplatform.user` also works,
+  but it carries 464 permissions.
+- `--max-instances 1` caps the service at one instance. A billing budget only
+  notifies, so this and the spend guard do the capping (see the notes under
+  the hardening commands).
+- If the embedding endpoint is unreachable, the UI's self-test shows a
+  "Degraded mode" banner, and `api/app.py`, where it is served, logs
+  `DENSE DEGRADED` at startup: a misconfig is loud, never silent. The image
+  runs Streamlit only, so on Cloud Run the banner is the signal.
 - `CRG_BOOTSTRAP_N` (optional) sets the GEV bootstrap refits per fit for both the
   stationary (default 300) and trend-adjusted (default 200) paths. It is read
   once at import and is part of the hazard-fit cache key. A higher value buys
@@ -115,7 +138,8 @@ gcloud run deploy climate-risk-agent \
     `storage.objects.create` and `storage.objects.delete`. No list and no update:
     the code never lists, sets metadata at upload time, and overwrites under the
     delete permission (an overwrite needs it, per the objects.insert docs);
-  - the service runs as that account after the next deploy, maxScale 1, min 0.
+  - the service moves to that account through the `candidate` and `promote`
+    steps ("Hardening the GCP side"), maxScale 1, min 0.
   Smoke test, 2026-11-11, with the owner's ADC under `smoke/`: write, read,
   increment twice (1 then 3), delete both, read back nothing. All passed.
 - **Open-Meteo archive budget** (`tools/archive_budget.py`), in front of every
@@ -136,7 +160,9 @@ gcloud run deploy climate-risk-agent \
   - `scripts/precompute_climatology.py` fills `climatology.json` with ERA5 fits
     for `scripts/precompute_cities.json`. One 1960 to 2022 archive request
     counts as about 1,644 Open-Meteo calls against a free limit of 10,000 a
-    day, so it runs paced and budgeted; `--plan` prints the cost first.
+    day, so it runs paced and budgeted; `--plan` prints the cost first. The
+    shipped file holds 3 entries: Berlin's heat, rain and wind fits, one city
+    of the 132 listed.
   - `scripts/precompute_grounding.py` fills `ipcc.json` with the IPCC answer and
     the Ch.12 projection per (hazard, AR6 region), up to 3 model calls a pair.
     `--presets` covers the six UI presets (6 pairs); no flag runs all 138.
@@ -189,11 +215,12 @@ gcloud run deploy climate-risk-agent \
   read -rs KEY && printf '%s' "$KEY" | gcloud secrets create jev-api-key \
     --replication-policy=automatic --data-file=- && unset KEY
 
-  # 2. Let the service's identity read it (the Compute Engine default service
-  #    account, unless the service was deployed with --service-account).
-  PROJECT_NUMBER=$(gcloud projects describe climate-risk-agent --format='value(projectNumber)')
+  # 2. Let the service's identity read it: the runtime service account the
+  #    deploy command above sets with --service-account. A service deployed
+  #    without that flag runs as the Compute Engine default service account,
+  #    PROJECT_NUMBER-compute@developer.gserviceaccount.com, so bind that instead.
   gcloud secrets add-iam-policy-binding jev-api-key \
-    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --member="serviceAccount:climate-risk-runtime@climate-risk-agent.iam.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor"
 
   # 3. Expose it as JEV_API_KEY: add this flag to the deploy command above.
@@ -305,8 +332,10 @@ not to the live demo.
 
 Evals run with the budget off: `evals.yml` sets `CRG_DAILY_MODEL_BUDGET_USD:
 "off"`, and both eval runners default to off unless the variable is set. A
-refusal halfway through an eval would be scored as wrong answers, and
-`scripts/eval_gate.py` does not read `errors`.
+refusal halfway through an eval would leave questions unmeasured: the e2e
+runner records each refused call under `errors` instead of scoring it, and
+`scripts/eval_gate.py` fails a run with more errored questions than
+`--max-errors` (default 0).
 
 ### The arithmetic behind the defaults
 
@@ -323,8 +352,11 @@ https://cloud.google.com/vertex-ai/generative-ai/pricing:
 
 What one answer call sends (`rag/answer.py`, `agent/graph.py`): the rules
 (1,111 characters), 8 excerpts (`_IPCC_TOP_K`) of at most 1,200 characters each
-(`rag/chunk.py`), and the question (166 characters at most for the templated
-one the app asks; up to 1,000 from the MCP tool). With full-size excerpts that
+(`rag/chunk.py`), and the question (167 characters at most for the templated
+one the app asks over an AR6 land region; over an ocean point the template
+names the caller's location string instead, so that question, like the MCP
+tool's, is bounded only by the 1,000-character fence in
+`rag/prompt_safety.py`). With full-size excerpts that
 is 11,815 characters, about 2,950 tokens at Google's "a token is equivalent to
 about 4 characters" (https://ai.google.dev/gemini-api/docs/tokens), so $0.00089
 of input. Output is the JSON answer plus thinking, which for `gemini-2.5-flash`
@@ -588,10 +620,10 @@ Notes:
 
 ## Release gate (evals run on tag pushes, not on every commit)
 
-`ci.yml` still runs only the unit/integration tests on every push and PR
-(corpus-dependent ones auto-skip). The retrieval + e2e evals are expensive and
-credential-bound, so they live in a **separate workflow** that fires exactly
-when a release is being cut:
+`ci.yml` runs ruff, mypy and the unit/integration tests (corpus-dependent ones
+auto-skip) on every push to `main` and every PR. The retrieval + e2e evals are
+expensive and credential-bound, so they live in a **separate workflow** that
+fires exactly when a release is being cut:
 
 | workflow | trigger | what it runs |
 | --- | --- | --- |
@@ -610,12 +642,15 @@ The gate (`scripts/eval_gate.py`, unit-tested in `tests/test_eval_gate.py`) fail
 
 1. **`false_answer > 0`** in the e2e artifact. Confabulation blocks a release, full stop.
 2. **headline R@3 more than 3 points below** the last committed run of the same
-   eval set, same retriever (`evals/results/`).
+   eval set, same retriever and same arm (`evals/results/`).
 3. **no `hybrid` column** in the retrieval artifact. That means the dense path was
    skipped, i.e. the embedding cache was missing and the run silently measured
    BM25-only, so its numbers are not a release.
+4. **more errored questions than `--max-errors`** (default 0) in the e2e
+   artifact's `errors`. A question whose call failed was never measured, so the
+   matrix would count fewer questions than it appears to.
 
-Rule, unchanged: run both, publish the numbers in README/STATE, THEN tag/deploy.
+Rule, unchanged: run both, publish the numbers in README.md, THEN tag/deploy.
 
 ### Repository setup (manual, once)
 

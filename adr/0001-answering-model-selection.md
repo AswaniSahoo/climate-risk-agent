@@ -45,7 +45,21 @@ reserved for release gates; a config change is diagnosed on dev by protocol).
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | gemini-2.5-flash | 33 | 11 | 0 | 1 | 94% | 85% | 3.9 s | 40.3 s | 0 |
 | gemini-3.5-flash | 30 | 11 | 0 | 3 | 93% | 70% | 8.9 s | 112.0 s | 1 |
-| gemini-3.6-flash | 31 | 11 | 0 | 3 | 94% | 77% | 6.1 s | 16.1 s | 0 |
+| gemini-3.6-flash | 31 | 11 | 0 | 3 | 94% | 81% | 5.9 s | 14.8 s | 0 |
+
+Sources in `evals/results/`, corrected on 2026-11-19 against the committed
+files. The gemini-3.5-flash row is `e2e-gemini-3.5-flash-2026-07-22.json`. The
+gemini-3.6-flash row is `e2e-gemini-3.6-flash-2026-07-22.json`, which holds
+the same run as `repeat5-gemini-3.6-flash.json`; this table first gave 77%
+numeric provenance, which is the four committed 3.6 runs pooled (96 of 124),
+and 6.1 s / 16.1 s, which no committed run records. The rule-enabled
+gemini-2.5-flash run behind the first row is not committed:
+`e2e-gemini-2.5-flash-2026-07-22.json` now holds the rule-disabled ablation
+(the same run as `ablate-noregional-2.json`), written later that day under the
+same name. Its matrix, citation and numeric columns match each complete
+rule-enabled repeat (`repeat2`, `repeat4` and `repeat5-gemini-2.5-flash.json`:
+33/11/0/1, 31/33, 28/33); its latency columns are not in any committed file
+(those repeats give p50 3.3 to 5.2 s and p95 15.5 to 99.2 s).
 
 ### Stability (repeat runs, identical inputs)
 
@@ -72,14 +86,17 @@ grounds a location question. Hence: keep the rule, default it off.
 
 ### Cost
 
-Reported cost was `$0.052` (2.5) vs `$0.052` (3.6) — misleading on two counts,
-both since fixed:
+Reported cost was `$0.052` (2.5) vs `$0.052` (3.6), misleading on two counts;
+the first is fixed, the second only in part:
 
 - Thinking tokens were not counted. One measured 3.6 call used 50 visible
   output tokens and **987 thinking tokens**, all billed. Roughly a 20x
   undercount on the output side, making 3.6 far more expensive than reported.
 - Unpriced models silently reported `$0.00` instead of "unknown"
-  (`gemini-3.5-flash` had no price entry).
+  (`gemini-3.5-flash` had no price entry). The `/metrics` rollup now lists such
+  a model under `cost_incomplete_unpriced_models`, but per-request telemetry,
+  which the API responses and the UI show, still counts it as $0
+  (LIMITATIONS.md, "Known gaps").
 
 ### Release gate on the shipped config (held-out set, 2nd exposure)
 
@@ -106,8 +123,9 @@ published numbers must describe the configuration that is actually deployed.
 - `CRG_GENERATE_MODEL` and `CRG_REGIONAL_GROUNDING` remain env-overridable, so
   a future model change is a config change plus a re-run of this ADR's
   experiments, not a code rewrite.
-- Telemetry now counts thinking tokens and refuses to present an unknown cost
-  as zero.
+- Telemetry now counts thinking tokens. An unknown cost is logged and flagged
+  in the `/metrics` rollup, but per-request telemetry still adds it as zero
+  (LIMITATIONS.md, "Known gaps").
 - The determinism claim in `rag/answer_cache.py` was corrected: temperature 0
   does **not** make generation deterministic (measured for both families), so
   the cache pins one valid answer rather than guaranteeing the answer.
@@ -126,5 +144,8 @@ published numbers must describe the configuration that is actually deployed.
 Changing the answering model is a **release-gated change**: re-run the dev
 evals, compare against this table, update the published numbers, and only then
 deploy. The model that produced a number is now recorded inside every eval
-artifact (`generate_model`) and in its filename, so this cannot silently drift
-again.
+artifact (`generate_model`), and in the e2e artifact's filename; retrieval
+artifacts are named by set, arm and date only. An e2e filename carries the
+date but not the time or the regional-rule setting, so a second run on the
+same day, model and arm overwrites the first, which is how the rule-enabled
+gemini-2.5-flash run above was lost.
